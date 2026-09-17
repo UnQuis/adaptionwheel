@@ -124,8 +124,6 @@ public final class FlyingSlashRenderer {
                                float u, float v, int[] color, int alpha) {
         consumer.addVertex(matrix, (float) position.x, (float) position.y, (float) position.z)
                 .setColor(color[0], color[1], color[2], alpha)
-                .setUv(u, v)
-                .setLight(0xF000F0)
-                .setNormal(0f, 1f, 0f);
+                .setUv(u, v);
     }
 }
