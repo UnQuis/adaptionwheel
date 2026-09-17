@@ -70,7 +70,7 @@ PENDING_RESPAWN_HEALTH.put(player.getUUID(), player.getHealth() / maxHealth);
 
 Порядок в vanilla 1.21.1: `hurt()` → `actuallyHurt()` → `setHealth(health - f)` (здоровье упирается в 0) → `isDeadOrDying()` → `die(source)` → **первой строкой** `CommonHooks.onLivingDeath` → `LivingDeathEvent`. То есть к моменту нашего хендлера `getHealth()` **всегда 0**, доля всегда `0f`.
 
-Дальше [AdaptionEvents.java:1018-1028](src/main/java/ru/adaptionwheel/server/AdaptionEvents.java#L1018):
+Дальше [AdaptionEvents.java:1018-1026](src/main/java/ru/adaptionwheel/server/AdaptionEvents.java#L1018):
 ```java
 float target = Mth.clamp(max * fraction, 1f, max);   // всегда 1f
 if (player.getHealth() < target - 0.01f) {
@@ -119,7 +119,7 @@ cachedAdaptCount = adapted.size() + (int) levels.values().stream().filter(l -> l
 [AdaptionEvents.java:1611-1640](src/main/java/ru/adaptionwheel/server/AdaptionEvents.java#L1611): цикл по **всем** зарегистрированным `EntityType` (~500 в vanilla 1.21.1, тысячи в моде-паках) пишет 3 уровня (Contact_/Offense_NPC_/Drop_NPC_) + запись в history. Итог:
 
 - `WheelData` (компонент предмета): ~1500-3000+ строк в NBT/codec — утяжеляет предметы в мире и сейвы;
-- каждый `AdaptionSyncPayload` (шлётся **каждые 20 тиков** и при каждом изменении задач — [AdaptionEvents.java:1010-1013](src/main/java/ru/adaptionwheel/server/AdaptionEvents.java#L1010)) несёт весь `levels`-мап целиком → десятки-сотни КБ трафика в секунду на одного трансцендентного игрока;
+- каждый `AdaptionSyncPayload` (шлётся **каждые 20 тиков** и при каждом изменении задач — [AdaptionEvents.java:1007-1009](src/main/java/ru/adaptionwheel/server/AdaptionEvents.java#L1007)) несёт весь `levels`-мап целиком → десятки-сотни КБ трафика в секунду на одного трансцендентного игрока;
 - сериализация attachment в player.dat — аналогично.
 
 Аналогичный (управляемый, но тоже неконтролируемый) путь — `/adaptionwheel grant` (опы, неограниченное число произвольных концептов).
@@ -139,7 +139,7 @@ if (bestLevel >= 8) {
 ```
 В 1.21.1 `invulnerableTime > 10 && !BYPASSES_COOLDOWN` → следующее попадание с уроном ≤ `lastHurt` **полностью** игнорируется, с уроном больше — уменьшается на `lastHurt`. То есть одинокий скрач при Lv8 даёт 120 тиков (6 с) сильного иммунитета: фактически урон принимается не чаще раза в 6 секунд при любом DPS. Оригинальный i-frame окно — порядка 10 тиков. Выглядит как опечатка (120 вместо 10-20); если намеренно — задокументировать.
 
-### M2. Lifesteal лечит заблокированный щитом урон — `server/AdaptionEvents.java:375-378`
+### M2. Lifesteal лечит заблокированный щитом урон — `server/AdaptionEvents.java:374-379`
 
 ```java
 if (bestLevel >= 5) {
