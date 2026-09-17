@@ -856,8 +856,14 @@ public class AdaptionEvents {
                 data.adversityActive = false;
                 data.adversityCooldownTimer = (int) (AdaptionConfig.ADVERSITY_COOLDOWN_SECONDS.get() * 20);
                 player.heal(player.getMaxHealth());
+                // Tasks present when Adversity started were deliberately frozen for
+                // the whole challenge. Resolve that snapshot now, regardless of how
+                // much time remained on each progress bar.
                 completeAllTasks(player, data);
                 grantOneTime(player, data, Concepts.ADVERSITY);
+                // Apply attribute changes immediately instead of waiting for the
+                // next one-second passive-stat refresh.
+                applyStats(player, data);
                 playAdaptVoice(player, 1f, 1f);
                 player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adversity_done")
                         .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
@@ -1450,7 +1456,9 @@ public class AdaptionEvents {
 
     /** Starts (or keeps) an analysis task; public so trigger subsystems can request analyses. */
     public static void startTask(ServerPlayer player, PlayerAdaption data, String concept, int timer) {
-        if (data.isAdapted(concept) || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
+        // Adversity freezes the tasks that were already running. Do not let a
+        // secondary trigger sneak a new task into the frozen set.
+        if (data.adversityActive || data.isAdapted(concept) || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
         if (data.tasks.size() >= AdaptionConfig.MAX_SIMULTANEOUS_ADAPTATIONS.get()) return;
         for (AdaptionTask task : data.tasks) {
             if (task.concept.equals(concept)) return;
@@ -1474,7 +1482,9 @@ public class AdaptionEvents {
 
     private static void startOrAccelerate(ServerPlayer player, PlayerAdaption data, String concept, int baseTicks,
                                           boolean accelerate, int accelerationTicks) {
-        if (data.isAdapted(concept) || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
+        // Keep both the task list and each timer completely frozen during
+        // Adversity; completion happens atomically when the challenge ends.
+        if (data.adversityActive || data.isAdapted(concept) || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
         AdaptionTask existing = null;
         for (AdaptionTask task : data.tasks) {
             if (task.concept.equals(concept)) { existing = task; break; }
