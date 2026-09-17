@@ -1,0 +1,6 @@
+{
+  "order": 100,
+  "size": 1,
+  "icon": "adaptionwheel:slot/empty_wheel_slot",
+  "validators": ["curios:tag"]
+}

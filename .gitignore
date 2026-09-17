@@ -1,0 +1,31 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# Dev runs & worlds
+runs/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OpenCode local state
+.opencode/
+opencode.json
+
+# Terraria reference artifacts (not part of the Minecraft port)
+3670588280/
+ADAPTIONWHEEL/
+ADAPTIONWHEEL.zip
+
+# External mod jars used for local dev testing
+*.jar
+
+# LDLib shader scratch (unrelated working folder)
+ldlib2/
+
+# OS noise
+.DS_Store
+Thumbs.db

@@ -1,0 +1,32 @@
+{
+  "adapt_voice": {
+    "sounds": [
+      "adaptionwheel:adapt_voice"
+    ]
+  },
+  "dimension_cut": {
+    "sounds": [
+      "adaptionwheel:dimension_cut"
+    ]
+  },
+  "swing": {
+    "sounds": [
+      "adaptionwheel:swing"
+    ]
+  },
+  "soe_hit1": {
+    "sounds": [
+      "adaptionwheel:soe_hit1"
+    ]
+  },
+  "soe_hit2": {
+    "sounds": [
+      "adaptionwheel:soe_hit2"
+    ]
+  },
+  "ref": {
+    "sounds": [
+      "adaptionwheel:ref"
+    ]
+  }
+}

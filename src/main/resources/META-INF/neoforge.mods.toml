@@ -1,0 +1,36 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+
+[[mixins]]
+config = "adaptionwheel.mixins.json"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+description='''${mod_description}'''
+authors="${mod_authors}"
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    versionRange="${neo_version_range}"
+    ordering="NONE"
+    type="required"
+
+[[dependencies.${mod_id}]]
+    modId="curios"
+    versionRange="[9.5.0,)"
+    ordering="NONE"
+    type="required"
+
+# Soft integration: dedicated Chaos Guardian adaptation (existence + all attacks).
+# Everything degrades gracefully when the mod is absent.
+# NOTE: NeoForge 21+ parses the "type" field; the legacy Forge "mandatory" key is
+# silently ignored and would default this dependency to REQUIRED, crashing any
+# install without Draconic Evolution.
+[[dependencies.${mod_id}]]
+    modId="draconicevolution"
+    versionRange="*"
+    ordering="AFTER"
+    type="optional"

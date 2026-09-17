@@ -1,0 +1,26 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "ru.adaptionwheel.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "ru.adaptionwheel.mixin.AdaptionMixinPlugin",
+  "mixins": [
+    "FrictionMixin",
+    "SlimeBlockMixin",
+    "WebBlockMixin",
+    "SpeedFactorMixin",
+    "PowderSnowBlockMixin",
+    "BerryBushMixin",
+    "BubbleColumnMixin",
+    "ShieldDisableMixin",
+    "AttackCooldownMixin",
+    "LivingEntityTickerAccessor",
+    "GuardianLaserMixin"
+  ],
+  "client": [
+    "HurtCamMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
