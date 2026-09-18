@@ -96,10 +96,10 @@ public class WheelRenderer {
 
         // 2. Cancel the body yaw set up by the living renderer so the wheel stays
         //    fixed in world space regardless of how the player is turned
-        poseStack.mulPose(Axis.YP.rotation((float) Math.toRadians(-state.bodyRot)));
+        poseStack.rotate(Axis.YP, (float) Math.toRadians(-state.bodyRot));
 
         // 3. Continuous spin around the world Y axis
-        poseStack.mulPose(Axis.YP.rotation(time * SPIN_RADS_PER_TICK));
+        poseStack.rotate(Axis.YP, time * SPIN_RADS_PER_TICK);
 
         // 4. Scale to match configured wheel size
         poseStack.scale(scale, scale, scale);

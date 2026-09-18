@@ -34,8 +34,8 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile, S
 
     /** See {@link CursedSlashRenderer#getBoundingBoxForCulling}. */
     @Override
-    protected AABB getBoundingBoxForCulling(SpatialRiftProjectile entity) {
-        return super.getBoundingBoxForCulling(entity).inflate(8.0);
+    protected AABB getBoundingBoxForCulling(SpatialRiftProjectile entity, float partialTicks) {
+        return super.getBoundingBoxForCulling(entity, partialTicks).inflate(8.0);
     }
 
     @Override
@@ -46,7 +46,7 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile, S
         float fade = lifeRatio > 0.82f ? Mth.clamp((1f - lifeRatio) / 0.18f, 0f, 1f) : 1f;
 
         poseStack.pushPose();
-        poseStack.mulPose(camera.orientation);
+        poseStack.rotate(camera.orientation);
         FlyingSlashRenderer.render(poseStack, collector, state.motion, state.roll, age,
                 9.0f, 7.5f, BLADE_VIOLET, GLOW_VIOLET, fade);
         poseStack.popPose();

@@ -27,18 +27,18 @@ Toolchain: Java 25, NeoGradle 7.1.39, Gradle 9.2.1, NeoForge `26.3.0.4-beta`
 | `Level.isClientSide` | field | `isClientSide()` |
 | Items | `SwordItem`/`Tiers`, `Unbreakable` component, `UseAnim` | `Item.Properties.sword(ToolMaterial…)`, `DataComponents.UNBREAKABLE`+`Unit`, `ItemUseAnimation`; `DeferredRegister.Items.registerItem(name, ctor, Supplier<Properties>)`; `appendHoverText(stack, ctx, TooltipDisplay, Consumer, flag)`; `use` returns `InteractionResult` |
 | Creative tabs | `CreativeModeTabs.COMBAT` | keys are private → `ResourceKey.create(Registries.CREATIVE_MODE_TAB, "minecraft:combat")`; custom tab via `CreativeModeTab.builder(Row, int)` |
-| Entities | `EntityType.Builder.build(String)`, `CompoundTag` save data, `getBoundingBoxForCulling` on the entity | `build(ResourceKey)`, `ValueInput`/`ValueOutput` (`getFloatOr`, …), culling box override moved to `EntityRenderer.getBoundingBoxForCulling(entity)` |
-| Damage | `hurt(source, dmg)`, `knockback(str, x, z)` | `hurtServer(level, source, dmg)`, `knockback(str, x, z, source, dmg)`; `killedEntity(level, target, source)`; `Entity.hasImpulse` → `syncVelocity`; `fallDistance` is `double` |
+| Entities | `EntityType.Builder.build(String)`, `CompoundTag` save data, `getBoundingBoxForCulling` on the entity | `build(ResourceKey)`, `ValueInput`/`ValueOutput` (`getFloatOr`, …), culling box override moved to `EntityRenderer.getBoundingBoxForCulling(entity, partialTicks)` |
+| Damage | `hurt(source, dmg)`, `knockback(str, x, z)` | `hurtServer(level, source, dmg)`, `knockback(str, x, z, source, dmg)`; `killedEntity(level, target, source)`; `Entity.hasImpulse` → `syncVelocity`; `invulnerableTime` is private (`setInvulnerableTime`); `fallDistance` is `double` |
 | Loot | `Entity.getLootTable()` key | `Optional<ResourceKey<LootTable>>` |
 | Registries | `BuiltInRegistries.X.get(id)` value | `getValue(id)` (`get` now returns `Optional<Holder>`) ; `EntityType.is(tag)` → `builtInRegistryHolder().is(tag)` |
 | Attachments | `AttachmentType.builder().serialize(Codec)` | `serialize(MapCodec)` |
 | Player | `displayClientMessage(c, true/false)` | `sendOverlayMessage` / `sendSystemMessage`; `ServerPlayer.server` private → `level().getServer()` |
 | Commands | `s.hasPermission(2)` | `Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)` |
 | Events | `BlockEvent.BreakEvent`, `AnvilUpdateEvent.setCost` | `event.level.block.BreakBlockEvent`, `setXpCost(int)`; `PacketDistributor.sendToServer` → `ClientPacketDistributor.sendToServer` |
-| Keybinds | string category | `KeyMapping.Category` record + `RegisterKeyMappingsEvent.registerCategory`; lang key `key.category.<ns>.<path>` |
+| Keybinds | string category, GLFW key codes | `KeyMapping.Category` record + `RegisterKeyMappingsEvent.registerCategory`; lang key `key.category.<ns>.<path>`; **26.3 uses SDL3 scancodes** (`InputConstants.Type.KEYBOARD`, `InputConstants.KEY_K`) — GLFW is gone |
 | FML | `FMLLoader.getLoadingModList()` static, `FMLEnvironment.dist` | `FMLLoader.getCurrent().getLoadingModList()`, `FMLEnvironment.getDist()` |
 | GUI | `GuiGraphics` (`drawString`, `renderOutline`, `pose()` = `PoseStack`), `Screen.render`, `mouseClicked(x, y, button)`, `Minecraft.screen/setScreen` | `GuiGraphicsExtractor` (`text`, `outline`, `pose()` = `Matrix3x2fStack`), `Screen.extractRenderState`, `mouseClicked(MouseButtonEvent, doubleClick)`, `Minecraft.gui.screen()/setScreen()`, `isInGameUi()` for transparent background; immediate-mode `Tesselator`/`RenderSystem` quads → `blit(RenderPipelines.GUI_TEXTURED, …, color)` |
-| Entity rendering | `EntityRenderer<T>.render(entity, …, MultiBufferSource)` | `EntityRenderer<T, S extends EntityRenderState>` with `createRenderState`/`extractRenderState`/`submit(state, pose, SubmitNodeCollector, camera)`; custom quads via `submitCustomGeometry`; `RenderTypes.entityTranslucent/entityCutout`; `LightCoordsUtil.FULL_BRIGHT`; `camera.orientation` instead of `entityRenderDispatcher.camera.rotation()` |
+| Entity rendering | `EntityRenderer<T>.render(entity, …, MultiBufferSource)` | `EntityRenderer<T, S extends EntityRenderState>` with `createRenderState`/`extractRenderState`/`submit(state, pose, SubmitNodeCollector, camera)`; custom quads via `submitCustomGeometry`; `RenderTypes.entityTranslucent/entityCutout`; `LightCoordsUtil.FULL_BRIGHT`; `PoseStack.rotate(Quaternionfc)` / `rotate(Axis, float)` replace `mulPose`; `camera.orientation` instead of `entityRenderDispatcher.camera.rotation()` |
 | Wheel above head | `RenderLivingEvent.Post` had the entity | render-state based: `RegisterRenderStateModifiersEvent.registerAvatarEntityModifier` stores "wearing" + world time on the `AvatarRenderState`, `RenderLivingEvent.Post<?,?,?>` reads them and `submitModelPart`s the model |
 
 ## Mixins
@@ -48,7 +48,7 @@ Toolchain: Java 25, NeoGradle 7.1.39, Gradle 9.2.1, NeoForge `26.3.0.4-beta`
 | `*BlockMixin.entityInside` | new signature `(BlockState, Level, BlockPos, Entity, InsideBlockEffectApplier, boolean)` |
 | `FrictionMixin` | friction call moved from `travel` to `travelInAir`; still wraps NeoForge's `BlockState.getFriction(LevelReader, BlockPos, Entity)` |
 | `SlimeBlockMixin` | `updateEntityAfterFallOn` no longer exists; bounce is generic restitution → new `SlimeBounceMixin` wraps `Entity.getBlockBounciness(BlockPos, BlockState)` inside `restituteMovementAfterCollisions` and returns 0 for adapted players on slime |
-| `ShieldDisableMixin` | `Player.disableShield()` is gone; injects into `Player.blockUsingItem(ServerLevel, LivingEntity, DamageSource, float)` and keeps only the `LivingEntity` knockback part |
+| `ShieldDisableMixin` | `Player.disableShield()` is gone; injects into `Player.blockUsingItem(ServerLevel, LivingEntity, DamageSource, float, boolean fullyBlocked)` and keeps only the `LivingEntity` knockback part |
 | `HurtCamMixin` | `GameRenderer.bobHurt(CameraRenderState, PoseStack)` |
 | `SpeedFactorMixin`, `AttackCooldownMixin`, `LivingEntityTickerAccessor`, `GuardianLaserMixin` | unchanged (targets verified against 26.3) |
 

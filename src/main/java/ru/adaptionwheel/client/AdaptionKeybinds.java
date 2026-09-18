@@ -8,7 +8,6 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import org.lwjgl.glfw.GLFW;
 import ru.adaptionwheel.AdaptionWheel;
 
 /** Keybind for the adaptation browser screen (default: K). */
@@ -22,8 +21,8 @@ public final class AdaptionKeybinds {
     /** Null on dedicated servers; only dereferenced behind a dist check. */
     public static final KeyMapping OPEN_SCREEN_KEY = new KeyMapping(
             "key.adaptionwheel.open_screen",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_K,
+            InputConstants.Type.KEYBOARD,
+            InputConstants.KEY_K, // 26.3 uses SDL scancodes (GLFW is gone)
             CATEGORY);
 
     private AdaptionKeybinds() {

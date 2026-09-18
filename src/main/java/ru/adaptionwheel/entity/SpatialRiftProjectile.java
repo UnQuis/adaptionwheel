@@ -147,7 +147,7 @@ public class SpatialRiftProjectile extends Projectile {
         Entity owner = getOwner();
         var source = damageSources().playerAttack(owner instanceof net.minecraft.server.level.ServerPlayer sp ? sp : null);
 
-        target.invulnerableTime = 0;
+        target.setInvulnerableTime(0);
         target.setHealth(0f);
         target.die(source);
         if (owner instanceof net.minecraft.server.level.ServerPlayer killer && target.getHealth() <= 0f) {

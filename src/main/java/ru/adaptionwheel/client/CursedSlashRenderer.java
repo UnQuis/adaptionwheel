@@ -38,8 +38,8 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile, S
      * still on screen.
      */
     @Override
-    protected AABB getBoundingBoxForCulling(CursedSlashProjectile entity) {
-        return super.getBoundingBoxForCulling(entity).inflate(8.0);
+    protected AABB getBoundingBoxForCulling(CursedSlashProjectile entity, float partialTicks) {
+        return super.getBoundingBoxForCulling(entity, partialTicks).inflate(8.0);
     }
 
     @Override
@@ -51,7 +51,7 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile, S
         float fade = age < 24f ? 1f : Mth.clamp(1f - (age - 24f) / 12f, 0f, 1f);
 
         poseStack.pushPose();
-        poseStack.mulPose(camera.orientation);
+        poseStack.rotate(camera.orientation);
         FlyingSlashRenderer.render(poseStack, collector, state.motion, state.roll, age,
                 6.0f, 5.0f, BLADE_CYAN, GLOW_CYAN, fade);
         poseStack.popPose();
