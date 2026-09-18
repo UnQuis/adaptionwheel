@@ -2,8 +2,9 @@
 
 ## SlashBlade: Resharped flying-slash textures
 
-The following two files were adapted without modification from the SlashBlade:
-Resharped repository:
+The following two files are based on assets from the SlashBlade: Resharped
+repository. The soft grayscale mask was converted to a transparent RGBA PNG so
+Minecraft does not render its black background:
 
 - `src/main/resources/assets/adaptionwheel/textures/entity/flying_slash.png`
 - `src/main/resources/assets/adaptionwheel/textures/entity/flying_slash_soft.png`
