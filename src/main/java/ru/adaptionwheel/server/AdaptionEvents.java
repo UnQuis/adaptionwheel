@@ -1663,15 +1663,15 @@ public class AdaptionEvents {
     }
 
     /**
-     * Solemn completion stinger for a genuinely completed adaptation.
+     * Solemn completion voice for a genuinely completed adaptation.
      *
-     * <p>The lower pitch makes the existing reference voice sound weightier than
-     * a regular level-up. Keep this one helper for level 8, existence, combo
-     * unlocks, and the All Adaptations consumable so all of those milestones
-     * have the same audio identity.</p>
+     * <p>This intentionally uses the same adaptation voice as an ordinary
+     * completion, only with a lower pitch. Keep one helper for level 8,
+     * existence, combo unlocks, and the All Adaptations consumable so all of
+     * those milestones use the same adaptation sound with a weightier tone.</p>
      */
     private static void playMaxVoice(ServerPlayer player) {
-        playSoundThrottled(player, ModSounds.REF.get(), 0.68f, 1.2f);
+        playSoundThrottled(player, ModSounds.ADAPT_VOICE.get(), 0.68f, 1.2f);
     }
 
     private static void playSoundThrottled(ServerPlayer player, net.minecraft.sounds.SoundEvent sound, float pitch, float volume) {
