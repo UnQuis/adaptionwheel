@@ -97,7 +97,6 @@ public class SpatialRiftProjectile extends Projectile {
             while (trailPositions.size() > 22) {
                 trailPositions.removeFirst();
             }
-            super.tick();
             setPos(getX() + motion.x, getY() + motion.y, getZ() + motion.z);
             return;
         }

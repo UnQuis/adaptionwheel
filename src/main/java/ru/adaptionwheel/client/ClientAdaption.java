@@ -93,8 +93,13 @@ public final class ClientAdaption {
         if (ticks == null || existenceThreshold <= 0) {
             return 0f;
         }
-        int current = ticks + elapsedTicksSinceSync();
+        int current = ticks + progressElapsedTicks();
         return Math.min(1f, (float) current / existenceThreshold);
+    }
+
+    /** Task and existence progress are both frozen while Adversity is active. */
+    private static int progressElapsedTicks() {
+        return adversityActive ? 0 : elapsedTicksSinceSync();
     }
 
     private static int elapsedTicksSinceSync() {
