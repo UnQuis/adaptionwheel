@@ -374,7 +374,7 @@ public class AdaptionEvents {
             }
         }
         if (bestLevel >= 8) {
-            player.invulnerableTime = Math.max(player.invulnerableTime, 120);
+            player.setInvulnerableTime(Math.max(player.getInvulnerableTime(), 120));
         }
 
         // ---- Start / accelerate analysis tasks ----
@@ -459,7 +459,7 @@ public class AdaptionEvents {
         player.setHealth(Math.max(1f, player.getHealth() - 30f));
         data.adversityActive = true;
         data.adversityTimer = 480; // 24 seconds analysis
-        player.invulnerableTime = 60;
+        player.setInvulnerableTime(60);
         // Totem-style burst in front of the player's face.
         if (player.level() instanceof ServerLevel serverLevel) {
             var random = player.getRandom();
@@ -572,7 +572,7 @@ public class AdaptionEvents {
             // Push the attacker away from the wearer, like the original mod's contact reflection.
             living.knockback(1.2, player.getX() - living.getX(), player.getZ() - living.getZ(),
                     player.damageSources().playerAttack(player), damage * multiplier);
-            player.invulnerableTime = Math.max(player.invulnerableTime, 10);
+            player.setInvulnerableTime(Math.max(player.getInvulnerableTime(), 10));
         }
     }
 
