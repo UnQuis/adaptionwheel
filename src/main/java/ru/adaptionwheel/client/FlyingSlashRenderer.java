@@ -2,8 +2,10 @@ package ru.adaptionwheel.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
@@ -124,6 +126,9 @@ public final class FlyingSlashRenderer {
                                float u, float v, int[] color, int alpha) {
         consumer.addVertex(matrix, (float) position.x, (float) position.y, (float) position.z)
                 .setColor(color[0], color[1], color[2], alpha)
-                .setUv(u, v);
+                .setUv(u, v)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setLight(LightTexture.FULL_BRIGHT)
+                .setNormal(0f, 1f, 0f);
     }
 }
