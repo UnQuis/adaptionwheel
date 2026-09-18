@@ -5,15 +5,20 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.component.TooltipDisplay;
+import net.neoforged.fml.loading.FMLEnvironment;
 import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.data.WheelData;
-import top.theillusivec4.curios.api.SlotContext;
-import top.theillusivec4.curios.api.type.capability.ICurioItem;
 
-import java.util.List;
+import java.util.function.Consumer;
 
-/** The Mahoraga Wheel — the source of all adaptation. Equips only in the dedicated Curios wheel slot. */
-public class MahoragaWheelItem extends Item implements ICurioItem {
+/**
+ * The Mahoraga Wheel — the source of all adaptation.
+ * With Curios installed it equips only in the dedicated {@code wheel} curio slot
+ * (see {@link ru.adaptionwheel.compat.CuriosCompat}); without Curios it is "worn"
+ * while carried in the inventory or off-hand (see {@link ru.adaptionwheel.compat.WheelSlots}).
+ */
+public class MahoragaWheelItem extends Item {
 
     public static final String WHEEL_SLOT = "wheel";
 
@@ -22,36 +27,25 @@ public class MahoragaWheelItem extends Item implements ICurioItem {
     }
 
     @Override
-    public boolean canEquip(SlotContext slotContext, ItemStack stack) {
-        return WHEEL_SLOT.equals(slotContext.identifier());
-    }
-
-    @Override
-    public boolean canEquipFromUse(SlotContext slotContext, ItemStack stack) {
-        return canEquip(slotContext, stack);
-    }
-
-    @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
-        tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip").withStyle(ChatFormatting.GOLD));
-        tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip2").withStyle(ChatFormatting.GRAY));
-        tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip3").withStyle(ChatFormatting.DARK_GRAY));
+    public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay display,
+                                Consumer<Component> tooltip, TooltipFlag tooltipFlag) {
+        tooltip.accept(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip").withStyle(ChatFormatting.GOLD));
+        tooltip.accept(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip2").withStyle(ChatFormatting.GRAY));
+        tooltip.accept(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip3").withStyle(ChatFormatting.DARK_GRAY));
 
         WheelData wd = stack.get(ModDataComponents.WHEEL_DATA);
         if (wd != null) {
             int count = wd.adaptCount();
             if (count > 0) {
-                tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.adaptations", count)
+                tooltip.accept(Component.translatable("item.adaptionwheel.mahoraga_wheel.adaptations", count)
                         .withStyle(ChatFormatting.LIGHT_PURPLE));
             }
         }
         // Hint for the adaptation browser screen (client-only key name).
-        if (net.neoforged.fml.loading.FMLEnvironment.dist.isClient()) {
-            net.minecraft.client.KeyMapping key = ru.adaptionwheel.client.AdaptionKeybinds.OPEN_SCREEN_KEY;
-            if (key != null && !key.isUnbound()) {
-                tooltipComponents.add(Component.translatable(
-                                "item.adaptionwheel.mahoraga_wheel.tooltip4",
-                                key.getTranslatedKeyMessage())
+        if (FMLEnvironment.getDist().isClient()) {
+            Component keyName = ru.adaptionwheel.client.AdaptionKeybinds.boundKeyName();
+            if (keyName != null) {
+                tooltip.accept(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip4", keyName)
                         .withStyle(ChatFormatting.DARK_GRAY));
             }
         }

@@ -21,7 +21,9 @@ public abstract class BubbleColumnMixin {
     private void adaptionwheel$noDrag(net.minecraft.world.level.block.state.BlockState state,
                                       net.minecraft.world.level.Level level,
                                       net.minecraft.core.BlockPos pos,
-                                      Entity entity, CallbackInfo ci) {
+                                      Entity entity,
+                                      net.minecraft.world.entity.InsideBlockEffectApplier effectApplier,
+                                      boolean isPrecise, CallbackInfo ci) {
         if (entity instanceof Player player && SurfaceAdaptations.controlsBubbleColumns(player)) {
             ci.cancel();
         }

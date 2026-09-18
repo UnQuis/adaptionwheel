@@ -1,7 +1,8 @@
 package ru.adaptionwheel.entity;
 
 import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -79,7 +80,7 @@ public class CursedSlashProjectile extends Projectile {
         super.tick();
         Vec3 motion = getDeltaMovement();
 
-        if (level().isClientSide) {
+        if (level().isClientSide()) {
             trailPositions.addLast(position());
             while (trailPositions.size() > TRAIL_LENGTH) {
                 trailPositions.removeFirst();
@@ -125,7 +126,9 @@ public class CursedSlashProjectile extends Projectile {
                 continue;
             }
             DamageSource source = damageSources().mobProjectile(this, getOwner() instanceof LivingEntity living ? living : null);
-            target.hurt(source, damage);
+            if (level() instanceof ServerLevel serverLevel) {
+                target.hurtServer(serverLevel, source, damage);
+            }
             level().playSound(null, target.blockPosition(), ModSounds.SOE_HIT_2.get(), SoundSource.PLAYERS, 0.8f,
                     1f + (random.nextFloat() - 0.5f) * 0.2f);
             if (alreadyHit.size() >= maxHits) {
@@ -152,26 +155,19 @@ public class CursedSlashProjectile extends Projectile {
         return true;
     }
 
-    /**
-     * The visual blade/tear extends far beyond the 0.5-block entity hitbox;
-     * without an inflated culling box the frustum test drops the entity while
-     * its glow is still on screen.
-     */
-    @Override
-    public AABB getBoundingBoxForCulling() {
-        return super.getBoundingBoxForCulling().inflate(8.0);
-    }
+    // Note: the inflated culling box (visual extends far beyond the hitbox) is now
+    // provided by the renderer's getBoundingBoxForCulling override (26.x moved it there).
 
     @Override
-    protected void readAdditionalSaveData(CompoundTag tag) {
+    protected void readAdditionalSaveData(ValueInput tag) {
         super.readAdditionalSaveData(tag);
-        damage = tag.getFloat("Damage");
-        maxHits = tag.getInt("MaxHits");
-        entityData.set(ROLL, tag.getFloat("Roll"));
+        damage = tag.getFloatOr("Damage", 20f);
+        maxHits = tag.getIntOr("MaxHits", 2);
+        entityData.set(ROLL, tag.getFloatOr("Roll", 0f));
     }
 
     @Override
-    protected void addAdditionalSaveData(CompoundTag tag) {
+    protected void addAdditionalSaveData(ValueOutput tag) {
         super.addAdditionalSaveData(tag);
         tag.putFloat("Roll", entityData.get(ROLL));
         tag.putFloat("Damage", damage);

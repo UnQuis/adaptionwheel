@@ -33,7 +33,7 @@ public final class MovementTriggers {
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
-                || player.level().isClientSide || player.isDeadOrDying()) {
+                || player.level().isClientSide() || player.isDeadOrDying()) {
             return;
         }
         if (!AdaptionConfig.ENABLE_MOVEMENT.get()) {

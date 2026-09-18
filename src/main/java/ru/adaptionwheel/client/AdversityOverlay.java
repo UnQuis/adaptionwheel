@@ -1,21 +1,15 @@
 package ru.adaptionwheel.client;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.client.Minecraft;import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import org.joml.Matrix4f;
+import org.joml.Matrix3x2fStack;
 import ru.adaptionwheel.AdaptionWheel;
 
 /**
@@ -49,14 +43,14 @@ public final class AdversityOverlay {
             return;
         }
 
-        GuiGraphics graphics = event.getGuiGraphics();
+        GuiGraphicsExtractor graphics = event.getGuiGraphics();
         Font font = mc.font;
         float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(false);
         float time = ClientAdaption.gameTime() + partialTick;
         float pulse = Mth.abs(Mth.sin(time * 0.2f));
         int screenW = graphics.guiWidth();
         int screenH = graphics.guiHeight();
-        PoseStack pose = graphics.pose();
+        Matrix3x2fStack pose = graphics.pose();
 
         // Totem-style face flash right after the trigger, then faint gray heartbeat wheel.
         drawWheel(graphics, time, screenW, screenH);
@@ -66,7 +60,7 @@ public final class AdversityOverlay {
             String cdText = Component.translatable("adaptionwheel.hud.adversity_cooldown",
                     ClientAdaption.adversityCooldownTimer / 20).getString();
             int w = font.width(cdText);
-            graphics.drawString(font, cdText, (screenW - w) / 2, 50, 0xFF999999, true);
+            graphics.text(font, cdText, (screenW - w) / 2, 50, 0xFF999999, true);
             return;
         }
 
@@ -86,23 +80,23 @@ public final class AdversityOverlay {
         float titleScale = 1.5f + pulse * 0.1f;
 
         // Title.
-        pose.pushPose();
-        pose.translate(cx, cy - 14, 0);
-        pose.scale(titleScale, titleScale, 1f);
+        pose.pushMatrix();
+        pose.translate(cx, cy - 14);
+        pose.scale(titleScale, titleScale);
         String title = Component.translatable("adaptionwheel.hud.adversity_title").getString();
-        graphics.drawString(font, title, -font.width(title) / 2, -font.lineHeight / 2, 0xFFFF0000, true);
-        pose.popPose();
+        graphics.text(font, title, -font.width(title) / 2, -font.lineHeight / 2, 0xFFFF0000, true);
+        pose.popMatrix();
 
         // Countdown [ SS : CS ].
         int remainingTicks = ClientAdaption.smoothedAdversityTimer();
         int seconds = remainingTicks / 20;
         int centis = (int) (remainingTicks % 20 / 20f * 100f);
         String timeStr = "[ " + String.format("%02d : %02d", seconds, centis) + " ]";
-        pose.pushPose();
-        pose.translate(cx, cy + 16, 0);
-        pose.scale(0.9f, 0.9f, 1f);
-        graphics.drawString(font, timeStr, -font.width(timeStr) / 2, -font.lineHeight / 2, themeColor, true);
-        pose.popPose();
+        pose.pushMatrix();
+        pose.translate(cx, cy + 16);
+        pose.scale(0.9f, 0.9f);
+        graphics.text(font, timeStr, -font.width(timeStr) / 2, -font.lineHeight / 2, themeColor, true);
+        pose.popMatrix();
 
         // Progress bar shrinking symmetrically toward zero.
         float progress = Mth.clamp(remainingTicks / (float) ADVERSITY_TOTAL_TICKS, 0f, 1f);
@@ -121,7 +115,7 @@ public final class AdversityOverlay {
      * fading out over 60 ticks like the original AdversitySpinTimer), then a subtle
      * gray heartbeat wheel for the rest of the active run.
      */
-    private static void drawWheel(GuiGraphics graphics, float time, int screenW, int screenH) {
+    private static void drawWheel(GuiGraphicsExtractor graphics, float time, int screenW, int screenH) {
         long triggeredAt = ClientAdaption.adversityTriggeredAtGameTime;
         long now = ClientAdaption.gameTime();
         float alpha;
@@ -144,21 +138,14 @@ public final class AdversityOverlay {
 
         int size = (int) (screenH * sizeFrac);
         int argb = (int) (alpha * 255f) << 24 | (white ? 0xFFFFFF : 0x777777);
-        drawTexturedQuad(graphics.pose(), screenW / 2 - size / 2, screenH / 2 - size / 2, size, argb);
+        drawTexturedQuad(graphics, screenW / 2 - size / 2, screenH / 2 - size / 2, size, argb);
     }
 
-    private static void drawTexturedQuad(PoseStack pose, int x, int y, int size, int argb) {
-        RenderSystem.enableBlend();
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-        RenderSystem.setShaderTexture(0, AdaptionHud.WHEEL_TEXTURE);
-        Matrix4f matrix = pose.last().pose();
-        BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
-        buffer.addVertex(matrix, x, y, 0).setUv(0f, 0f).setColor(argb);
-        buffer.addVertex(matrix, x, y + size, 0).setUv(0f, 1f).setColor(argb);
-        buffer.addVertex(matrix, x + size, y + size, 0).setUv(1f, 1f).setColor(argb);
-        buffer.addVertex(matrix, x + size, y, 0).setUv(1f, 0f).setColor(argb);
-        BufferUploader.drawWithShader(buffer.buildOrThrow());
-        RenderSystem.disableBlend();
+    private static void drawTexturedQuad(GuiGraphicsExtractor graphics, int x, int y, int size, int argb) {
+        // 26.x GUI rendering is retained-mode: submit a tinted textured blit through the
+        // GUI_TEXTURED pipeline (blending is part of the pipeline state).
+        graphics.blit(RenderPipelines.GUI_TEXTURED, AdaptionHud.WHEEL_TEXTURE,
+                x, y, 0f, 0f, size, size, size, size, size, size, argb);
     }
 
     private static int lerpColor(int from, int to, float t) {

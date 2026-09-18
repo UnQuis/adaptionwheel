@@ -2,7 +2,7 @@ package ru.adaptionwheel.category;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /**
  * Concept keys mirror the original Terraria mod's adaptation naming scheme:
@@ -275,17 +275,17 @@ public final class Concepts {
     }
 
     private static Component debuffName(String effectPath) {
-        ResourceLocation id = ResourceLocation.tryParse(effectPath);
+        Identifier id = Identifier.tryParse(effectPath);
         if (id != null && BuiltInRegistries.MOB_EFFECT.containsKey(id)) {
-            return Component.translatable(BuiltInRegistries.MOB_EFFECT.get(id).getDescriptionId());
+            return Component.translatable(BuiltInRegistries.MOB_EFFECT.getValue(id).getDescriptionId());
         }
         return Component.literal(effectPath);
     }
 
     private static Component entityName(String entityPart, String suffix) {
-        ResourceLocation id = ResourceLocation.tryParse(entityPart);
+        Identifier id = Identifier.tryParse(entityPart);
         if (id != null && BuiltInRegistries.ENTITY_TYPE.containsKey(id)) {
-            return Component.translatable(BuiltInRegistries.ENTITY_TYPE.get(id).getDescriptionId()).append(suffix);
+            return Component.translatable(BuiltInRegistries.ENTITY_TYPE.getValue(id).getDescriptionId()).append(suffix);
         }
         return Component.literal(entityPart).append(suffix);
     }

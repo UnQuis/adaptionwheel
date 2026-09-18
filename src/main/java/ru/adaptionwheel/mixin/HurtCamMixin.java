@@ -19,7 +19,8 @@ import ru.adaptionwheel.client.ClientAdaption;
 public abstract class HurtCamMixin {
 
     @Inject(method = "bobHurt", at = @At("HEAD"), cancellable = true)
-    private void adaptionwheel$steadyGaze(PoseStack poseStack, float partialTick, CallbackInfo ci) {
+    private void adaptionwheel$steadyGaze(net.minecraft.client.renderer.state.level.CameraRenderState cameraState,
+                                          PoseStack poseStack, CallbackInfo ci) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null && ClientAdaption.wearingWheel
                 && ClientAdaption.isAdapted(Concepts.PERCEP_STEADY_GAZE)) {

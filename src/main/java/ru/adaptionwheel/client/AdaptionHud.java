@@ -2,9 +2,9 @@ package ru.adaptionwheel.client;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
@@ -26,8 +26,8 @@ import java.util.Map;
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = net.neoforged.api.distmarker.Dist.CLIENT)
 public class AdaptionHud {
 
-    public static final ResourceLocation WHEEL_TEXTURE =
-            ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, "textures/entity/wheel.png");
+    public static final Identifier WHEEL_TEXTURE =
+            Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "textures/entity/wheel.png");
 
     private static final int HEADER_COLOR = 0xFFD700;
     private static final int ROW_WIDTH = 252;
@@ -45,21 +45,20 @@ public class AdaptionHud {
                 && ClientAdaption.EXISTENCE_PROGRESS.isEmpty()) {
             return;
         }
-        GuiGraphics graphics = event.getGuiGraphics();
+        GuiGraphicsExtractor graphics = event.getGuiGraphics();
         Minecraft mc = Minecraft.getInstance();
         Font font = mc.font;
         int opacity = AdaptionConfig.HUD_OPACITY.get();
         float scale = (float) (double) AdaptionConfig.HUD_SCALE.get();
 
-        graphics.pose().pushPose();
+        graphics.pose().pushMatrix();
         graphics.pose().translate(
                 25f * scale + AdaptionConfig.HUD_OFFSET_X.get(),
-                mc.getWindow().getGuiScaledHeight() * 0.35f + AdaptionConfig.HUD_OFFSET_Y.get(),
-                0f);
-        graphics.pose().scale(scale, scale, 1f);
+                graphics.guiHeight() * 0.35f + AdaptionConfig.HUD_OFFSET_Y.get());
+        graphics.pose().scale(scale, scale);
 
         // Header
-        graphics.drawString(font, Component.literal(">>> ADAPTATION_ANALYSIS"), 0, 0,
+        graphics.text(font, Component.literal(">>> ADAPTATION_ANALYSIS"), 0, 0,
                 withAlpha(HEADER_COLOR, Math.min(100, opacity * 150 / 100)), true);
 
         // Build row list: tasks + existence progress + adversity
@@ -80,22 +79,22 @@ public class AdaptionHud {
         }
         rows.sort(Comparator.comparingInt(r -> priority(r.concept)));
 
-        int maxDisplay = Math.max(5, (int) (mc.getWindow().getGuiScaledHeight() * 0.6f / (SPACING * scale)));
+        int maxDisplay = Math.max(5, (int) (graphics.guiHeight() * 0.6f / (SPACING * scale)));
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
             int y = (i + 1) * SPACING;
-            if (i >= maxDisplay || y + ROW_HEIGHT > mc.getWindow().getGuiScaledHeight() / scale) {
-                graphics.drawString(font, Component.literal("...and " + (rows.size() - i) + " more"),
+            if (i >= maxDisplay || y + ROW_HEIGHT > graphics.guiHeight() / scale) {
+                graphics.text(font, Component.literal("...and " + (rows.size() - i) + " more"),
                         15, y, 0xFFAAAAAA, true);
                 break;
             }
             drawRow(graphics, font, row, y, opacity);
         }
 
-        graphics.pose().popPose();
+        graphics.pose().popMatrix();
     }
 
-    private static void drawRow(GuiGraphics graphics, Font font, Row row, int y, int opacity) {
+    private static void drawRow(GuiGraphicsExtractor graphics, Font font, Row row, int y, int opacity) {
         int color = row.rainbow ? rainbowColor() : Concepts.color(row.concept);
         int barW = Math.min(BAR_WIDTH, Math.max(0, (int) (BAR_WIDTH * row.progress)));
 
@@ -114,7 +113,7 @@ public class AdaptionHud {
             tag = " [Lv." + level + " > " + (level + 1) + "]";
         }
         String text = name + tag + " : " + String.format("%.1f%%", row.progress * 100f);
-        graphics.drawString(font, text, 15, y, withAlpha(color, opacity), true);
+        graphics.text(font, text, 15, y, withAlpha(color, opacity), true);
 
         // Progress bar: black background + colored fill
         graphics.fill(15, y + 24, 15 + BAR_WIDTH, y + 24 + BAR_HEIGHT, withAlpha(0x000000, opacity * 60 / 100));

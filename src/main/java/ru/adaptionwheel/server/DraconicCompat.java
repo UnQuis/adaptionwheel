@@ -1,7 +1,7 @@
 package ru.adaptionwheel.server;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -39,13 +39,13 @@ public final class DraconicCompat {
             "draconicevolution:chaos_implosion",     // death implosion / chaos crystal placer
             "draconicevolution:crystal_move");       // guardian crystal push
 
-    private static ResourceLocation guardianKey() {
-        return ResourceLocation.tryParse(GUARDIAN_ID);
+    private static Identifier guardianKey() {
+        return Identifier.tryParse(GUARDIAN_ID);
     }
 
     /** True when Draconic Evolution is loaded and the guardian entity type exists. */
     public static boolean available() {
-        ResourceLocation id = guardianKey();
+        Identifier id = guardianKey();
         return id != null && BuiltInRegistries.ENTITY_TYPE.containsKey(id);
     }
 
@@ -54,7 +54,7 @@ public final class DraconicCompat {
         if (entity == null) {
             return null;
         }
-        ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+        Identifier key = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return key != null ? key.toString() : null;
     }
 

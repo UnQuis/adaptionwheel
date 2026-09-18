@@ -84,7 +84,7 @@ public final class AdaptionCommand {
         root.then(net.minecraft.commands.Commands.literal("status")
                 .executes(ctx -> status(ctx, self(ctx)))
                 .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
-                        .requires(s -> s.hasPermission(2))
+                        .requires(net.minecraft.commands.Commands.hasPermission(net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
                         .executes(ctx -> status(ctx, EntityArgument.getPlayer(ctx, "target")))));
 
         root.then(net.minecraft.commands.Commands.literal("list")
@@ -93,7 +93,7 @@ public final class AdaptionCommand {
                         .suggests(DOMAIN_SUGGESTIONS)
                         .executes(ctx -> list(ctx, self(ctx), StringArgumentType.getString(ctx, "domain")))
                         .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
-                                .requires(s -> s.hasPermission(2))
+                                .requires(net.minecraft.commands.Commands.hasPermission(net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
                                 .executes(ctx -> list(ctx, EntityArgument.getPlayer(ctx, "target"),
                                         StringArgumentType.getString(ctx, "domain"))))));
 
@@ -111,7 +111,7 @@ public final class AdaptionCommand {
 
         // ---- mutations of state: ops only ----
         root.then(net.minecraft.commands.Commands.literal("grant")
-                .requires(s -> s.hasPermission(2))
+                .requires(net.minecraft.commands.Commands.hasPermission(net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
                 .then(conceptArg("concept")
                         .executes(ctx -> grant(ctx, selfOrTarget(ctx, "target"), concept(ctx), PlayerAdaption.MAX_LEVEL))
                         .then(net.minecraft.commands.Commands.argument("level", IntegerArgumentType.integer(0, 8))
@@ -122,7 +122,7 @@ public final class AdaptionCommand {
                                                 concept(ctx), IntegerArgumentType.getInteger(ctx, "level")))))));
 
         root.then(net.minecraft.commands.Commands.literal("analyze")
-                .requires(s -> s.hasPermission(2))
+                .requires(net.minecraft.commands.Commands.hasPermission(net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
                 .then(conceptArg("concept")
                         .executes(ctx -> analyze(ctx, selfOrTarget(ctx, "target"), concept(ctx)))
                         .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
@@ -130,13 +130,13 @@ public final class AdaptionCommand {
                                         concept(ctx))))));
 
         root.then(net.minecraft.commands.Commands.literal("reset")
-                .requires(s -> s.hasPermission(2))
+                .requires(net.minecraft.commands.Commands.hasPermission(net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
                 .executes(ctx -> reset(ctx, self(ctx)))
                 .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
                         .executes(ctx -> reset(ctx, EntityArgument.getPlayer(ctx, "target")))));
 
         root.then(net.minecraft.commands.Commands.literal("registry")
-                .requires(s -> s.hasPermission(2))
+                .requires(net.minecraft.commands.Commands.hasPermission(net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
                 .executes(AdaptionCommand::registry));
 
         event.getDispatcher().register(root);

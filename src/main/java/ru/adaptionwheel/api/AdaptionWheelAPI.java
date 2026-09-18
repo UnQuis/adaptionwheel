@@ -28,12 +28,12 @@ public final class AdaptionWheelAPI {
 
     /** True when the player currently wears the Mahoraga Wheel in its Curios slot (server side). */
     public static boolean isWearingWheel(Player player) {
-        return !player.level().isClientSide && AdaptionEvents.isWearingWheel(player);
+        return !player.level().isClientSide() && AdaptionEvents.isWearingWheel(player);
     }
 
     /** Level of a leveled adaptation concept ({@code Type_*}, {@code Contact_*}, ...), 0 if absent. */
     public static int getLevel(Player player, String concept) {
-        if (player.level().isClientSide || !(player instanceof net.minecraft.server.level.ServerPlayer sp)) {
+        if (player.level().isClientSide() || !(player instanceof net.minecraft.server.level.ServerPlayer sp)) {
             return 0;
         }
         return AdaptionEvents.dataOf(sp).level(concept);
@@ -41,7 +41,7 @@ public final class AdaptionWheelAPI {
 
     /** Whether a one-time adaptation (Env_*, Debuff_*, Existence_*, Mutation_*, ...) is completed. */
     public static boolean isAdapted(Player player, String concept) {
-        if (player.level().isClientSide || !(player instanceof net.minecraft.server.level.ServerPlayer sp)) {
+        if (player.level().isClientSide() || !(player instanceof net.minecraft.server.level.ServerPlayer sp)) {
             return false;
         }
         return AdaptionEvents.dataOf(sp).isAdapted(concept);
@@ -49,7 +49,7 @@ public final class AdaptionWheelAPI {
 
     /** Total number of completed adaptations (drives cumulative bonuses). */
     public static int getAdaptCount(Player player) {
-        if (player.level().isClientSide || !(player instanceof net.minecraft.server.level.ServerPlayer sp)) {
+        if (player.level().isClientSide() || !(player instanceof net.minecraft.server.level.ServerPlayer sp)) {
             return 0;
         }
         return AdaptionEvents.dataOf(sp).getAdaptCount();
@@ -57,7 +57,7 @@ public final class AdaptionWheelAPI {
 
     /** Concepts of all running analysis tasks. */
     public static List<String> getActiveTasks(Player player) {
-        if (player.level().isClientSide || !(player instanceof net.minecraft.server.level.ServerPlayer sp)) {
+        if (player.level().isClientSide() || !(player instanceof net.minecraft.server.level.ServerPlayer sp)) {
             return List.of();
         }
         return AdaptionEvents.dataOf(sp).tasks.stream().map(t -> t.concept).toList();

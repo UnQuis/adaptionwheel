@@ -6,7 +6,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
 import net.neoforged.neoforge.event.entity.living.LivingShieldBlockEvent;
-import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.level.block.BreakBlockEvent;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
@@ -30,9 +30,9 @@ public final class DomainTriggers {
     }
 
     @SubscribeEvent
-    public static void onBlockBreak(BlockEvent.BreakEvent event) {
+    public static void onBlockBreak(BreakBlockEvent event) {
         if (!(event.getPlayer() instanceof net.minecraft.server.level.ServerPlayer player)
-                || player.level().isClientSide) {
+                || player.level().isClientSide()) {
             return;
         }
         if (!AdaptionConfig.ENABLE_MINING.get() || !AdaptionEvents.isWearingWheel(player)) {
@@ -46,7 +46,7 @@ public final class DomainTriggers {
     @SubscribeEvent
     public static void onAttack(AttackEntityEvent event) {
         if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
-                || player.level().isClientSide) {
+                || player.level().isClientSide()) {
             return;
         }
         if (!AdaptionConfig.ENABLE_COMBAT.get() || !AdaptionEvents.isWearingWheel(player)) {
@@ -60,7 +60,7 @@ public final class DomainTriggers {
     @SubscribeEvent
     public static void onShieldBlock(LivingShieldBlockEvent event) {
         if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
-                || player.level().isClientSide) {
+                || player.level().isClientSide()) {
             return;
         }
         if (!AdaptionConfig.ENABLE_COMBAT.get() || !AdaptionEvents.isWearingWheel(player)) {

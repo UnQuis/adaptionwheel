@@ -13,8 +13,8 @@ public class AttachmentTypes {
             DeferredRegister.create(NeoForgeRegistries.ATTACHMENT_TYPES, AdaptionWheel.MODID);
 
     public static final Supplier<AttachmentType<PlayerAdaption>> ADAPTION =
-            ATTACHMENTS.register("adaption", () -> AttachmentType.builder(PlayerAdaption::new)
-                    .serialize(PlayerAdaption.CODEC)
+            ATTACHMENTS.register("adaption", () -> AttachmentType.builder(() -> new PlayerAdaption())
+                    .serialize(PlayerAdaption.MAP_CODEC)
                     .copyOnDeath()
                     .build());
 }

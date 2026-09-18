@@ -5,7 +5,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -37,7 +37,7 @@ public final class SkillIssueHandler {
 
     @SubscribeEvent
     public static void onArrowLoose(ArrowLooseEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide) {
+        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide()) {
             return;
         }
         if (!AdaptionConfig.ENABLE_COMBAT.get() || !AdaptionEvents.isWearingWheel(player)) {
@@ -55,7 +55,7 @@ public final class SkillIssueHandler {
                 || arrow.tickCount > 400) {
             return;
         }
-        if (!(arrow.getOwner() instanceof ServerPlayer shooter) || shooter.level().isClientSide) {
+        if (!(arrow.getOwner() instanceof ServerPlayer shooter) || shooter.level().isClientSide()) {
             return;
         }
         if (!AdaptionConfig.SKILL_ISSUE_ENABLED.get()
@@ -83,7 +83,7 @@ public final class SkillIssueHandler {
             return;
         }
         arrow.setDeltaMovement(steered.normalize().scale(speed));
-        arrow.hasImpulse = true;
+        arrow.syncVelocity = true; // 26.x: hasImpulse was renamed
     }
 
     /**

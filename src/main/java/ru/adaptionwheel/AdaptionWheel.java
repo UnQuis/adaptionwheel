@@ -2,9 +2,9 @@ package ru.adaptionwheel;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.CreativeModeTab;
-import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -16,24 +16,27 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.DeferredHolder;
+import ru.adaptionwheel.compat.CuriosCompat;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.AttachmentTypes;
 import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.item.ModItems;
 import ru.adaptionwheel.sound.ModSounds;
-import top.theillusivec4.curios.api.CuriosApi;
-import top.theillusivec4.curios.api.type.capability.ICurioItem;
 
 @Mod(AdaptionWheel.MODID)
 public class AdaptionWheel {
 
     public static final String MODID = "adaptionwheel";
 
+    /** Vanilla "Combat" tab key ({@code CreativeModeTabs.COMBAT} is private in 26.x). */
+    private static final ResourceKey<CreativeModeTab> COMBAT_TAB =
+            ResourceKey.create(Registries.CREATIVE_MODE_TAB, Identifier.withDefaultNamespace("combat"));
+
     private static final DeferredRegister<CreativeModeTab> CREATIVE_TABS =
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
 
     private static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = CREATIVE_TABS.register("adaptionwheel",
-            () -> CreativeModeTab.builder()
+            () -> CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
                     .title(Component.translatable("itemGroup.adaptionwheel"))
                     .icon(() -> ModItems.MAHORAGA_WHEEL.get().getDefaultInstance())
                     .displayItems((parameters, output) -> {
@@ -59,7 +62,7 @@ public class AdaptionWheel {
     private void commonSetup(FMLCommonSetupEvent event) {
         event.enqueueWork(() -> {
             Item item = ModItems.MAHORAGA_WHEEL.get();
-            CuriosApi.registerCurio(item, (ICurioItem) item);
+            CuriosCompat.registerWheel(item);
         });
     }
 
@@ -68,7 +71,7 @@ public class AdaptionWheel {
 
         @SubscribeEvent
         public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {
-            if (event.getTabKey() == CreativeModeTabs.COMBAT) {
+            if (event.getTabKey() == COMBAT_TAB) {
                 event.accept(ModItems.MAHORAGA_WHEEL_WOOD.get());
                 event.accept(ModItems.MAHORAGA_WHEEL.get());
                 event.accept(ModItems.ALL_ADAPTION.get());

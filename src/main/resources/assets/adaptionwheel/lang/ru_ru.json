@@ -78,7 +78,7 @@
   "adaptionwheel.concept.special.Dimension_Destroy": "Разрушение Измерения",
 
   "item.adaptionwheel.mahoraga_wheel.tooltip4": "[%s] Открыть адаптации",
-  "key.categories.adaptionwheel": "Колесо Адаптации",
+  "key.category.adaptionwheel.adaptionwheel": "Колесо Адаптации",
   "key.adaptionwheel.open_screen": "Экран адаптаций",
 
   "adaptionwheel.gui.title": "Колесо Адаптаций",
