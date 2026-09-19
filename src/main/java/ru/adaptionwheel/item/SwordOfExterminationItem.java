@@ -4,30 +4,32 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.SwordItem;
-import net.minecraft.world.item.Tier;
 import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.level.Level;
 import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.sound.ModSounds;
 
-import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Sword of Extermination. Two energy modes, switched with right click:
  * Positive Energy — melee hits deal bonus damage based on the target's current HP.
  * Cursed Energy — swings fire piercing cursed slashes empowered by adaptation count.
  * Port of the original mod's SwordOfExtermination.cs.
+ *
+ * <p>Since 26.x there is no {@code SwordItem}; the sword stats come from
+ * {@link Item.Properties#sword} (see {@link ModItems}).
  */
-public class SwordOfExterminationItem extends SwordItem {
+public class SwordOfExterminationItem extends Item {
 
-    public SwordOfExterminationItem(Tier tier, Properties properties) {
-        super(tier, properties);
+    public SwordOfExterminationItem(Properties properties) {
+        super(properties);
     }
 
     public static boolean isCursed(ItemStack stack) {
@@ -39,39 +41,39 @@ public class SwordOfExterminationItem extends SwordItem {
     }
 
     @Override
-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+    public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
-        if (!level.isClientSide) {
+        if (!level.isClientSide()) {
             boolean cursed = !isCursed(stack);
             setMode(stack, cursed);
             level.playSound(null, player.blockPosition(), ModSounds.SWING.get(), SoundSource.PLAYERS, 1f, 1.2f);
-            player.displayClientMessage(Component.translatable(cursed
+            player.sendOverlayMessage(Component.translatable(cursed
                             ? "adaptionwheel.sword.mode_cursed" : "adaptionwheel.sword.mode_positive")
-                    .withStyle(cursed ? ChatFormatting.AQUA : ChatFormatting.WHITE), true);
+                    .withStyle(cursed ? ChatFormatting.AQUA : ChatFormatting.WHITE));
         }
-        return InteractionResultHolder.sidedSuccess(stack, level.isClientSide);
+        return InteractionResult.SUCCESS;
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
-        tooltip.add(Component.translatable("adaptionwheel.sword.switch_hint").withStyle(ChatFormatting.GRAY));
+    public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay display,
+                                Consumer<Component> tooltip, TooltipFlag flag) {
+        tooltip.accept(Component.translatable("adaptionwheel.sword.switch_hint").withStyle(ChatFormatting.GRAY));
         if (isCursed(stack)) {
-            tooltip.add(Component.translatable("adaptionwheel.sword.cursed_info").withStyle(ChatFormatting.AQUA));
+            tooltip.accept(Component.translatable("adaptionwheel.sword.cursed_info").withStyle(ChatFormatting.AQUA));
         } else {
-            tooltip.add(Component.translatable("adaptionwheel.sword.positive_info").withStyle(ChatFormatting.WHITE));
+            tooltip.accept(Component.translatable("adaptionwheel.sword.positive_info").withStyle(ChatFormatting.WHITE));
         }
-        super.appendHoverText(stack, context, tooltip, flag);
+        super.appendHoverText(stack, context, display, tooltip, flag);
     }
 
     @Override
-    public boolean hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        boolean result = super.hurtEnemy(stack, target, attacker);
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        super.hurtEnemy(stack, target, attacker);
         Level level = attacker.level();
-        if (!level.isClientSide) {
+        if (!level.isClientSide()) {
             level.playSound(null, target.blockPosition(),
                     isCursed(stack) ? ModSounds.SOE_HIT_2.get() : ModSounds.SOE_HIT_1.get(),
                     SoundSource.PLAYERS, 0.9f, 1f);
         }
-        return result;
     }
 }

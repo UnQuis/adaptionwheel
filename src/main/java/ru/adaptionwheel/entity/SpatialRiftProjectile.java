@@ -1,7 +1,8 @@
 package ru.adaptionwheel.entity;
 
 import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -92,7 +93,7 @@ public class SpatialRiftProjectile extends Projectile {
         }
         Vec3 motion = getDeltaMovement();
 
-        if (level().isClientSide) {
+        if (level().isClientSide()) {
             trailPositions.addLast(position());
             while (trailPositions.size() > 22) {
                 trailPositions.removeFirst();
@@ -146,11 +147,11 @@ public class SpatialRiftProjectile extends Projectile {
         Entity owner = getOwner();
         var source = damageSources().playerAttack(owner instanceof net.minecraft.server.level.ServerPlayer sp ? sp : null);
 
-        target.invulnerableTime = 0;
+        target.setInvulnerableTime(0);
         target.setHealth(0f);
         target.die(source);
         if (owner instanceof net.minecraft.server.level.ServerPlayer killer && target.getHealth() <= 0f) {
-            killer.killedEntity(serverLevel, target);
+            killer.killedEntity(serverLevel, target, source);
         }
 
         serverLevel.sendParticles(ParticleTypes.SONIC_BOOM,
@@ -178,15 +179,8 @@ public class SpatialRiftProjectile extends Projectile {
         return true;
     }
 
-    /**
-     * The visual blade/tear extends far beyond the 0.5-block entity hitbox;
-     * without an inflated culling box the frustum test drops the entity while
-     * its glow is still on screen.
-     */
-    @Override
-    public AABB getBoundingBoxForCulling() {
-        return super.getBoundingBoxForCulling().inflate(8.0);
-    }
+    // Note: the inflated culling box (visual extends far beyond the hitbox) is now
+    // provided by the renderer's getBoundingBoxForCulling override (26.x moved it there).
 
     @Override
     public boolean isAttackable() {
@@ -194,14 +188,14 @@ public class SpatialRiftProjectile extends Projectile {
     }
 
     @Override
-    protected void readAdditionalSaveData(CompoundTag tag) {
+    protected void readAdditionalSaveData(ValueInput tag) {
         super.readAdditionalSaveData(tag);
-        entityData.set(ROLL, tag.getFloat("Roll"));
-        bladeHalfWidth = tag.getFloat("BladeHalfWidth");
+        entityData.set(ROLL, tag.getFloatOr("Roll", 0f));
+        bladeHalfWidth = tag.getFloatOr("BladeHalfWidth", bladeHalfWidth);
     }
 
     @Override
-    protected void addAdditionalSaveData(CompoundTag tag) {
+    protected void addAdditionalSaveData(ValueOutput tag) {
         super.addAdditionalSaveData(tag);
         tag.putFloat("Roll", entityData.get(ROLL));
         tag.putFloat("BladeHalfWidth", bladeHalfWidth);

@@ -1,6 +1,7 @@
 package ru.adaptionwheel.client;
 
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
@@ -119,8 +120,10 @@ public class AdaptationScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && mouseY >= panelY + HEADER_H && mouseY < panelY + HEADER_H + TAB_H) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        if (event.button() == 0 && mouseY >= panelY + HEADER_H && mouseY < panelY + HEADER_H + TAB_H) {
             for (int i = 0; i < tabHitboxes.size(); i++) {
                 int[] box = tabHitboxes.get(i);
                 if (mouseX >= box[0] && mouseX < box[0] + box[1]) {
@@ -131,25 +134,31 @@ public class AdaptationScreen extends Screen {
                 }
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public boolean isInGameUi() {
+        // Transparent in-game background (no blur), like the 1.21 renderBackground() default.
+        return true;
     }
 
     @Override
     public void onClose() {
-        this.minecraft.setScreen(null);
+        this.minecraft.gui.setScreen(null);
     }
 
     // ================= rendering =================
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        super.render(g, mouseX, mouseY, partialTick);
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(g, mouseX, mouseY, partialTick);
         listY = panelY + HEADER_H + TAB_H + PAD;
         listH = panelH - (listY - panelY) - FOOTER_H;
 
         // Panel backdrop
         g.fill(panelX, panelY, panelX + PANEL_W, panelY + panelH, 0xD0101018);
-        g.renderOutline(panelX, panelY, PANEL_W, panelH, 0xFFD4A017);
+        g.outline(panelX, panelY, PANEL_W, panelH, 0xFFD4A017);
 
         renderHeader(g, mouseX, mouseY);
         renderTabs(g, mouseX, mouseY);
@@ -165,19 +174,19 @@ public class AdaptationScreen extends Screen {
         g.disableScissor();
 
         renderScrollbar(g);
-        g.drawString(this.font,
+        g.text(this.font,
                 Component.translatable("adaptionwheel.gui.footer_scroll"),
                 panelX + PAD, panelY + panelH - FOOTER_H + 3, 0xFF777777, false);
     }
 
-    private void renderHeader(GuiGraphics g, int mouseX, int mouseY) {
-        g.drawString(this.font, this.title, panelX + PAD, panelY + PAD, 0xFFFFD700, true);
+    private void renderHeader(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        g.text(this.font, this.title, panelX + PAD, panelY + PAD, 0xFFFFD700, true);
         String count = Component.translatable("adaptionwheel.gui.count", ClientAdaption.adaptedCount).getString();
-        g.drawString(this.font, count,
+        g.text(this.font, count,
                 panelX + PANEL_W - PAD - this.font.width(count), panelY + PAD, 0xFFBBBBBB, true);
     }
 
-    private void renderTabs(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderTabs(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         tabHitboxes.clear();
         int x = panelX + PAD;
         int y = panelY + HEADER_H;
@@ -195,13 +204,13 @@ public class AdaptationScreen extends Screen {
             int bg = selected ? 0xFF3A3A22 : 0xFF222230;
             g.fill(x, y, x + w, y + TAB_H - 2, bg);
             int fg = selected ? 0xFFFFE08A : 0xFFAAAAAA;
-            g.drawString(this.font, label, x + 5, y + 3, fg, false);
+            g.text(this.font, label, x + 5, y + 3, fg, false);
             tabHitboxes.add(new int[]{x, w});
             x += w + 4;
         }
     }
 
-    private void renderEntry(GuiGraphics g, String concept, int y) {
+    private void renderEntry(GuiGraphicsExtractor g, String concept, int y) {
         int x = panelX + PAD;
         int contentW = PANEL_W - PAD * 2 - 6;
         int domainColor = 0xFF000000 | Concepts.color(concept);
@@ -247,12 +256,12 @@ public class AdaptationScreen extends Screen {
             barFill = 0f;
             stateColor = 0xFF999999;
         }
-        g.drawString(this.font, state, panelX + PANEL_W - PAD - this.font.width(state),
+        g.text(this.font, state, panelX + PANEL_W - PAD - this.font.width(state),
                 y + 2, stateColor, true);
 
         // Name
         String name = Concepts.displayName(concept).getString();
-        g.drawString(this.font, this.font.plainSubstrByWidth(name, contentW - this.font.width(state) - 8),
+        g.text(this.font, this.font.plainSubstrByWidth(name, contentW - this.font.width(state) - 8),
                 x, y + 2, domainColor, true);
 
         // Progress bar
@@ -272,11 +281,11 @@ public class AdaptationScreen extends Screen {
         });
         int dy = barY + 7;
         for (int i = 0; i < desc.size() && i < 2; i++) {
-            g.drawString(this.font, desc.get(i), x, dy + i * 9, 0xFF8A8A8A, false);
+            g.text(this.font, desc.get(i), x, dy + i * 9, 0xFF8A8A8A, false);
         }
     }
 
-    private void renderScrollbar(GuiGraphics g) {
+    private void renderScrollbar(GuiGraphicsExtractor g) {
         double max = maxScroll();
         if (max <= 0 || listH <= 0) {
             return;

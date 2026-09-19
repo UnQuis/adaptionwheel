@@ -1,11 +1,10 @@
 package ru.adaptionwheel.item;
 
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.util.Unit;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Rarity;
-import net.minecraft.world.item.SwordItem;
-import net.minecraft.world.item.Tiers;
-import net.minecraft.world.item.component.Unbreakable;
+import net.minecraft.world.item.ToolMaterial;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import ru.adaptionwheel.AdaptionWheel;
@@ -15,22 +14,25 @@ public final class ModItems {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(AdaptionWheel.MODID);
 
     public static final DeferredItem<Item> MAHORAGA_WHEEL_WOOD =
-            ITEMS.registerItem("mahoraga_wheel_wood", Item::new, new Item.Properties());
+            ITEMS.registerItem("mahoraga_wheel_wood", Item::new, () -> new Item.Properties());
 
     public static final DeferredItem<MahoragaWheelItem> MAHORAGA_WHEEL =
-            ITEMS.registerItem("mahoraga_wheel", p -> new MahoragaWheelItem(p.stacksTo(1)), new Item.Properties());
+            ITEMS.registerItem("mahoraga_wheel", MahoragaWheelItem::new, () -> new Item.Properties().stacksTo(1));
 
     public static final DeferredItem<AllAdaptionItem> ALL_ADAPTION =
-            ITEMS.registerItem("all_adaption", p -> new AllAdaptionItem(p.stacksTo(1)), new Item.Properties());
+            ITEMS.registerItem("all_adaption", AllAdaptionItem::new, () -> new Item.Properties().stacksTo(1));
 
+    /**
+     * 26.x has no SwordItem class any more: sword behaviour (attributes, tool component,
+     * "sweep" attack) is fully data-driven via {@link Item.Properties#sword}.
+     */
     public static final DeferredItem<SwordOfExterminationItem> SWORD_OF_EXTERMINATION =
-            ITEMS.registerItem("sword_of_extermination", p ->
-                    new SwordOfExterminationItem(Tiers.NETHERITE, p), new Item.Properties()
+            ITEMS.registerItem("sword_of_extermination", SwordOfExterminationItem::new, () -> new Item.Properties()
+                    .sword(ToolMaterial.NETHERITE, 12f, -2.4f)
                     .stacksTo(1)
                     .rarity(Rarity.EPIC)
                     .fireResistant()
-                    .attributes(SwordItem.createAttributes(Tiers.NETHERITE, 12, -2.4f))
-                    .component(DataComponents.UNBREAKABLE, new Unbreakable(true)));
+                    .component(DataComponents.UNBREAKABLE, Unit.INSTANCE));
 
     private ModItems() {
     }

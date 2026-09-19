@@ -19,7 +19,7 @@ public class AdaptionMixinPlugin implements IMixinConfigPlugin {
 
     private static boolean isDraconicEvolutionLoaded() {
         try {
-            net.neoforged.fml.loading.LoadingModList list = net.neoforged.fml.loading.FMLLoader.getLoadingModList();
+            net.neoforged.fml.loading.LoadingModList list = net.neoforged.fml.loading.FMLLoader.getCurrent().getLoadingModList();
             return list != null && list.getModFileById("draconicevolution") != null;
         } catch (Throwable ignored) {
             return false;

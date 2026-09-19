@@ -21,7 +21,9 @@ import ru.adaptionwheel.SurfaceAdaptations;
 public abstract class WebBlockMixin {
 
     @Inject(method = "entityInside", at = @At("HEAD"), cancellable = true)
-    private void adaptionwheel$gentlerWeb(BlockState state, Level level, BlockPos pos, Entity entity, CallbackInfo ci) {
+    private void adaptionwheel$gentlerWeb(BlockState state, Level level, BlockPos pos, Entity entity,
+                                          net.minecraft.world.entity.InsideBlockEffectApplier effectApplier,
+                                          boolean isPrecise, CallbackInfo ci) {
         if (entity instanceof Player player && SurfaceAdaptations.movesThroughWebs(player)) {
             entity.makeStuckInBlock(state, new Vec3(0.5, 0.1, 0.5));
             ci.cancel();

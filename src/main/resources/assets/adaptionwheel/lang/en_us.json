@@ -78,7 +78,7 @@
   "adaptionwheel.concept.special.Dimension_Destroy": "Dimension Destroy",
 
   "item.adaptionwheel.mahoraga_wheel.tooltip4": "[%s] View adaptations",
-  "key.categories.adaptionwheel": "Adaption Wheel",
+  "key.category.adaptionwheel.adaptionwheel": "Adaption Wheel",
   "key.adaptionwheel.open_screen": "Open Adaptation Screen",
 
   "adaptionwheel.gui.title": "Wheel of Adaptation",

@@ -3,7 +3,7 @@ package ru.adaptionwheel.server;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.boss.EnderDragonPart;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragonPart;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.monster.warden.Warden;
@@ -28,7 +28,7 @@ public final class BossHelper {
         if (DraconicCompat.isGuardian(entity)) {
             return true;
         }
-        return entity.getType().is(Tags.EntityTypes.BOSSES);
+        return entity.getType().builtInRegistryHolder().is(Tags.EntityTypes.BOSSES);
     }
 
     /**

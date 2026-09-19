@@ -18,10 +18,10 @@ public final class AdaptionScreenOpener {
     public static void onClientTick(ClientTickEvent.Post event) {
         while (AdaptionKeybinds.OPEN_SCREEN_KEY.consumeClick()) {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null && mc.screen == null && ClientAdaption.wearingWheel) {
-                mc.setScreen(new AdaptationScreen());
-            } else if (mc.screen instanceof AdaptationScreen) {
-                mc.screen.onClose();
+            if (mc.player != null && mc.gui.screen() == null && ClientAdaption.wearingWheel) {
+                mc.gui.setScreen(new AdaptationScreen());
+            } else if (mc.gui.screen() instanceof AdaptationScreen screen) {
+                screen.onClose();
             }
         }
     }

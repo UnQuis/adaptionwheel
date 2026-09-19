@@ -5,7 +5,7 @@ import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import ru.adaptionwheel.AdaptionWheel;
 
 /**
@@ -18,8 +18,8 @@ import ru.adaptionwheel.AdaptionWheel;
  */
 public final class DharmaChakraModel {
 
-    public static final ResourceLocation TEXTURE =
-            ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, "textures/entity/dharma_chakra.png");
+    public static final Identifier TEXTURE =
+            Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "textures/entity/dharma_chakra.png");
 
     private static ModelPart bakedRoot;
 

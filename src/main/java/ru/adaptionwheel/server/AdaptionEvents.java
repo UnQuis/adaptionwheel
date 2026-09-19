@@ -6,7 +6,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
@@ -76,16 +76,16 @@ import java.util.UUID;
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public class AdaptionEvents {
 
-    private static final ResourceLocation HP_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "hp");
-    private static final ResourceLocation ARMOR_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "armor");
-    private static final ResourceLocation SWIM_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "swim");
-    private static final ResourceLocation LIQUID_SPEED_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "liquid_speed");
-    private static final ResourceLocation SUBMERGED_MINING_MODIFIER =
-            ResourceLocation.fromNamespaceAndPath("adaptionwheel", "submerged_mining");
-    private static final ResourceLocation AQUATIC_SWIM_SPEED_MODIFIER =
-            ResourceLocation.fromNamespaceAndPath("adaptionwheel", "aquatic_swim_speed");
-    private static final ResourceLocation AQUATIC_SWIM_EFFICIENCY_MODIFIER =
-            ResourceLocation.fromNamespaceAndPath("adaptionwheel", "aquatic_swim_efficiency");
+    private static final Identifier HP_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "hp");
+    private static final Identifier ARMOR_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "armor");
+    private static final Identifier SWIM_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "swim");
+    private static final Identifier LIQUID_SPEED_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "liquid_speed");
+    private static final Identifier SUBMERGED_MINING_MODIFIER =
+            Identifier.fromNamespaceAndPath("adaptionwheel", "submerged_mining");
+    private static final Identifier AQUATIC_SWIM_SPEED_MODIFIER =
+            Identifier.fromNamespaceAndPath("adaptionwheel", "aquatic_swim_speed");
+    private static final Identifier AQUATIC_SWIM_EFFICIENCY_MODIFIER =
+            Identifier.fromNamespaceAndPath("adaptionwheel", "aquatic_swim_efficiency");
 
     /** Health fraction at the moment of death; restored (scaled) once the wheel is worn again. */
     private static final Map<UUID, Float> PENDING_RESPAWN_HEALTH = new HashMap<>();
@@ -110,9 +110,7 @@ public class AdaptionEvents {
         if (cached != null && cached[0] == stamp) {
             return cached[1] != 0;
         }
-        boolean wearing = top.theillusivec4.curios.api.CuriosApi.getCuriosInventory(serverPlayer)
-                .map(handler -> handler.isEquipped(ModItems.MAHORAGA_WHEEL.get()))
-                .orElse(false);
+        boolean wearing = ru.adaptionwheel.compat.WheelSlots.isWorn(serverPlayer);
         WEARING_CACHE.put(serverPlayer.getUUID(), new long[]{stamp, wearing ? 1 : 0});
         return wearing;
     }
@@ -136,9 +134,7 @@ public class AdaptionEvents {
     }
 
     private static Optional<ItemStack> getWheelStack(Player player) {
-        return top.theillusivec4.curios.api.CuriosApi.getCuriosInventory(player)
-                .flatMap(handler -> handler.findFirstCurio(ModItems.MAHORAGA_WHEEL.get()))
-                .map(result -> result.stack());
+        return ru.adaptionwheel.compat.WheelSlots.findWorn(player);
     }
 
     private static PlayerAdaption data(ServerPlayer player) {
@@ -158,7 +154,7 @@ public class AdaptionEvents {
     }
 
     private static void saveToStack(ItemStack stack, PlayerAdaption data) {
-        stack.set(ModDataComponents.WHEEL_DATA, WheelData.fromPlayer(data));
+        stack.set(ModDataComponents.WHEEL_DATA.get(), WheelData.fromPlayer(data));
     }
 
     private static void loadFromItem(Player player, PlayerAdaption data) {
@@ -169,7 +165,7 @@ public class AdaptionEvents {
     }
 
     private static String entityPath(EntityType<?> type) {
-        ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        Identifier key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
         return key != null ? key.toString() : type.toShortString();
     }
 
@@ -213,7 +209,7 @@ public class AdaptionEvents {
      */
     @SubscribeEvent
     public static void onAttack(LivingIncomingDamageEvent event) {
-        if (event.getEntity().level().isClientSide) return;
+        if (event.getEntity().level().isClientSide()) return;
         if (!(event.getEntity() instanceof ServerPlayer player) || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
         DamageSource source = event.getSource();
@@ -266,7 +262,7 @@ public class AdaptionEvents {
 
     @SubscribeEvent
     public static void onDamage(LivingDamageEvent.Pre event) {
-        if (event.getEntity().level().isClientSide) return;
+        if (event.getEntity().level().isClientSide()) return;
         DamageSource source = event.getSource();
         float original = event.getOriginalDamage();
         float newDamage = event.getNewDamage();
@@ -378,7 +374,7 @@ public class AdaptionEvents {
             }
         }
         if (bestLevel >= 8) {
-            player.invulnerableTime = Math.max(player.invulnerableTime, 120);
+            player.setInvulnerableTime(Math.max(player.getInvulnerableTime(), 120));
         }
 
         // ---- Start / accelerate analysis tasks ----
@@ -463,7 +459,7 @@ public class AdaptionEvents {
         player.setHealth(Math.max(1f, player.getHealth() - 30f));
         data.adversityActive = true;
         data.adversityTimer = 480; // 24 seconds analysis
-        player.invulnerableTime = 60;
+        player.setInvulnerableTime(60);
         // Totem-style burst in front of the player's face.
         if (player.level() instanceof ServerLevel serverLevel) {
             var random = player.getRandom();
@@ -498,7 +494,7 @@ public class AdaptionEvents {
      */
     public static void handleDirectHealthReduction(LivingEntity target, float newHealth) {
         float current = target.getHealth();
-        if (!(target instanceof ServerPlayer player) || player.level().isClientSide || newHealth >= current) {
+        if (!(target instanceof ServerPlayer player) || player.level().isClientSide() || newHealth >= current) {
             target.setHealth(newHealth);
             return;
         }
@@ -574,8 +570,9 @@ public class AdaptionEvents {
             float multiplier = (float) (double) AdaptionConfig.EXISTENCE_REFLECT_MULTIPLIER.get();
             living.hurt(player.damageSources().playerAttack(player), damage * multiplier);
             // Push the attacker away from the wearer, like the original mod's contact reflection.
-            living.knockback(1.2, player.getX(), player.getZ());
-            player.invulnerableTime = Math.max(player.invulnerableTime, 10);
+            living.knockback(1.2, player.getX() - living.getX(), player.getZ() - living.getZ(),
+                    player.damageSources().playerAttack(player), damage * multiplier);
+            player.setInvulnerableTime(Math.max(player.getInvulnerableTime(), 10));
         }
     }
 
@@ -603,7 +600,7 @@ public class AdaptionEvents {
             if (level >= 8 && attacker.getRandom().nextFloat() * 100f < AdaptionConfig.DIMENSION_SLASH_CHANCE.get()) {
                 float slashDamage = Math.max(1f, (float) (target.getMaxHealth()
                         * AdaptionConfig.DIMENSION_SLASH_HP_PERCENT.get() / 100.0));
-                attacker.server.execute(() -> {
+                attacker.level().getServer().execute(() -> {
                     if (target.isAlive() && !target.isRemoved()) {
                         target.hurt(attacker.damageSources().playerAttack(attacker), slashDamage);
                     }
@@ -640,7 +637,7 @@ public class AdaptionEvents {
 
     @SubscribeEvent
     public static void onMobDeath(LivingDeathEvent event) {
-        if (event.getEntity().level().isClientSide) return;
+        if (event.getEntity().level().isClientSide()) return;
         LivingEntity dead = event.getEntity();
         if (dead instanceof Player) return;
         ServerPlayer player = killerOf(event.getSource());
@@ -659,7 +656,7 @@ public class AdaptionEvents {
     /** Drop-rate adaptation also multiplies the experience a killed mob grants. */
     @SubscribeEvent
     public static void onExperienceDrop(net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent event) {
-        if (event.getEntity().level().isClientSide) return;
+        if (event.getEntity().level().isClientSide()) return;
         ServerPlayer player = event.getAttackingPlayer() instanceof ServerPlayer sp ? sp : null;
         if (player == null || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
@@ -688,7 +685,7 @@ public class AdaptionEvents {
 
     @SubscribeEvent
     public static void onMobDrops(LivingDropsEvent event) {
-        if (event.getEntity().level().isClientSide) return;
+        if (event.getEntity().level().isClientSide()) return;
         LivingEntity dead = event.getEntity();
         ServerPlayer player = killerOf(event.getSource());
         if (player == null || !wearingWheel(player)) return;
@@ -707,6 +704,10 @@ public class AdaptionEvents {
 
         ServerLevel serverLevel = (ServerLevel) dead.level();
         DamageSource source = event.getSource();
+        // 26.x: loot tables are optional per entity; nothing to roll without one.
+        java.util.Optional<net.minecraft.resources.ResourceKey<net.minecraft.world.level.storage.loot.LootTable>> lootTable = dead.getLootTable();
+        if (lootTable.isEmpty()) return;
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.storage.loot.LootTable> lootTableKey = lootTable.get();
         LootParams.Builder builder = new LootParams.Builder(serverLevel)
                 .withParameter(LootContextParams.THIS_ENTITY, dead)
                 .withParameter(LootContextParams.ORIGIN, dead.position())
@@ -730,7 +731,7 @@ public class AdaptionEvents {
         boolean usedFallback = false;
         for (int i = 0; i < extraRolls; i++) {
             java.util.List<ItemStack> lootRoll = serverLevel.getServer().reloadableRegistries()
-                    .getLootTable(dead.getLootTable()).getRandomItems(params);
+                    .getLootTable(lootTableKey).getRandomItems(params);
             if (lootRoll.isEmpty()) {
                 if (!usedFallback && !baseDrops.isEmpty()) {
                     for (ItemStack fallbackStack : baseDrops) {
@@ -753,7 +754,7 @@ public class AdaptionEvents {
     /** Avoid treating re-login while wearing the wheel as a fresh equip (clears tasks / reloads stale item data). */
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide) return;
+        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide()) return;
         if (wearingWheel(player)) {
             PlayerAdaption data = data(player);
             data.wasWearing = true;
@@ -773,7 +774,7 @@ public class AdaptionEvents {
 
     @SubscribeEvent
     public static void onPlayerDeath(LivingDeathEvent event) {
-        if (event.getEntity().level().isClientSide) return;
+        if (event.getEntity().level().isClientSide()) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         // Remember the health fraction so a respawn that full-heals into the vanilla
         // max (before our modifier is re-applied) can be restored once the wheel is worn.
@@ -787,14 +788,14 @@ public class AdaptionEvents {
         data.reset();
         data.wasWearing = wearingWheel(player);
         applyStats(player, data);
-        getWheelStack(player).ifPresent(stack -> stack.set(ModDataComponents.WHEEL_DATA, WheelData.EMPTY));
+        getWheelStack(player).ifPresent(stack -> stack.set(ModDataComponents.WHEEL_DATA.get(), WheelData.EMPTY));
     }
 
     // ================= TICK =================
 
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide) return;
+        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide()) return;
         PlayerAdaption data = data(player);
         boolean wearing = wearingWheel(player);
 
@@ -816,7 +817,7 @@ public class AdaptionEvents {
             if (AdaptionConfig.KEEP_DATA_ON_UNEQUIP.get()) {
                 saveToItem(player, data);
             } else {
-                getWheelStack(player).ifPresent(stack -> stack.set(ModDataComponents.WHEEL_DATA, WheelData.EMPTY));
+                getWheelStack(player).ifPresent(stack -> stack.set(ModDataComponents.WHEEL_DATA.get(), WheelData.EMPTY));
             }
             data.reset();
             applyStats(player, data);
@@ -1254,7 +1255,7 @@ public class AdaptionEvents {
                 && lastFall >= minFall) {
             triggerImpactShockwave(player, lastFall);
         }
-        data.impactLastFallDistance = grounded ? 0f : player.fallDistance;
+        data.impactLastFallDistance = grounded ? 0f : (float) player.fallDistance;
         data.impactWasOnGround = grounded || player.isInWater() || player.isInLava() || player.onClimbable();
     }
 
@@ -1439,7 +1440,7 @@ public class AdaptionEvents {
     }
 
     private static String effectKey(MobEffectInstance effect) {
-        ResourceLocation key = BuiltInRegistries.MOB_EFFECT.getKey(effect.getEffect().value());
+        Identifier key = BuiltInRegistries.MOB_EFFECT.getKey(effect.getEffect().value());
         return key != null ? key.getPath() : "unknown";
     }
 
@@ -1608,7 +1609,7 @@ public class AdaptionEvents {
             if (effect.isBeneficial()) {
                 continue;
             }
-            ResourceLocation key = BuiltInRegistries.MOB_EFFECT.getKey(effect);
+            Identifier key = BuiltInRegistries.MOB_EFFECT.getKey(effect);
             if (key == null) {
                 continue;
             }
@@ -1619,7 +1620,7 @@ public class AdaptionEvents {
         }
 
         for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
-            ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+            Identifier key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
             if (key == null) {
                 continue;
             }
@@ -1629,7 +1630,7 @@ public class AdaptionEvents {
             data.levels.put(Concepts.drop(path), PlayerAdaption.MAX_LEVEL);
             data.addHistory(Concepts.contact(path));
 
-            if (type.is(Tags.EntityTypes.BOSSES)
+            if (type.builtInRegistryHolder().is(Tags.EntityTypes.BOSSES)
                     || DraconicCompat.GUARDIAN_ID.equals(path)
                     || path.contains("wither")
                     || path.contains("ender_dragon")
@@ -1725,7 +1726,7 @@ public class AdaptionEvents {
         PlayerAdaption d = data(player);
         d.reset();
         applyStats(player, d);
-        getWheelStack(player).ifPresent(stack -> stack.set(ModDataComponents.WHEEL_DATA, WheelData.EMPTY));
+        getWheelStack(player).ifPresent(stack -> stack.set(ModDataComponents.WHEEL_DATA.get(), WheelData.EMPTY));
         sync(player, d, false);
     }
 
@@ -1733,7 +1734,7 @@ public class AdaptionEvents {
 
     @SubscribeEvent
     public static void onKnockback(LivingKnockBackEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide) {
+        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide()) {
             return;
         }
         if (!wearingWheel(player)) {
@@ -1779,7 +1780,7 @@ public class AdaptionEvents {
     @SubscribeEvent
     public static void onEffectApplicable(MobEffectEvent.Applicable event) {
         if (event.getEntity() instanceof ServerPlayer player
-                && !player.level().isClientSide
+                && !player.level().isClientSide()
                 && wearingWheel(player)) {
             MobEffectInstance instance = event.getEffectInstance();
             if (instance != null && !instance.getEffect().value().isBeneficial()) {
@@ -1819,7 +1820,7 @@ public class AdaptionEvents {
                 aquatic ? 1.0 : 0.0, AttributeModifier.Operation.ADD_VALUE);
     }
 
-    private static void applyStat(AttributeInstance attribute, ResourceLocation id,
+    private static void applyStat(AttributeInstance attribute, Identifier id,
                                   double amount, AttributeModifier.Operation operation) {
         AttributeModifier existing = attribute.getModifier(id);
         if (existing != null && existing.amount() == amount && existing.operation() == operation) {
@@ -1843,7 +1844,7 @@ public class AdaptionEvents {
             return;
         }
         event.setOutput(new ItemStack(ModItems.MAHORAGA_WHEEL.get()));
-        event.setCost(WHEEL_GOLD_COST);
+        event.setXpCost((int) WHEEL_GOLD_COST);
         event.setMaterialCost(1);
     }
 

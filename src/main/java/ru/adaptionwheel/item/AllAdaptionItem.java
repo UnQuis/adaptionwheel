@@ -5,7 +5,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.level.Level;
 import ru.adaptionwheel.server.AdaptionEvents;
 
@@ -21,8 +21,8 @@ public class AllAdaptionItem extends Item {
     }
 
     @Override
-    public UseAnim getUseAnimation(ItemStack stack) {
-        return UseAnim.EAT;
+    public ItemUseAnimation getUseAnimation(ItemStack stack) {
+        return ItemUseAnimation.EAT;
     }
 
     @Override
@@ -33,7 +33,7 @@ public class AllAdaptionItem extends Item {
     @Override
     public ItemStack finishUsingItem(ItemStack stack, Level level, LivingEntity entity) {
         ItemStack result = super.finishUsingItem(stack, level, entity);
-        if (entity instanceof Player player && !level.isClientSide) {
+        if (entity instanceof Player player && !level.isClientSide()) {
             AdaptionEvents.grantAllAdaptations(player);
         }
         return result;

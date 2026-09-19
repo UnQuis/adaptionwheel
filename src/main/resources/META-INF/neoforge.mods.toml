@@ -1,5 +1,3 @@
-modLoader="javafml"
-loaderVersion="${loader_version_range}"
 license="${mod_license}"
 
 [[mixins]]
@@ -19,10 +17,19 @@ authors="${mod_authors}"
     type="required"
 
 [[dependencies.${mod_id}]]
-    modId="curios"
-    versionRange="[9.5.0,)"
+    modId="minecraft"
+    versionRange="${minecraft_version_range}"
     ordering="NONE"
     type="required"
+
+# Optional: with Curios installed the wheel gets its dedicated "wheel" curio slot;
+# without it the wheel counts as worn from the off-hand / main inventory.
+# Curios has no Minecraft 26.3 build yet, so it is bound reflectively (compat/CuriosCompat).
+[[dependencies.${mod_id}]]
+    modId="curios"
+    versionRange="*"
+    ordering="AFTER"
+    type="optional"
 
 # Soft integration: dedicated Chaos Guardian adaptation (existence + all attacks).
 # Everything degrades gracefully when the mod is absent.

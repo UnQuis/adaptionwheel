@@ -1,7 +1,7 @@
 package ru.adaptionwheel.sound;
 
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -36,7 +36,7 @@ public final class ModSounds {
 
     private static DeferredHolder<SoundEvent, SoundEvent> register(String name) {
         return SOUNDS.register(name, () -> SoundEvent.createVariableRangeEvent(
-                ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, name)));
+                Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, name)));
     }
 
     private ModSounds() {

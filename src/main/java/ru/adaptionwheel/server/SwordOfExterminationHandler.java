@@ -125,8 +125,8 @@ public final class SwordOfExterminationHandler {
                 ModSounds.SWING.get(), SoundSource.PLAYERS, 1.2f, 0.6f);
         // The original flashes "DESTROY THE DIMENSION" over each victim; the
         // wearer gets the announcement once per volley instead.
-        player.displayClientMessage(net.minecraft.network.chat.Component.literal("DESTROY THE DIMENSION")
-                .withStyle(net.minecraft.ChatFormatting.BLACK, net.minecraft.ChatFormatting.BOLD), true);
+        player.sendOverlayMessage(net.minecraft.network.chat.Component.literal("DESTROY THE DIMENSION")
+                .withStyle(net.minecraft.ChatFormatting.BLACK, net.minecraft.ChatFormatting.BOLD));
     }
 
     /** Rotates a vector around the Y axis (fan spread). */

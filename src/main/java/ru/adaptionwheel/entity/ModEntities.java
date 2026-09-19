@@ -1,6 +1,8 @@
 package ru.adaptionwheel.entity;
 
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -18,7 +20,7 @@ public class ModEntities {
                     .sized(0.5f, 0.5f)
                     .clientTrackingRange(6)
                     .updateInterval(20)
-                    .build("cursed_slash"));
+                    .build(key("cursed_slash")));
 
     public static final DeferredHolder<EntityType<?>, EntityType<SpatialRiftProjectile>> SPATIAL_RIFT =
             ENTITIES.register("spatial_rift", () -> EntityType.Builder.<SpatialRiftProjectile>of(
@@ -27,5 +29,9 @@ public class ModEntities {
                     .fireImmune()
                     .clientTrackingRange(8)
                     .updateInterval(10)
-                    .build("spatial_rift"));
+                    .build(key("spatial_rift")));
+
+    private static ResourceKey<EntityType<?>> key(String name) {
+        return ResourceKey.create(Registries.ENTITY_TYPE, Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, name));
+    }
 }

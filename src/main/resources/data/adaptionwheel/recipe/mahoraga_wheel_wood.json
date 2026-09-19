@@ -6,12 +6,8 @@
     "SSS"
   ],
   "key": {
-    "S": {
-      "item": "minecraft:stick"
-    },
-    "L": {
-      "tag": "minecraft:logs"
-    }
+    "S": "minecraft:stick",
+    "L": "#minecraft:logs"
   },
   "result": {
     "id": "adaptionwheel:mahoraga_wheel_wood",

@@ -3,7 +3,7 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'maven-publish'
-    id 'net.neoforged.gradle.userdev' version '7.0.192'
+    id 'net.neoforged.gradle.userdev' version '7.1.39'
 }
 
 tasks.named('wrapper', Wrapper).configure {
@@ -17,17 +17,19 @@ base {
     archivesName = mod_id
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+// Mojang ships Java 25 to end users in 26.3, so mods should target Java 25.
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
 runs {
     configureEach {
         systemProperty 'forge.logging.markers', 'REGISTRIES'
         systemProperty 'forge.logging.console.level', 'debug'
+        workingDirectory project.layout.projectDirectory.dir('run').dir(name)
         modSource project.sourceSets.main
     }
 
     client {
-        systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
+        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         // Optional quick-play hook for automated visual smoke tests:
         // AW_QUICKPLAY="singleplayer/New World" ./gradlew runClient
         if (System.getenv('AW_QUICKPLAY')) {
@@ -36,15 +38,15 @@ runs {
     }
 
     server {
-        systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
+        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         argument '--nogui'
     }
 
     gameTestServer {
-        systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
+        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
     }
 
-    data {
+    clientData {
         arguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
     }
 }
@@ -53,19 +55,19 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
     mavenLocal()
-    maven { url = 'https://maven.theillusivec4.top/' }
     maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
 }
 
 dependencies {
     implementation "net.neoforged:neoforge:${neo_version}"
 
-    compileOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}:api"
-    runtimeOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}"
+    // Curios is an OPTIONAL runtime integration (see compat/CuriosCompat): there is no
+    // Curios build for Minecraft 26.3 yet, so it is bound reflectively and not a compile
+    // dependency. Once a 26.3 artifact exists it can be added as `localRuntime` for testing.
 
-    // Mixin annotations + MixinExtras (both provided at runtime by NeoForge)
-    compileOnly 'org.spongepowered:mixin:0.8.5'
-    compileOnly 'io.github.llamalad7:mixinextras-common:0.5.3'
+    // Mixin annotations + MixinExtras (both provided at runtime by NeoForge 26.3)
+    compileOnly "org.spongepowered:mixin:${mixin_version}"
+    compileOnly "io.github.llamalad7:mixinextras-common:${mixinextras_version}"
 }
 
 tasks.withType(ProcessResources).configureEach {
@@ -74,7 +76,6 @@ tasks.withType(ProcessResources).configureEach {
             minecraft_version_range: minecraft_version_range,
             neo_version            : neo_version,
             neo_version_range      : neo_version_range,
-            loader_version_range   : loader_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
             mod_license            : mod_license,

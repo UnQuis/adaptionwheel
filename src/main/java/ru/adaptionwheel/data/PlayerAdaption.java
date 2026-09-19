@@ -1,6 +1,7 @@
 package ru.adaptionwheel.data;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 import java.util.ArrayList;
@@ -20,7 +21,7 @@ public class PlayerAdaption {
     public static final int MAX_LEVEL = 8;
     public static final int HISTORY_LIMIT = 30;
 
-    public static final Codec<PlayerAdaption> CODEC = RecordCodecBuilder.create(inst -> inst.group(
+    public static final MapCodec<PlayerAdaption> MAP_CODEC = RecordCodecBuilder.mapCodec(inst -> inst.group(
             Codec.unboundedMap(Codec.STRING, Codec.INT).fieldOf("levels").forGetter(d -> d.levels),
             Codec.STRING.listOf().fieldOf("adapted").forGetter(d -> new ArrayList<>(d.adapted)),
             AdaptionTask.CODEC.listOf().fieldOf("tasks").forGetter(d -> d.tasks),
@@ -38,6 +39,8 @@ public class PlayerAdaption {
             Codec.FLOAT.fieldOf("wheelRotation").forGetter(d -> d.wheelRotation),
             Codec.BOOL.optionalFieldOf("wasWearing", false).forGetter(d -> d.wasWearing)
     ).apply(inst, PlayerAdaption::new));
+
+    public static final Codec<PlayerAdaption> CODEC = MAP_CODEC.codec();
 
     public final Map<String, Integer> levels = new HashMap<>();
     public final Set<String> adapted = new HashSet<>();

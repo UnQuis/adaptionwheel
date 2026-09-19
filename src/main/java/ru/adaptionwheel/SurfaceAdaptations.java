@@ -94,7 +94,7 @@ public final class SurfaceAdaptations {
      * Returns 0 when the wheel is not worn.
      */
     public static int conceptLevel(Player player, String concept) {
-        if (player.level().isClientSide) {
+        if (player.level().isClientSide()) {
             return ClientChecks.level(concept);
         }
         return ru.adaptionwheel.server.AdaptionEvents.conceptLevel(player, concept);
@@ -106,7 +106,7 @@ public final class SurfaceAdaptations {
     }
 
     private static boolean has(Player player, String concept) {
-        if (player.level().isClientSide) {
+        if (player.level().isClientSide()) {
             return ClientChecks.has(concept);
         }
         return AdaptionEvents.hasAdaptation(player, concept);

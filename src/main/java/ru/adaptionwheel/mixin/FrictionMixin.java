@@ -20,7 +20,7 @@ import ru.adaptionwheel.SurfaceAdaptations;
 public abstract class FrictionMixin {
 
     @WrapOperation(
-            method = "travel",
+            method = "travelInAir",
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/world/level/block/state/BlockState;getFriction(Lnet/minecraft/world/level/LevelReader;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/Entity;)F"))
     private float adaptionwheel$groundFriction(BlockState state, LevelReader level, BlockPos pos, Entity entity,

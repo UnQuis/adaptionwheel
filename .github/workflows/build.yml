@@ -12,11 +12,22 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 25
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       - name: Build with Gradle
-        run: ./gradlew build --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew build --no-daemon --stacktrace 2>&1 | tee build.log
+      - name: Summarize failure
+        if: failure()
+        run: |
+          # Surface the compiler / Gradle errors as annotations so they are visible
+          # without downloading the full log.
+          grep -E "error:|What went wrong|Caused by:|Could not|FAILURE" build.log | head -60 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+          grep -A3 -E "\.java:[0-9]+: error:" build.log | head -300 >> "$GITHUB_STEP_SUMMARY" || true
       - name: Upload mod jar
         if: always()
         uses: actions/upload-artifact@v4
