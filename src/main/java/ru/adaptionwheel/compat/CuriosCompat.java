@@ -60,14 +60,23 @@ public final class CuriosCompat {
         }
     }
 
+    /**
+     * Whether Curios is loaded <i>and</i> its API could actually be bound. Callers must use this (not
+     * {@link #isLoaded()}) to decide whether the Curios code path is authoritative, so a drifted Curios
+     * API degrades into the off-hand/inventory fallback instead of making the wheel silently dead.
+     */
+    public static boolean isUsable() {
+        return isLoaded() && Impl.available();
+    }
+
     /** Whether the given item is equipped in any Curios slot of the entity. */
     public static boolean isEquipped(LivingEntity entity, Item item) {
-        return findFirst(entity, item).isPresent();
+        return isUsable() && findFirst(entity, item).isPresent();
     }
 
     /** First stack of the given item found in the entity's Curios slots. */
     public static Optional<ItemStack> findFirst(LivingEntity entity, Item item) {
-        return isLoaded() && Impl.available() ? Impl.findFirst(entity, item) : Optional.empty();
+        return isUsable() ? Impl.findFirst(entity, item) : Optional.empty();
     }
 
     /** Whether the wheel may be equipped in the given curio slot id. */
@@ -75,10 +84,37 @@ public final class CuriosCompat {
         return MahoragaWheelItem.WHEEL_SLOT.equals(slotId);
     }
 
+    /** The value a {@code ICurioItem} method should answer with when we have no opinion about it. */
+    private static Object defaultAnswer(Method method) {
+        Class<?> type = method.getReturnType();
+        if (type == boolean.class) {
+            return Boolean.FALSE;
+        }
+        if (type == int.class) {
+            return 0;
+        }
+        if (type == float.class) {
+            return 0F;
+        }
+        if (type == double.class) {
+            return 0D;
+        }
+        if (type == long.class) {
+            return 0L;
+        }
+        if (type == void.class) {
+            return null;
+        }
+        return type.isInstance(Optional.empty()) ? Optional.empty() : null;
+    }
+
     /** Reflective binding to the Curios API; resolved on first use. */
     private static final class Impl {
 
         private static final String API = "top.theillusivec4.curios.api.";
+
+        private static final java.util.concurrent.atomic.AtomicBoolean WARNED_FIND_FAILURE =
+                new java.util.concurrent.atomic.AtomicBoolean();
 
         private static boolean resolved;
         private static boolean ok;
@@ -145,6 +181,11 @@ public final class CuriosCompat {
                 }
                 return Optional.ofNullable((ItemStack) slotResultStack.invoke(result.get()));
             } catch (Throwable t) {
+                //Never swallow this silently: a drifted Curios API looks exactly like "the wheel is not equipped"
+                if (WARNED_FIND_FAILURE.compareAndSet(false, true)) {
+                    LOGGER.warn("Curios lookup of an equipped item failed, the wheel will fall back to the "
+                            + "off-hand/inventory check. Further occurrences are not logged.", t);
+                }
                 return Optional.empty();
             }
         }
@@ -162,6 +203,9 @@ public final class CuriosCompat {
                     String slotId = (String) slotContextId.invoke(args[0]);
                     return isWheelSlot(slotId);
                 }
+                if (name.equals("canUnequip") || name.equals("getSlotContext") || name.equals("canShow")) {
+                    return defaultAnswer(method);
+                }
                 if (method.isDefault()) {
                     return InvocationHandler.invokeDefault(proxy, method, args);
                 }
@@ -169,7 +213,9 @@ public final class CuriosCompat {
                     case "equals" -> proxy == args[0];
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "toString" -> "AdaptionWheel WheelCurio";
-                    default -> throw new UnsupportedOperationException("ICurioItem." + name);
+                    //Anything else (curioTick, render helpers, tooltips of a newer Curios) must not throw inside
+                    //Curios' own call sites: the default answer is "nothing special"
+                    default -> defaultAnswer(method);
                 };
             }
         }

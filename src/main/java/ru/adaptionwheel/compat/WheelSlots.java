@@ -20,9 +20,14 @@ public final class WheelSlots {
     /** Returns the worn wheel stack, if any. Works on both logical sides. */
     public static Optional<ItemStack> findWorn(Player player) {
         Item wheel = ModItems.MAHORAGA_WHEEL.get();
-        if (CuriosCompat.isLoaded()) {
-            return CuriosCompat.findFirst(player, wheel);
+        if (CuriosCompat.isUsable()) {
+            Optional<ItemStack> worn = CuriosCompat.findFirst(player, wheel);
+            if (worn.isPresent()) {
+                return worn;
+            }
         }
+        //Fallback for "no Curios" and "Curios present but its API could not be bound": the off-hand and the
+        //inventory both count, so a drifted Curios API can never make the wheel silently dead
         ItemStack offhand = player.getOffhandItem();
         if (offhand.is(wheel)) {
             return Optional.of(offhand);
@@ -38,8 +43,8 @@ public final class WheelSlots {
     }
 
     public static boolean isWorn(Player player) {
-        if (CuriosCompat.isLoaded()) {
-            return CuriosCompat.isEquipped(player, ModItems.MAHORAGA_WHEEL.get());
+        if (CuriosCompat.isUsable() && CuriosCompat.isEquipped(player, ModItems.MAHORAGA_WHEEL.get())) {
+            return true;
         }
         return findWorn(player).isPresent();
     }

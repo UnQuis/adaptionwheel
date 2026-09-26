@@ -62,8 +62,10 @@ public class PlayerAdaption {
     /** Tracks whether the player was wearing the wheel last tick (for item-bound load/save). */
     public boolean wasWearing;
 
-    /** Runtime identity of the currently equipped wheel stack — detects wheel swaps. Not serialized. */
+    /** The wheel stack that was equipped last tick — used to detect wheel swaps. Not serialized. */
     public transient net.minecraft.world.item.ItemStack equippedStack;
+    /** How many ticks in a row the equipped wheel differed from the remembered one. Not serialized. */
+    public transient int wheelSwapMismatchTicks;
 
     /** Tick accumulator for the Thermal Mastery heat-scaled regeneration. Not serialized. */
     public transient int thermalHealingTimer;
@@ -143,6 +145,7 @@ public class PlayerAdaption {
         adversityCooldownTimer = 0;
         adversityTimer = 0;
         adversityActive = false;
+        wheelSwapMismatchTicks = 0;
         invalidateAdaptCount();
     }
 

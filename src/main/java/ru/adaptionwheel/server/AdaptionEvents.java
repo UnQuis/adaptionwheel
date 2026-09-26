@@ -99,7 +99,15 @@ public class AdaptionEvents {
      * tick path; entries are valid only for the exact tick they were computed in,
      * so equipment changes are still noticed on the very next tick.
      */
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("AdaptionWheel/Events");
+
     private static final Map<UUID, long[]> WEARING_CACHE = new HashMap<>();
+
+    /** Ticks a wheel mismatch has to persist before it counts as a real wheel swap. */
+    private static final int WHEEL_SWAP_CONFIRM_TICKS = 5;
+    /** Minimum ticks between two "wheel swapped" log lines, so a broken lookup can never spam the log. */
+    private static final int WHEEL_SWAP_LOG_INTERVAL = 100;
+    private static int lastWheelSwapLog = -WHEEL_SWAP_LOG_INTERVAL;
 
     private static boolean wearingWheel(Player player) {
         if (!(player instanceof ServerPlayer serverPlayer)) {
@@ -828,12 +836,28 @@ public class AdaptionEvents {
         // two wheels in the curios slot): persist onto the old wheel, adopt the new one's data.
         if (wearing && !player.isDeadOrDying()) {
             ItemStack equipped = getWheelStack(player).orElse(null);
-            if (equipped != null && data.equippedStack != null && equipped != data.equippedStack) {
-                saveToStack(data.equippedStack, data);
-                data.reset();
-                loadFromItem(player, data);
-                applyStats(player, data);
-                sync(player, data, true);
+            if (equipped != null && data.equippedStack != null) {
+                //NOTE: the ItemStack a Curios slot hands out is NOT identity stable between ticks (its lookup is
+                //cached per game time, so a fresh SlotResult, and with it a fresh stack instance, is produced every
+                //tick). Comparing by reference therefore took the "the wheel was swapped" branch on EVERY tick, which
+                //reset the whole adaptation state and wiped every running analysis, so analyses could never progress
+                //and their triggers restarted them over and over. The stacks are therefore compared by content, and
+                //only a mismatch that survives several ticks counts as a real swap (e.g. cursor swapping two wheels).
+                if (ItemStack.isSameItemSameComponents(equipped, data.equippedStack)) {
+                    data.wheelSwapMismatchTicks = 0;
+                } else if (++data.wheelSwapMismatchTicks >= WHEEL_SWAP_CONFIRM_TICKS) {
+                    if (player.tickCount - lastWheelSwapLog >= WHEEL_SWAP_LOG_INTERVAL) {
+                        lastWheelSwapLog = player.tickCount;
+                        LOGGER.info("{} swapped the equipped Adaption Wheel, "
+                                + "adopting the data of the new one", player.getName().getString());
+                    }
+                    saveToStack(data.equippedStack, data);
+                    data.reset();
+                    loadFromItem(player, data);
+                    applyStats(player, data);
+                    sync(player, data, true);
+                    data.wheelSwapMismatchTicks = 0;
+                }
             }
             data.equippedStack = equipped;
         }
