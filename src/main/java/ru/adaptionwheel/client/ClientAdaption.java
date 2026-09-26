@@ -72,17 +72,16 @@ public final class ClientAdaption {
         return ADAPTED.contains(concept);
     }
 
-    /** Highest fist tier reached on the client mirror; {@code -1} when the fist is locked. */
+    /**
+     * Highest fist tier reachable on the client mirror, or {@code -1} when the fist is locked.
+     * Shares one implementation with the server so the two can never disagree.
+     */
     public static int fistTier() {
         if (!wearingWheel || !ADAPTED.contains(ru.adaptionwheel.category.Concepts.MUTATION_FIST)) {
             return -1;
         }
-        for (int i = ru.adaptionwheel.category.FistTiers.TIER_COUNT - 1; i >= 0; i--) {
-            if (LEVELS.getOrDefault(ru.adaptionwheel.category.FistTiers.concept(i), 0) > 0) {
-                return i;
-            }
-        }
-        return 0;
+        return ru.adaptionwheel.category.FistTiers.reachTier(
+                tier -> LEVELS.getOrDefault(ru.adaptionwheel.category.FistTiers.concept(tier), 0));
     }
 
     /** Smooth task progress: advances locally between 1 Hz server syncs. */

@@ -226,6 +226,33 @@ The adaptation to breaking itself, plus the material ladder that grows out of it
 - [x] 14 gametests, including one that asserts each tier's speed equals its vanilla tool's and
       that the speed ladder never decreases.
 
+### Third playtest: the fist still mined at bare-hand speed
+Three separate bugs stacked, none of them visible server-side:
+- [x] **The client never granted the harvest check.** `FistMastery.onHarvestCheck` bailed on
+      `!isClientSide`, but that check also picks the `/30` vs `/100` destroy-speed divisor, and
+      `MultiPlayerGameMode.continueDestroyBlock` accumulates break progress *client-side* and
+      destroys the block itself. The server thought stone took 12 ticks; the player spent ~38.
+      Now answered on both sides through `SurfaceAdaptations`.
+- [x] **Client and server disagreed on the reachable tier.** `FistMastery.currentTier` had been
+      changed to "the previous tier being maxed opens this one" but `ClientAdaption.fistTier` was
+      a separate copy still using "highest tier with a level". After maxing Wood the client kept
+      mining at wooden-fist speed for a whole tier. The rule now lives in one place,
+      `FistTiers.reachTier`, called by both.
+- [x] **`DataComponents.TOOL.defaultMiningSpeed` is 1.0 for every vanilla tool.** A tool's real
+      speed lives in the matching `Tool.Rule`, resolved by `Tool.getMiningSpeed(state)`; the
+      component field is only the fallback for blocks no rule covers. Reading it collapsed the
+      whole ladder to bare-hand speed — and the "speed equals tool" test *passed*, because it
+      compared against the same wrong field. Now measured with `Item.getDestroySpeed` on the block
+      in front of the player, and the ladder is pinned to 2/4/4/6/8/9 by an explicit test.
+- [x] **The speed is applied as a multiplier, not an absolute value.** Vanilla builds a bare hand's
+      speed as `1.0 × BLOCK_BREAK_SPEED × haste ÷ 5 airborne × submerged`, all of which is already
+      in `newSpeed` when the event fires. Multiplying swaps the 1.0 and keeps every modifier;
+      overwriting with an absolute value discarded haste and dropped the airborne penalty.
+- [x] 20 gametests, two of which assert the player-facing **break duration** in ticks rather than
+      the speed number — a stone fist must break stone in the same 12 ticks as a stone pickaxe, and
+      a netherite fist must break obsidian as fast as a netherite pickaxe. Comparing speeds alone
+      cannot catch a client/server disagreement; comparing durations can.
+
 ### Also fixed in this phase (from the code audit)
 - [x] Existence reflection was dead code: the immunity cancelled the hit in `LivingIncomingDamageEvent`,
       which fires at the top of `LivingEntity.hurt()`, so the `LivingDamageEvent.Pre` branch that

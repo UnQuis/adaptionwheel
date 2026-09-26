@@ -108,6 +108,19 @@ public final class SurfaceAdaptations {
     // ================= Fist Mastery (adaptation to breaking) =================
 
     /**
+     * Whether the wheel is worn, resolved on whichever side is asking. The client mirror is not
+     * optional here: {@code MultiPlayerGameMode.continueDestroyBlock} accumulates break progress
+     * <em>client-side</em> and destroys the block itself, so a mining hook that only answers on the
+     * server makes the player mine at a fraction of the intended speed.
+     */
+    public static boolean wearingWheel(Player player) {
+        if (player.level().isClientSide) {
+            return ru.adaptionwheel.client.ClientAdaption.wearingWheel;
+        }
+        return ru.adaptionwheel.server.AdaptionEvents.isWearingWheel(player);
+    }
+
+    /**
      * Highest fist tier the player has reached, or {@code -1} when the fist is not unlocked.
      * Resolved on whichever side is asking: the client reads the synced mirror.
      */

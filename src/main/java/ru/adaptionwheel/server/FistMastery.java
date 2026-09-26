@@ -55,17 +55,9 @@ public final class FistMastery {
     // ================= STATE =================
 
     /**
-     * The material tier the fist currently reaches.
-     *
-     * <p>This is the highest tier whose <em>predecessor</em> is maxed, so reaching Stone means
-     * stone drops <em>immediately</em>, not only after the first fifteen stone blocks have been
-     * broken. Deriving it from "highest tier with a level above zero" instead deadlocks the
-     * ladder: maxing Wood announced the Stone fist while {@code Fist_Stone} was still level 0,
-     * and levelling it needed stone blocks that would not drop. That reported as "I maxed the
-     * wooden fist and stone still gives me nothing".</p>
-     *
-     * <p>Levels granted out of order (the {@code /adaptionwheel grant} command) still count, so
-     * a granted tier is never ignored.</p>
+     * The material tier the fist currently reaches. Delegates to
+     * {@link FistTiers#reachTier} so the client mirror cannot disagree — see there for why that
+     * matters.
      *
      * @return {@code 0..5} once the fist exists, {@code -1} when it does not.
      */
@@ -73,19 +65,7 @@ public final class FistMastery {
         if (!data.isAdapted(Concepts.MUTATION_FIST)) {
             return -1;
         }
-        int progression = 0;
-        while (progression < FistTiers.TIER_COUNT - 1
-                && data.level(FistTiers.concept(progression)) >= PlayerAdaption.MAX_LEVEL) {
-            progression++;
-        }
-        int granted = 0;
-        for (int i = FistTiers.TIER_COUNT - 1; i >= 0; i--) {
-            if (data.level(FistTiers.concept(i)) > 0) {
-                granted = i;
-                break;
-            }
-        }
-        return Math.max(progression, granted);
+        return FistTiers.reachTier(tier -> data.level(FistTiers.concept(tier)));
     }
 
     public static boolean isMaxed(PlayerAdaption data, int tier) {
@@ -145,35 +125,41 @@ public final class FistMastery {
      * anything: vanilla gates both the drops and the destroy-speed divisor behind the same
      * harvest check, so answering true here grants the drops <em>and</em> the "correct tool"
      * speed bonus (divide by 30 rather than 100) in a single place. No mixin required.
+     *
+     * <p>Must answer on the client too. The check feeds the {@code /30} divisor inside
+     * {@code getDestroyProgress}, and the client's own progress accumulation is what decides how
+     * long the player spends holding the button — staying server-only made every block take
+     * 3.3x longer than intended, which reads as "the stone fist mines as slow as a bare hand".</p>
      */
     @SubscribeEvent
     public static void onHarvestCheck(PlayerEvent.HarvestCheck event) {
         if (event.canHarvest() || !enabled() || !AdaptionConfig.FIST_HARVEST_WITHOUT_TOOL.get()) {
             return;
         }
-        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide) {
-            return;
-        }
-        if (!AdaptionEvents.isWearingWheel(player)
+        Player player = event.getEntity();
+        if (!SurfaceAdaptations.wearingWheel(player)
                 || !FistTiers.usableWith(player.getMainHandItem(), event.getTargetBlock())) {
             return;
         }
-        int tier = currentTier(AdaptionEvents.dataOf(player));
+        int tier = SurfaceAdaptations.fistTier(player);
         if (tier >= 0 && FistTiers.canHarvest(event.getTargetBlock(), tier)) {
             event.setCanHarvest(true);
         }
     }
 
     /**
-     * The fist's bare-hand mining speed, or {@code newSpeed} untouched when the fist is not in
-     * play (no wheel, locked, or a tool/weapon in hand — a held tool keeps its own speed).
+     * The fist's bare-hand mining speed multiplier, or {@code 1} when the fist is not in play (no
+     * wheel, locked, or a tool/weapon in hand — a held tool keeps its own speed).
      *
-     * <p>This is an <em>absolute</em> value, not a bonus: the fist is meant to be as fast as the
-     * tool of the same material, so the base 1.0 of a bare hand is replaced rather than added to.
-     * Mine_Labor's trained multiplier is applied after this, so the two still compose.</p>
+     * <p>Applied as a <em>multiplier</em>, not an absolute overwrite. Vanilla computes a bare
+     * hand's speed as {@code 1.0 × BLOCK_BREAK_SPEED × haste × efficiency ÷ 5 when airborne ×
+     * submerged penalty}, and all of that is already in {@code newSpeed} by the time this event
+     * fires. Multiplying swaps the 1.0 for the tool's speed and keeps every modifier intact;
+     * assigning an absolute value instead would silently hand the fist night vision in mid-air
+     * and ignore haste, because the modifiers upstream were thrown away.</p>
      */
     public static float breakSpeed(Player player, float newSpeed, BlockState target) {
-        if (!enabled() || !FistTiers.usableWith(player.getMainHandItem(), target)) {
+        if (!enabled() || newSpeed <= 0f || !FistTiers.usableWith(player.getMainHandItem(), target)) {
             return newSpeed;
         }
         int tier = SurfaceAdaptations.fistTier(player);
@@ -185,7 +171,10 @@ public final class FistMastery {
                 && SurfaceAdaptations.instabreakActive(player)) {
             return (float) (double) AdaptionConfig.FIST_INSTABREAK_SPEED.get();
         }
-        return FistTiers.vanillaMiningSpeed(tier) * (float) (double) AdaptionConfig.FIST_SPEED_SCALE.get();
+        // Measured against the block actually in front of the player, so a tool with per-block
+        // speeds is matched exactly rather than approximated by one number.
+        return newSpeed * FistTiers.vanillaMiningSpeed(tier, target)
+                * (float) (double) AdaptionConfig.FIST_SPEED_SCALE.get();
     }
 
     // ================= PROGRESSION =================

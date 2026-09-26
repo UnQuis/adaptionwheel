@@ -12,6 +12,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.function.IntUnaryOperator;
+
 /**
  * Layout of the "Fist Mastery" progression unlocked by {@link Concepts#MUTATION_FIST}.
  *
@@ -47,6 +49,13 @@ public final class FistTiers {
 
     private static final float[] SPEED_CACHE = new float[TIER_COUNT];
 
+    /**
+     * Block the per-tier speed is measured against when no specific block is at hand. Stone is
+     * in {@code #minecraft:mineable/pickaxe}, so every pickaxe tier resolves a real rule on it.
+     */
+    private static final BlockState REFERENCE_BLOCK =
+            net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
+
     /** One HUD/chat color per tier, roughly following the material itself. */
     public static final int[] COLORS = {
             0xFFA9784A, // Wood   - bark brown
@@ -81,6 +90,11 @@ public final class FistTiers {
         };
     }
 
+    /** The vanilla tool id a tier mirrors; exposed for diagnostics and tests. */
+    public static String toolId(int tier) {
+        return TIER_TOOL_IDS[tier];
+    }
+
     public static String concept(int tier) {
         return CONCEPTS[tier];
     }
@@ -94,35 +108,49 @@ public final class FistTiers {
     }
 
     /**
-     * Bare-hand mining speed for a tier, taken straight from the vanilla tool that tier stands
-     * in for. Wooden/stone/copper/iron/diamond/netherite pickaxes mine at 2/4/4/6/8/9 in 1.21.1,
-     * but reading them beats copying those numbers: a modpack that retunes tool speed moves the
-     * fist with it, and there is no table here to fall out of date.
+     * Bare-hand mining speed for a tier, taken from the vanilla tool that tier stands in for.
+     * Wooden/stone/iron/diamond/netherite pickaxes mine at 2/4/6/8/9 in 1.21.1, but reading them
+     * beats copying those numbers: a pack that retunes tool speed moves the fist with it.
+     *
+     * <p>Measured with {@link Item#getDestroySpeed} against a reference block rather than by
+     * reading {@code DataComponents.TOOL} directly. A tool's real speed lives in the matching
+     * {@code Tool.Rule}, and {@code defaultMiningSpeed} is only the fallback for blocks no rule
+     * covers — reading that field returns 1.0 for every vanilla tool, which silently reduced the
+     * whole ladder to bare-hand speed.</p>
      *
      * <p>If a tool is missing (modded away, odd mapping), the tier inherits the speed of the one
-     * below it rather than dropping to a bare hand — the ladder stays monotone instead of a
-     * single tier suddenly becoming useless.</p>
+     * below it rather than dropping to a bare hand, so the ladder stays monotone.</p>
      */
     public static float vanillaMiningSpeed(int tier) {
+        return vanillaMiningSpeed(tier, REFERENCE_BLOCK);
+    }
+
+    /**
+     * Speed of this tier's tool on one specific block. Preferred at runtime: a tool may carry
+     * per-block speeds, and the fist should match the tool it stands in for on the block actually
+     * being mined.
+     */
+    public static float vanillaMiningSpeed(int tier, BlockState target) {
         if (tier < 0 || tier >= TIER_COUNT) {
             return 1.0f;
         }
-        if (SPEED_CACHE[tier] > 0f) {
+        if (target == REFERENCE_BLOCK && SPEED_CACHE[tier] > 0f) {
             return SPEED_CACHE[tier];
         }
         float speed = 0f;
         Item tool = BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(TIER_TOOL_IDS[tier]))
                 .orElse(null);
         if (tool != null) {
-            var component = tool.getDefaultInstance().get(DataComponents.TOOL);
-            if (component != null) {
-                speed = component.defaultMiningSpeed();
-            }
+            speed = tool.getDestroySpeed(tool.getDefaultInstance(), target);
         }
-        if (speed <= 0f) {
-            speed = tier == 0 ? 1.0f : vanillaMiningSpeed(tier - 1);
+        if (speed <= 1.0f) {
+            // A tool that does not out-mine a bare hand on this block tells us nothing; fall
+            // back to the tier below so the ladder still climbs.
+            speed = tier == 0 ? 1.0f : vanillaMiningSpeed(tier - 1, target);
         }
-        SPEED_CACHE[tier] = speed;
+        if (target == REFERENCE_BLOCK) {
+            SPEED_CACHE[tier] = speed;
+        }
         return speed;
     }
 
@@ -144,6 +172,35 @@ public final class FistTiers {
     public static boolean canHarvest(BlockState state, int tier) {
         int required = tierOf(state);
         return required < 0 || required <= tier;
+    }
+
+    /**
+     * The tier a fist with these levels can reach.
+     *
+     * <p>Shared by the server ({@code FistMastery}) and the client mirror
+     * ({@code ClientAdaption}) on purpose. They used to be separate copies and drifted: the
+     * server switched to "the previous tier being maxed opens this one" while the client kept
+     * "the highest tier with a level", so after maxing Wood the two sides disagreed about whether
+     * the Stone fist existed — and since the client is what accumulates break progress, the
+     * player mined at wooden speed for a whole tier.</p>
+     *
+     * <p>One implementation, so they cannot drift again. {@code levelOf} maps a tier index to its
+     * current level.</p>
+     */
+    public static int reachTier(IntUnaryOperator levelOf) {
+        int maxLevel = ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
+        int progression = 0;
+        while (progression < TIER_COUNT - 1 && levelOf.applyAsInt(progression) >= maxLevel) {
+            progression++;
+        }
+        int granted = 0;
+        for (int i = TIER_COUNT - 1; i >= 0; i--) {
+            if (levelOf.applyAsInt(i) > 0) {
+                granted = i;
+                break;
+            }
+        }
+        return Math.max(progression, granted);
     }
 
     // ================= what counts as a bare hand =================

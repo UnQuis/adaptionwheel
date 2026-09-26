@@ -1,6 +1,6 @@
 package ru.adaptionwheel.test;
 
-import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.gametest.framework.GameTest;
@@ -75,24 +75,24 @@ public final class FistGameTests {
      */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void tierSpeedMatchesItsVanillaTool(GameTestHelper helper) {
-        String[] ids = {"wooden_pickaxe", "stone_pickaxe", "copper_pickaxe",
-                "iron_pickaxe", "diamond_pickaxe", "netherite_pickaxe"};
+        BlockState reference = Blocks.STONE.defaultBlockState();
         float previous = 0f;
         for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
-            Item tool = BuiltInRegistries.ITEM.getOptional(ResourceLocation.withDefaultNamespace(ids[tier]))
+            Item tool = BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(FistTiers.toolId(tier)))
                     .orElse(null);
             float actual = FistTiers.vanillaMiningSpeed(tier);
             if (tool != null) {
-                var component = tool.getDefaultInstance().get(DataComponents.TOOL);
-                helper.assertTrue(component != null, ids[tier] + " should carry a tool component");
-                helper.assertTrue(component.defaultMiningSpeed() == actual,
-                        "tier " + tier + " should mine at " + ids[tier] + "'s speed ("
-                                + component.defaultMiningSpeed() + ") but reports " + actual);
+                // The real per-tool speed lives in the matching Tool.Rule, so it has to be read
+                // through Item.getDestroySpeed. DataComponents.TOOL.defaultMiningSpeed is the
+                // fallback for uncovered blocks and reads 1.0 for every vanilla tool.
+                float toolSpeed = tool.getDestroySpeed(tool.getDefaultInstance(), reference);
+                helper.assertTrue(toolSpeed == actual,
+                        "tier " + tier + " should mine at " + FistTiers.toolId(tier) + "'s speed ("
+                                + toolSpeed + ") but reports " + actual);
             } else {
-                // Not in this registry: the documented fallback is the tier below.
                 helper.assertTrue(actual == previous,
-                        "tier " + tier + " has no " + ids[tier] + ", so it must inherit the speed below ("
-                                + previous + ") but reports " + actual);
+                        "tier " + tier + " has no " + FistTiers.toolId(tier)
+                                + ", so it must inherit the speed below (" + previous + ") but reports " + actual);
             }
             previous = actual;
         }
@@ -192,6 +192,136 @@ public final class FistGameTests {
                                 + (tier - 1) + " (" + lower + ")");
             }
         }
+        helper.succeed();
+    }
+
+    /**
+     * The player-facing number, not just the speed value: how many ticks a Stone Fist needs to
+     * break one stone block must equal what an actual stone pickaxe needs.
+     *
+     * <p>This is the assertion that would have caught the real bug. The speed value was already
+     * correct on the server, but the client never granted the harvest check, so it divided by
+     * 100 instead of 30 and the player spent 3.3x longer holding the button than the server
+     * thought. Comparing speeds alone cannot see that; comparing durations can.</p>
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void stoneFistBreaksStoneAsFastAsAStonePickaxe(GameTestHelper helper) {
+        BlockPos pos = new BlockPos(1, 1, 1);
+        BlockState stone = Blocks.STONE.defaultBlockState();
+        helper.getLevel().setBlockAndUpdate(pos, stone);
+        float hardness = stone.getDestroySpeed(helper.getLevel(), pos);
+        helper.assertTrue(hardness > 0f, "stone must have a destroy speed");
+
+        ItemStack pickaxe = new ItemStack(Items.STONE_PICKAXE);
+        int withPickaxe = ticksToBreak(Items.STONE_PICKAXE.getDestroySpeed(pickaxe, stone), hardness);
+        int withFist = ticksToBreak(FistTiers.vanillaMiningSpeed(1), hardness);
+
+        helper.assertTrue(withFist == withPickaxe,
+                "a Stone Fist should break stone in the same " + withPickaxe
+                        + " ticks as a stone pickaxe, but takes " + withFist);
+        helper.succeed();
+    }
+
+    /** Same check for the tier that matters most, where the old speed really did feel like a joke. */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void netheriteFistMatchesANetheritePickaxe(GameTestHelper helper) {
+        BlockPos pos = new BlockPos(1, 1, 1);
+        BlockState obsidian = Blocks.OBSIDIAN.defaultBlockState();
+        helper.getLevel().setBlockAndUpdate(pos, obsidian);
+        float hardness = obsidian.getDestroySpeed(helper.getLevel(), pos);
+
+        ItemStack pickaxe = new ItemStack(Items.NETHERITE_PICKAXE);
+        int withPickaxe = ticksToBreak(Items.NETHERITE_PICKAXE.getDestroySpeed(pickaxe, obsidian), hardness);
+        int withFist = ticksToBreak(FistTiers.vanillaMiningSpeed(FistTiers.TIER_COUNT - 1), hardness);
+        helper.assertTrue(withFist == withPickaxe,
+                "a Netherite Fist should break obsidian as fast as a netherite pickaxe ("
+                        + withPickaxe + " vs " + withFist + " ticks)");
+
+        // And the fist must never be slower than a bare hand.
+        int bareHand = ticksToBreak(1.0f, hardness);
+        helper.assertTrue(withFist < bareHand, "the fist must beat a bare hand (" + withFist + " vs " + bareHand + ")");
+        helper.succeed();
+    }
+
+    /** Ticks to break a block, reproducing vanilla's progress formula for a correct tool. */
+    private static int ticksToBreak(float speed, float hardness) {
+        float progressPerTick = speed / hardness / 30f; // 30 = correct-tool divisor from the harvest check
+        if (progressPerTick <= 0f) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) Math.ceil(1.0f / progressPerTick);
+    }
+
+    /**
+     * Pin the actual ladder to vanilla's numbers. The tier speed is looked up rather than
+     * hardcoded, so this is the test that notices if the lookup silently starts returning
+     * fallbacks again — which is exactly what happened once, when reading
+     * {@code DataComponents.TOOL.defaultMiningSpeed} instead of {@code Item.getDestroySpeed}
+     * quietly reduced every tier to bare-hand speed while the "speed equals tool" test still
+     * passed, because it was comparing against the same wrong field.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void tierSpeedIsTheVanillaLadder(GameTestHelper helper) {
+        // Copper has no pickaxe in this registry, so it inherits stone's speed.
+        float[] expected = {2.0f, 4.0f, 4.0f, 6.0f, 8.0f, 9.0f};
+        for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
+            helper.assertTrue(FistTiers.vanillaMiningSpeed(tier) == expected[tier],
+                    "tier " + tier + " (" + FistTiers.suffix(tier) + ") should mine at " + expected[tier]
+                            + "x but reports " + FistTiers.vanillaMiningSpeed(tier));
+        }
+        helper.succeed();
+    }
+
+    // ================= tier reach =================
+
+    /**
+     * The reach rule, pinned as data. This is the logic the client and the server both call, and
+     * the bug it caused was a silent disagreement between two hand-written copies of it — the
+     * client kept answering "Wood" after the server had already unlocked Stone, and since the
+     * client accumulates break progress, every block took twice as long as it should.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void reachOpensTheNextTierTheMomentThePreviousOneIsMaxed(GameTestHelper helper) {
+        int max = ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
+        int[] levels = new int[FistTiers.TIER_COUNT];
+        java.util.function.IntUnaryOperator levelOf = t -> levels[t];
+
+        helper.assertTrue(FistTiers.reachTier(levelOf) == 0, "a fresh fist reaches Wood");
+
+        levels[0] = 1;
+        helper.assertTrue(FistTiers.reachTier(levelOf) == 0, "Wood 1 is still Wood");
+        levels[0] = max - 1;
+        helper.assertTrue(FistTiers.reachTier(levelOf) == 0, "Wood 7 is still Wood");
+
+        // The whole point: Stone must be reachable at Wood 8 even though Fist_Stone is still 0.
+        levels[0] = max;
+        helper.assertTrue(FistTiers.reachTier(levelOf) == 1,
+                "maxing Wood must open Stone immediately, not after levelling Stone first");
+
+        levels[1] = 1;
+        helper.assertTrue(FistTiers.reachTier(levelOf) == 1, "Stone 1 stays Stone");
+        levels[1] = max;
+        helper.assertTrue(FistTiers.reachTier(levelOf) == 2, "maxing Stone opens Copper");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void reachHonoursTiersGrantedOutOfOrder(GameTestHelper helper) {
+        int[] levels = new int[FistTiers.TIER_COUNT];
+        java.util.function.IntUnaryOperator levelOf = t -> levels[t];
+        levels[4] = 3; // /adaptionwheel grant Fist_Diamond 3, with nothing before it
+        helper.assertTrue(FistTiers.reachTier(levelOf) == 4,
+                "a directly granted tier must count, otherwise the command is useless for testing");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void reachStopsAtTheLastTier(GameTestHelper helper) {
+        int max = ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
+        int[] levels = new int[FistTiers.TIER_COUNT];
+        java.util.Arrays.fill(levels, max);
+        helper.assertTrue(FistTiers.reachTier(t -> levels[t]) == FistTiers.TIER_COUNT - 1,
+                "everything maxed must clamp to the last tier, never past it");
         helper.succeed();
     }
 
