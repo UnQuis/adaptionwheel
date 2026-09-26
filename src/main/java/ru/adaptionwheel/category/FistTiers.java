@@ -17,22 +17,29 @@ import java.util.function.IntUnaryOperator;
 /**
  * Layout of the "Fist Mastery" progression unlocked by {@link Concepts#MUTATION_FIST}.
  *
- * <p>Six materials, each with {@link ru.adaptionwheel.data.PlayerAdaption#MAX_LEVEL} levels.
+ * <p>Five materials, each with {@link ru.adaptionwheel.data.PlayerAdaption#MAX_LEVEL} levels.
  * A fist at tier <em>n</em> can harvest every block belonging to tiers {@code 0..n}, so
  * higher tiers are strictly more capable; what makes them <em>harder</em> is that a level is
  * only earned by breaking blocks of that tier's <em>own</em> class, which are rarer and
  * slower to break by hand than the previous tier's.</p>
+ *
+ * <p>Vanilla's own tool ladder is Wood, Stone, Copper, Iron, Diamond, Netherite, but copper has
+ * no tool band of its own — a copper pickaxe is a stone-band tool — so a literal six-tier ladder
+ * had a tier that granted nothing. Copper was folded into Iron: that tier now trains on the union
+ * of the Nether band and everything needing an iron pickaxe, which is one honest eight-level
+ * climb instead of two thin ones.</p>
  *
  * <p>The material classes are plain block tags ({@code data/adaptionwheel/tags/block/}),
  * so modpacks can retarget or extend every tier without touching code.</p>
  */
 @SuppressWarnings("unchecked") // the TAGS array is written with a constant length in the static block
 public final class FistTiers {
-    public static final int TIER_COUNT = 6;
 
-    /** Wood, Stone, Copper, Iron, Diamond, Netherite — index order is the unlock order. */
+    public static final int TIER_COUNT = 5;
+
+    /** Wood, Stone, Iron, Diamond, Netherite — index order is the unlock order. */
     public static final String[] CONCEPTS = {
-            "Fist_Wood", "Fist_Stone", "Fist_Copper", "Fist_Iron", "Fist_Diamond", "Fist_Netherite"
+            "Fist_Wood", "Fist_Stone", "Fist_Iron", "Fist_Diamond", "Fist_Netherite"
     };
 
     private static final TagKey<Block>[] TAGS = new TagKey[TIER_COUNT];
@@ -43,7 +50,7 @@ public final class FistTiers {
      * every mapping set, and a missing one would otherwise cost the whole tier its speed.
      */
     private static final String[] TIER_TOOL_IDS = {
-            "minecraft:wooden_pickaxe", "minecraft:stone_pickaxe", "minecraft:copper_pickaxe",
+            "minecraft:wooden_pickaxe", "minecraft:stone_pickaxe",
             "minecraft:iron_pickaxe", "minecraft:diamond_pickaxe", "minecraft:netherite_pickaxe"
     };
 
@@ -58,12 +65,11 @@ public final class FistTiers {
 
     /** One HUD/chat color per tier, roughly following the material itself. */
     public static final int[] COLORS = {
-            0xFFA9784A, // Wood   - bark brown
-            0xFF9A9A9A, // Stone  - grey
-            0xFFE07A4B, // Copper - oxidized orange
-            0xFFDCDCDC, // Iron   - pale steel
-            0xFF4FE3D8, // Diamond- cyan
-            0xFF6B4A78  // Netherite - dark violet
+            0xFFA9784A, // Wood     - bark brown
+            0xFF9A9A9A, // Stone    - grey
+            0xFFDCDCDC, // Iron     - pale steel
+            0xFF4FE3D8, // Diamond  - cyan
+            0xFF6B4A78  // Netherite- dark violet
     };
 
     static {
@@ -82,10 +88,9 @@ public final class FistTiers {
         return switch (tier) {
             case 0 -> "wood";
             case 1 -> "stone";
-            case 2 -> "copper";
-            case 3 -> "iron";
-            case 4 -> "diamond";
-            case 5 -> "netherite";
+            case 2 -> "iron";
+            case 3 -> "diamond";
+            case 4 -> "netherite";
             default -> throw new IllegalArgumentException("bad fist tier " + tier);
         };
     }

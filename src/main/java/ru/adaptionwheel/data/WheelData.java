@@ -70,5 +70,20 @@ public record WheelData(
         data.tasks.clear();
         data.tasks.addAll(tasks);
         data.invalidateAdaptCount();
+        migrateLegacyConcepts(data);
+    }
+
+    /**
+     * Folds the removed copper fist tier into iron, so a wheel that was played on the six-tier
+     * layout keeps its progress instead of silently losing it. A no-op on any current save.
+     */
+    private static void migrateLegacyConcepts(PlayerAdaption data) {
+        Integer copper = data.levels.remove("Fist_Copper");
+        if (copper == null) {
+            return;
+        }
+        int merged = Math.min(ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL,
+                data.level("Fist_Iron") + copper);
+        data.levels.put("Fist_Iron", merged);
     }
 }

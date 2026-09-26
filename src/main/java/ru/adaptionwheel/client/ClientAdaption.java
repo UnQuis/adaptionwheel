@@ -84,9 +84,16 @@ public final class ClientAdaption {
                 tier -> LEVELS.getOrDefault(ru.adaptionwheel.category.FistTiers.concept(tier), 0));
     }
 
-    /** Smooth task progress: advances locally between 1 Hz server syncs. */
+    /**
+     * Smooth task progress: advances locally between 1 Hz server syncs.
+     *
+     * <p>Frozen while Adversity is running, matching the server, which stops decrementing task
+     * timers. Without the guard the client kept filling the bar locally and then snapped it
+     * backwards on the next sync — the "bars keep moving during adversity, then jump back"
+     * report.</p>
+     */
     public static float taskProgress(AdaptionTask task) {
-        int elapsed = elapsedTicksSinceSync();
+        int elapsed = progressElapsedTicks();
         int remaining = Math.max(0, task.timer - elapsed);
         return 1f - (float) remaining / Math.max(1, task.maxTimer);
     }

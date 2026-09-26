@@ -18,6 +18,8 @@ public final class AdaptionConfig {
     private static final double[] OFFENSE_ARMOR_PEN = {12, 25, 37, 50, 62, 75, 87, 100};
     private static final double[] DROP_RATE_INCREASE = {100, 300, 500, 1000, 1500, 3000, 5000, 10000};
     private static final double[] DROP_RATE_KILLS = {1, 5, 10, 30, 100, 300, 500, 1000};
+    /** One entry per fist material: Wood, Stone, Iron, Diamond, Netherite. */
+    private static final double[] DEFAULT_FIST_TIER_COST = {1.0, 1.5, 2.5, 4.0, 5.0};
 
     // ---- General ----
     public static final ModConfigSpec.ConfigValue<Integer> MAX_SIMULTANEOUS_ADAPTATIONS;
@@ -258,8 +260,8 @@ public final class AdaptionConfig {
 
         s.comment("--- Fist Mastery (Mutation_Fist: adaptation to breaking) ---").push("fistMastery");
         FIST_ENABLED = s.comment("Fist Mastery: max Mine_Labor and break a stone block bare-handed to",
-                        "unlock a tool-less fist. The fist then advances through six materials",
-                        "(Wood > Stone > Copper > Iron > Diamond > Netherite), 8 levels each.")
+                        "unlock a tool-less fist. The fist then advances through five materials",
+                        "(Wood > Stone > Iron > Diamond > Netherite), 8 levels each.")
                 .define("enabled", true);
         FIST_HARVEST_WITHOUT_TOOL = s.comment("Let the fist actually collect the blocks it breaks.",
                         "Off = the fist only mines faster but tool-gated blocks still drop nothing.")
@@ -268,14 +270,15 @@ public final class AdaptionConfig {
                 .defineInRange("firstLevelBlocks", 10, 1, 100000);
         FIST_LEVEL_COST_GROWTH = s.comment("Cost growth per level inside a tier (cost *= this each level).")
                 .defineInRange("levelCostGrowth", 1.35, 1.0, 10.0);
-        FIST_TIER_COST_MULTIPLIER = s.comment("Per-tier cost multiplier, Wood > Stone > Copper > Iron >",
+        FIST_TIER_COST_MULTIPLIER = s.comment("Per-tier cost multiplier, Wood > Stone > Iron >",
                         "Diamond > Netherite. This is what makes each new material progressively",
-                        "harder to reach on top of its blocks being rarer and slower to break.")
-                .defineList("tierCostMultiplier", doubleList(new double[]{1.0, 1.5, 2.0, 3.0, 4.0, 5.0}),
+                        "harder to reach on top of its blocks being rarer and slower to break.",
+                        "Must have exactly one entry per material; a wrong-length list is ignored.")
+                .defineList("tierCostMultiplier", doubleList(DEFAULT_FIST_TIER_COST),
                         AdaptionConfig::isDouble);
         FIST_SPEED_SCALE = s.comment("Multiplier on the vanilla tool speed the fist copies.",
                         "Each tier mines as fast as the pickaxe of the same material (wooden 2x,",
-                        "stone 4x, copper 4x, iron 6x, diamond 8x, netherite 9x in 1.21.1) — those",
+                        "stone 4x, iron 6x, diamond 8x, netherite 9x in 1.21.1) — those",
                         "numbers are READ from the items at runtime, not copied here. 1.0 = exact",
                         "parity; raise it to make the fist outrun its tool equivalent.")
                 .defineInRange("fistSpeedScale", 1.0, 0.1, 20.0);
@@ -483,10 +486,44 @@ public final class AdaptionConfig {
         return table(COOLDOWN_RECOVERY_LEVELS, level, new double[]{25, 42, 56, 70, 82, 91, 97, 100});
     }
 
-    /** Per-tier Fist Mastery cost multiplier (index 0 = Wood). */
+    /**
+     * Per-tier Fist Mastery cost multiplier (index 0 = Wood).
+     *
+     * <p>A list whose length does not match the number of materials is ignored wholesale rather
+     * than read entry by entry. {@code defineList} only validates individual elements, so a
+     * config left over from the six-tier layout kept its six multipliers after the copper tier
+     * was merged away — and reading the surviving prefix silently gave Iron the old copper-era
+     * cost. Reverting the whole table to the defaults is the honest outcome for a table that no
+     * longer has the right shape, and the log line says so.</p>
+     */
     public static double fistTierCost(int tier) {
-        return listValue(FIST_TIER_COST_MULTIPLIER, tier, new double[]{1.0, 1.5, 2.0, 3.0, 4.0, 5.0});
+        java.util.List<? extends Double> configured = FIST_TIER_COST_MULTIPLIER.get();
+        if (configured == null || configured.size() != ru.adaptionwheel.category.FistTiers.TIER_COUNT) {
+            repairTierCostTable(configured == null ? -1 : configured.size());
+            configured = FIST_TIER_COST_MULTIPLIER.get();
+        }
+        return listValue(FIST_TIER_COST_MULTIPLIER, tier, DEFAULT_FIST_TIER_COST);
     }
+
+    /**
+     * Rewrites a table of the wrong length to the current defaults, so the mismatch is fixed once
+     * and does not sit there being reinterpreted on every read. {@code set} marks the config
+     * dirty, so the corrected list is written to disk on the next save.
+     */
+    private static void repairTierCostTable(int actualLength) {
+        if (tierCostRepaired) {
+            return;
+        }
+        tierCostRepaired = true;
+        org.slf4j.LoggerFactory.getLogger(AdaptionConfig.class).warn(
+                "adaptionwheel: mutations.fistMastery.tierCostMultiplier had {} entries but there are {} "
+                        + "fist materials; resetting it to the defaults. Any custom per-material "
+                        + "multipliers there have been discarded.",
+                actualLength, ru.adaptionwheel.category.FistTiers.TIER_COUNT);
+        FIST_TIER_COST_MULTIPLIER.set(doubleList(DEFAULT_FIST_TIER_COST));
+    }
+
+    private static boolean tierCostRepaired;
 
     /** Per-tier bare-hand mining speed is read from the vanilla tool; see {@link FistTiers}. */
     public static double fistTierSpeed(int tier) {

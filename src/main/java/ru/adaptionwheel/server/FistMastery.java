@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Fist Mastery — the adaptation to breaking, and the six material tiers that grow out of it.
+ * Fist Mastery — the adaptation to breaking, and the five material tiers that grow out of it.
  *
  * <p>Unlocking: max {@link Concepts#MINE_LABOR} and break a block of the Stone class
  * bare-handed. From then on the wearer's bare hand counts as a tool for every block up to the
@@ -59,7 +59,7 @@ public final class FistMastery {
      * {@link FistTiers#reachTier} so the client mirror cannot disagree — see there for why that
      * matters.
      *
-     * @return {@code 0..5} once the fist exists, {@code -1} when it does not.
+     * @return {@code 0..4} once the fist exists, {@code -1} when it does not.
      */
     public static int currentTier(PlayerAdaption data) {
         if (!data.isAdapted(Concepts.MUTATION_FIST)) {
@@ -184,6 +184,11 @@ public final class FistMastery {
      * Invoked from {@link DomainTriggers} once the block has actually been destroyed.
      */
     public static void onHandBreak(ServerPlayer player, PlayerAdaption data, BlockState state) {
+        // Adversity freezes every other analysis, and the fist is one. Without this the fist
+        // kept training through a challenge that is supposed to halt all progression.
+        if (data.adversityActive) {
+            return;
+        }
         int tier = currentTier(data);
         if (tier < 0) {
             tryUnlock(player, data, state);
@@ -201,6 +206,7 @@ public final class FistMastery {
         int need = AdaptionConfig.fistBlocksForNextLevel(tier, level);
         int have = TIER_PROGRESS.merge(player.getUUID(), 1, Integer::sum);
         if (have < need) {
+            pushProgress(player, have, need);
             return;
         }
         TIER_PROGRESS.put(player.getUUID(), 0);
@@ -208,7 +214,21 @@ public final class FistMastery {
 
         if (level + 1 >= PlayerAdaption.MAX_LEVEL) {
             announceTierUp(player, tier);
+        } else {
+            // The level just went up, so the next requirement is a different number.
+            int newLevel = level + 1;
+            pushProgress(player, 0, AdaptionConfig.fistBlocksForNextLevel(tier, newLevel));
         }
+    }
+
+    /**
+     * Pushes the counter to the one player it concerns, immediately. The regular adaptation sync
+     * only goes out once a second, so without this a break sat invisible in the HUD bar for up
+     * to a full second — the "I break a block and the bar only moves 100-700 ms later" report.
+     * Four bytes, and only on an actual counted break.
+     */
+    private static void pushProgress(ServerPlayer player, int done, int total) {
+        ru.adaptionwheel.network.FistProgressPayload.send(player, done, total);
     }
 
     private static void announceTierUp(ServerPlayer player, int tier) {

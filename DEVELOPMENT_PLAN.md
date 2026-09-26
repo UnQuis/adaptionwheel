@@ -42,7 +42,7 @@ Status legend: `[x]` done & verified · `[~]` partially done · `[ ]` planned
 - [x] Mutation_Thermal (existing) generalized into shared combo-grant flow
 - [x] Mutation_Aquatic — Env_Liquid + Env_Drowning → big swim-speed boost + faster underwater mining
 - [x] Mutation_Impact — Env_FallDamage + Env_Knockback → hard landings trigger a damaging shockwave
-- [x] Mutation_Fist — the adaptation to breaking and its six material tiers; see Phase 15
+- [x] Mutation_Fist — the adaptation to breaking and its five material tiers; see Phase 15
 - [x] Config toggles + tuning values under `mutations`
 - [x] All mutations included in All-Adaption item maxing
 
@@ -217,12 +217,9 @@ The adaptation to breaking itself, plus the material ladder that grows out of it
       Stone = everything a stone pickaxe mines, Iron = `needs_iron_tool`, Diamond =
       `needs_diamond_tool`. Vanilla leaves a few blocks untiered (any pickaxe works: coal ore,
       redstone blocks, most metal blocks) and those follow vanilla rather than intuition.
-- [x] **Copper is the one deliberate deviation.** Vanilla has no copper tool band — copper is a
-      stone-band tool, and `copper_pickaxe` is absent from this mapping's item set entirely — so a
-      "Copper Fist" copied from vanilla would grant nothing at all. It is the **Nether band**
-      instead: the only material band left unclaimed, and a satisfying unlock. Netherite is what no
-      pickaxe can harvest; its level 8 remains Instabreak. Alternative if this is not wanted:
-      drop to five tiers, which is exactly vanilla's ladder.
+- [~] **Superseded by the fourth playtest:** copper is gone entirely rather than being the Nether
+      band. Kept for the record — the reasoning about the missing tool band was right, the fix was
+      the wrong shape. Netherite is what no pickaxe can harvest; its level 8 remains Instabreak.
 - [x] 14 gametests, including one that asserts each tier's speed equals its vanilla tool's and
       that the speed ladder never decreases.
 
@@ -243,7 +240,8 @@ Three separate bugs stacked, none of them visible server-side:
       component field is only the fallback for blocks no rule covers. Reading it collapsed the
       whole ladder to bare-hand speed — and the "speed equals tool" test *passed*, because it
       compared against the same wrong field. Now measured with `Item.getDestroySpeed` on the block
-      in front of the player, and the ladder is pinned to 2/4/4/6/8/9 by an explicit test.
+      in front of the player, and the ladder is pinned to 2/4/4/6/8/9 by an explicit test
+      (now 2/4/6/8/9 — the fourth playtest removed the copper rung).
 - [x] **The speed is applied as a multiplier, not an absolute value.** Vanilla builds a bare hand's
       speed as `1.0 × BLOCK_BREAK_SPEED × haste ÷ 5 airborne × submerged`, all of which is already
       in `newSpeed` when the event fires. Multiplying swaps the 1.0 and keeps every modifier;
@@ -252,6 +250,34 @@ Three separate bugs stacked, none of them visible server-side:
       the speed number — a stone fist must break stone in the same 12 ticks as a stone pickaxe, and
       a netherite fist must break obsidian as fast as a netherite pickaxe. Comparing speeds alone
       cannot catch a client/server disagreement; comparing durations can.
+
+### Fourth playtest: the ladder was too long, and the HUD was late
+- [x] **The copper tier is gone, folded into Iron.** The player was right that Iron was the wall:
+      eight levels at 3.0x the base cost, needing two ore types that sit in two different
+      biomes/altitudes. Vanilla's own ladder is six materials but copper owns *no* tool band — a
+      copper pickaxe is a stone-band tool, and `copper_pickaxe` is absent from this registry
+      entirely — so a literal six-rung ladder has a rung that grants nothing and costs a whole
+      eight-level climb. Iron now trains on the **union** of the old copper band (the Nether
+      material band) and `needs_iron_tool`, and the tier-cost table went from six entries to five:
+      `1.0 / 1.5 / 2.5 / 4.0 / 5.0` (Iron dropped from 3.0 to 2.5, since it now absorbs two
+      bands' worth of blocks). Five tiers, each one an honest climb.
+- [x] **Existing wheels keep their progress.** `WheelData.migrateLegacyConcepts` folds a carried
+      `Fist_Copper` level into `Fist_Iron` on load, clamped to the cap so a wheel deep into both
+      tiers cannot land past the top and skip a tier-up. A no-op on any current save.
+- [x] **The HUD bar no longer lags by up to a second.** The fist's block counter only reached the
+      client on the 1 Hz full sync, so a break sat invisible for 100-700 ms depending on where in
+      the tick the sync landed. `network/FistProgressPayload` pushes the two ints (four bytes) the
+      moment a block is actually counted, so the bar moves with the break. The 1 Hz copy stays as
+      the recovery path for unequip/equip and for a dropped packet.
+- [x] **Progress bars freeze during Adversity.** The server already stops decrementing task timers,
+      but the client extrapolated them between syncs, so the bars crept forward and then snapped
+      back on the next packet. `ClientAdaption.taskProgress` now uses `progressElapsedTicks()`,
+      which is the same zero-during-adversity clock `existenceProgress` already used. The
+      adversity *overlay's* own countdown deliberately keeps running — that is the challenge.
+- [x] **The fist is an analysis, so Adversity freezes it too.** `FistMastery.onHandBreak` now
+      bails while `adversityActive`, matching every other analysis start.
+- [x] 22 gametests, including the copper→iron migration (merge, clamp, and no-op on current
+      saves) and an assertion that the copper blocks all landed in the iron tag.
 
 ### Also fixed in this phase (from the code audit)
 - [x] Existence reflection was dead code: the immunity cancelled the hit in `LivingIncomingDamageEvent`,

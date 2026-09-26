@@ -51,20 +51,17 @@ public final class FistGameTests {
         assertTier(helper, 1, Blocks.STONE, Blocks.DEEPSLATE, Blocks.COBBLESTONE, Blocks.SANDSTONE,
                 Blocks.QUARTZ_BLOCK, Blocks.IRON_ORE, Blocks.COPPER_ORE, Blocks.COAL_ORE,
                 Blocks.DEEPSLATE_IRON_ORE, Blocks.LAPIS_ORE, Blocks.IRON_BLOCK, Blocks.COPPER_BLOCK);
-        // Copper tier is the Nether band (vanilla has no copper tool band of its own).
+        // Iron tier is the old copper tier folded in: the Nether band plus everything an iron
+        // pickaxe mines. It is one eight-level climb rather than two thin ones.
         assertTier(helper, 2, Blocks.NETHERRACK, Blocks.BASALT, Blocks.BLACKSTONE, Blocks.GLOWSTONE,
-                Blocks.MAGMA_BLOCK, Blocks.CRIMSON_NYLIUM, Blocks.SOUL_SOIL, Blocks.BONE_BLOCK);
-        // Iron tier owns what needs an iron pickaxe, Diamond tier what needs a diamond one.
-        // Note vanilla leaves a few blocks untiered because any pickaxe suffices — redstone
-        // blocks, coal ore, most metal blocks — so those are deliberately NOT asserted here.
-        assertTier(helper, 3, Blocks.REDSTONE_ORE, Blocks.GOLD_ORE, Blocks.DEEPSLATE_REDSTONE_ORE,
-                Blocks.DEEPSLATE_GOLD_ORE, Blocks.DIAMOND_ORE, Blocks.EMERALD_ORE, Blocks.GOLD_BLOCK,
-                Blocks.RAW_GOLD_BLOCK);
+                Blocks.MAGMA_BLOCK, Blocks.CRIMSON_NYLIUM, Blocks.SOUL_SOIL, Blocks.BONE_BLOCK,
+                Blocks.REDSTONE_ORE, Blocks.GOLD_ORE, Blocks.DEEPSLATE_REDSTONE_ORE,
+                Blocks.DIAMOND_ORE, Blocks.EMERALD_ORE, Blocks.GOLD_BLOCK, Blocks.RAW_GOLD_BLOCK);
         // Vanilla gates ancient debris and netherite blocks behind a DIAMOND pickaxe, so the
         // final band is what no pickaxe can harvest at all.
-        assertTier(helper, 4, Blocks.OBSIDIAN, Blocks.CRYING_OBSIDIAN, Blocks.ANCIENT_DEBRIS,
+        assertTier(helper, 3, Blocks.OBSIDIAN, Blocks.CRYING_OBSIDIAN, Blocks.ANCIENT_DEBRIS,
                 Blocks.NETHERITE_BLOCK, Blocks.RESPAWN_ANCHOR, Blocks.LODESTONE);
-        assertTier(helper, 5, Blocks.DRAGON_EGG, Blocks.SPAWNER);
+        assertTier(helper, 4, Blocks.DRAGON_EGG, Blocks.SPAWNER);
         helper.succeed();
     }
 
@@ -147,10 +144,9 @@ public final class FistGameTests {
         BlockState[] ladder = {
                 Blocks.DIRT.defaultBlockState(),            // 0 wood
                 Blocks.IRON_ORE.defaultBlockState(),       // 1 stone   (needs a stone pickaxe)
-                Blocks.NETHERRACK.defaultBlockState(),      // 2 copper  (the Nether band)
-                Blocks.REDSTONE_ORE.defaultBlockState(),   // 3 iron    (needs an iron pickaxe)
-                Blocks.OBSIDIAN.defaultBlockState(),        // 4 diamond (needs a diamond pickaxe)
-                Blocks.DRAGON_EGG.defaultBlockState(),     // 5 netherite (no pickaxe at all)
+                Blocks.REDSTONE_ORE.defaultBlockState(),   // 2 iron    (needs an iron pickaxe, or is Nether stone)
+                Blocks.OBSIDIAN.defaultBlockState(),        // 3 diamond (needs a diamond pickaxe)
+                Blocks.DRAGON_EGG.defaultBlockState(),     // 4 netherite (no pickaxe at all)
         };
         for (int required = 0; required < ladder.length; required++) {
             for (int held = 0; held < FistTiers.TIER_COUNT; held++) {
@@ -262,12 +258,106 @@ public final class FistGameTests {
      */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void tierSpeedIsTheVanillaLadder(GameTestHelper helper) {
-        // Copper has no pickaxe in this registry, so it inherits stone's speed.
-        float[] expected = {2.0f, 4.0f, 4.0f, 6.0f, 8.0f, 9.0f};
+        // Five tiers, mirroring the vanilla pickaxe ladder 1.21.1 uses.
+        float[] expected = {2.0f, 4.0f, 6.0f, 8.0f, 9.0f};
+        helper.assertTrue(FistTiers.TIER_COUNT == expected.length,
+                "the tier table and this expectation must stay in step");
         for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
             helper.assertTrue(FistTiers.vanillaMiningSpeed(tier) == expected[tier],
                     "tier " + tier + " (" + FistTiers.suffix(tier) + ") should mine at " + expected[tier]
                             + "x but reports " + FistTiers.vanillaMiningSpeed(tier));
+        }
+        helper.succeed();
+    }
+
+    /** The copper tier is gone; its blocks must have landed in iron rather than vanished. */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void copperTierIsFullyFoldedIntoIron(GameTestHelper helper) {
+        for (int i = 0; i < FistTiers.TIER_COUNT; i++) {
+            helper.assertTrue(!FistTiers.concept(i).equals("Fist_Copper"),
+                    "no tier may be called Fist_Copper any more (index " + i + ")");
+        }
+        // The blocks the copper tier used to own are all iron-tier now.
+        for (Block block : new Block[]{
+                Blocks.NETHERRACK, Blocks.BASALT, Blocks.BLACKSTONE, Blocks.GLOWSTONE,
+                Blocks.MAGMA_BLOCK, Blocks.SOUL_SOIL, Blocks.CRIMSON_NYLIUM}) {
+            assertTier(helper, 2, block);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * A wheel played on the six-tier layout must not silently lose the copper investment when
+     * the tier it belonged to is merged away. The levels fold into iron, clamped so a wheel
+     * that was deep into both tiers does not end up past the cap.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void removedCopperProgressMigratesIntoIron(GameTestHelper helper) {
+        int max = ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
+
+        // Part-way into copper, nothing in iron: the levels should move over intact.
+        var loaded = loadLegacyWheel(java.util.Map.of("Fist_Copper", 3));
+        helper.assertTrue(loaded.level("Fist_Iron") == 3,
+                "3 copper levels should arrive as 3 iron levels, got " + loaded.level("Fist_Iron"));
+        helper.assertTrue(loaded.level("Fist_Copper") == 0,
+                "the dead concept must not linger, or it shows up as a broken row in the screen");
+
+        // Progress in both tiers adds up.
+        loaded = loadLegacyWheel(java.util.Map.of("Fist_Copper", 2, "Fist_Iron", 5));
+        helper.assertTrue(loaded.level("Fist_Iron") == 7,
+                "2 copper + 5 iron should merge to 7 iron, got " + loaded.level("Fist_Iron"));
+
+        // And it must not exceed the cap, which would let a level-up skip a tier-up.
+        loaded = loadLegacyWheel(java.util.Map.of("Fist_Copper", max, "Fist_Iron", max));
+        helper.assertTrue(loaded.level("Fist_Iron") == max,
+                "a merged level above " + max + " would break the tier ladder, got "
+                        + loaded.level("Fist_Iron"));
+
+        // A save with no copper at all is untouched by the migration.
+        loaded = loadLegacyWheel(java.util.Map.of("Fist_Iron", 4));
+        helper.assertTrue(loaded.level("Fist_Iron") == 4,
+                "a current save must pass through unchanged, got " + loaded.level("Fist_Iron"));
+        helper.succeed();
+    }
+
+    private static ru.adaptionwheel.data.PlayerAdaption loadLegacyWheel(
+            java.util.Map<String, Integer> levels) {
+        var wheel = new ru.adaptionwheel.data.WheelData(
+                new java.util.HashMap<>(levels), java.util.List.of(), java.util.List.of(),
+                new java.util.HashMap<>(), java.util.List.of(), java.util.List.of());
+        var data = new ru.adaptionwheel.data.PlayerAdaption(
+                new java.util.HashMap<>(), java.util.List.of(), java.util.List.of(),
+                java.util.List.of(), java.util.List.of(), new java.util.HashMap<>(),
+                new java.util.HashMap<>(), 0, 0, 0, false, 0f, 0f, false);
+        wheel.loadInto(data);
+        return data;
+    }
+
+    /**
+     * The cost table must have one entry per material. A config carried over from the six-tier
+     * layout still holds six multipliers after the copper merge, and reading the surviving prefix
+     * would silently hand Iron the old copper-era cost — so a wrong-length list is rejected
+     * wholesale in favour of the defaults.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void tierCostHasOneEntryPerMaterial(GameTestHelper helper) {
+        double[] defaults = {1.0, 1.5, 2.5, 4.0, 5.0};
+        helper.assertTrue(defaults.length == FistTiers.TIER_COUNT,
+                "the cost table and the tier table must stay the same length");
+        for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
+            double cost = ru.adaptionwheel.config.AdaptionConfig.fistTierCost(tier);
+            helper.assertTrue(cost > 0,
+                    "tier " + tier + " must have a positive cost multiplier, got " + cost);
+        }
+        // Monotone: each material must be strictly harder to level than the one before it, which
+        // is the whole reason the table exists.
+        double previous = 0;
+        for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
+            double cost = ru.adaptionwheel.config.AdaptionConfig.fistTierCost(tier);
+            helper.assertTrue(cost > previous,
+                    "tier " + FistTiers.suffix(tier) + " costs " + cost
+                            + ", which is not harder than the tier below it (" + previous + ")");
+            previous = cost;
         }
         helper.succeed();
     }
@@ -301,7 +391,7 @@ public final class FistGameTests {
         levels[1] = 1;
         helper.assertTrue(FistTiers.reachTier(levelOf) == 1, "Stone 1 stays Stone");
         levels[1] = max;
-        helper.assertTrue(FistTiers.reachTier(levelOf) == 2, "maxing Stone opens Copper");
+        helper.assertTrue(FistTiers.reachTier(levelOf) == 2, "maxing Stone opens Iron");
         helper.succeed();
     }
 
