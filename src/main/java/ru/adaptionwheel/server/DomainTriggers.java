@@ -38,9 +38,19 @@ public final class DomainTriggers {
         if (!AdaptionConfig.ENABLE_MINING.get() || !AdaptionEvents.isWearingWheel(player)) {
             return;
         }
+        // Creative and spectator players generate no adaptation progress from mining.
+        if (player.isCreative() || player.isSpectator()) {
+            return;
+        }
         AdaptionEvents.startOrAccelerate(player, AdaptionEvents.dataOf(player),
                 Concepts.MINE_LABOR,
                 (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
+
+        // Fist Mastery: a bare-handed break is the whole unlock ritual and the tier's
+        // training signal, so it is handled separately from the Labor analysis.
+        if (AdaptionConfig.FIST_ENABLED.get() && player.getMainHandItem().isEmpty()) {
+            FistMastery.onHandBreak(player, AdaptionEvents.dataOf(player), event.getState());
+        }
     }
 
     @SubscribeEvent

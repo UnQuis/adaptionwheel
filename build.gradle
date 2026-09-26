@@ -29,8 +29,11 @@ runs {
     client {
         systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
         // Optional quick-play hook for automated visual smoke tests:
-        // AW_QUICKPLAY="singleplayer/New World" ./gradlew runClient
-        if (System.getenv('AW_QUICKPLAY')) {
+        // AW_QUICKPLAY="singleplayer/New World"            ./gradlew runClient
+        // AW_QUICKPLAY="multiplayer/127.0.0.1:25565"       ./gradlew runClient
+        if (System.getenv('AW_QUICKPLAY')?.startsWith('multiplayer/')) {
+            programArguments '--quickPlayMultiplayer', System.getenv('AW_QUICKPLAY').replaceFirst('^multiplayer/', '')
+        } else if (System.getenv('AW_QUICKPLAY')) {
             programArguments '--quickPlaySingleplayer', System.getenv('AW_QUICKPLAY').replaceFirst('^singleplayer/', '')
         }
     }

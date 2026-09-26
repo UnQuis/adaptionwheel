@@ -64,7 +64,6 @@
   "adaptionwheel.concept.mutation.Aquatic": "Aquatic Mastery",
   "adaptionwheel.concept.mutation.Impact": "Impact Mastery",
   "adaptionwheel.msg.mutation_unlocked": "MUTATION UNLOCKED: %s",
-
   "adaptionwheel.concept.move.Move_SoulSand": "Soul Sand",
   "adaptionwheel.concept.move.Move_Honey": "Honey",
   "adaptionwheel.concept.move.Move_PowderSnow": "Powder Snow",
@@ -76,11 +75,9 @@
   "adaptionwheel.concept.combat.Combat_SkillIssue": "Skill Issue",
   "adaptionwheel.concept.percep.Percep_SteadyGaze": "Steady Gaze",
   "adaptionwheel.concept.special.Dimension_Destroy": "Dimension Destroy",
-
   "item.adaptionwheel.mahoraga_wheel.tooltip4": "[%s] View adaptations",
   "key.categories.adaptionwheel": "Adaption Wheel",
   "key.adaptionwheel.open_screen": "Open Adaptation Screen",
-
   "adaptionwheel.gui.title": "Wheel of Adaptation",
   "adaptionwheel.gui.tab_all": "ALL",
   "adaptionwheel.gui.empty": "No adaptations yet. Face the world - the wheel is watching.",
@@ -91,7 +88,6 @@
   "adaptionwheel.gui.pending": "NOT YET ADAPTED",
   "adaptionwheel.gui.count": "Adaptations: %s",
   "adaptionwheel.gui.footer_scroll": "Scroll to browse | Click a category to filter",
-
   "adaptionwheel.domain.damage": "Damage",
   "adaptionwheel.domain.effect": "Effects",
   "adaptionwheel.domain.movement": "Movement",
@@ -103,7 +99,6 @@
   "adaptionwheel.domain.entity": "Entities",
   "adaptionwheel.domain.existence": "Existence",
   "adaptionwheel.domain.special": "Special",
-
   "adaptionwheel.desc.Move_SoulSand": "Soul sand and soul soil no longer slow your steps.",
   "adaptionwheel.desc.Move_Honey": "Honey blocks neither slow you nor dampen your jumps.",
   "adaptionwheel.desc.Move_PowderSnow": "You walk atop powder snow and it no longer swallows you.",
@@ -131,7 +126,6 @@
   "adaptionwheel.desc.Combat_SkillIssue": "Arrows find their mark on their own — but only the target you actually missed. Shots into empty space still miss.",
   "adaptionwheel.desc.Dimension_Destroy": "Transcendence: Sword of Extermination swings tear three spatial rifts that sever up to five lives each.",
   "adaptionwheel.desc.Percep_SteadyGaze": "Pain no longer shakes your sight.",
-
   "adaptionwheel.cmd.root": "Wheel of Adaptation admin",
   "adaptionwheel.cmd.no_player": "No target player found.",
   "adaptionwheel.cmd.not_wearing": "%s is not wearing the Mahoraga Wheel.",
@@ -146,5 +140,22 @@
   "adaptionwheel.cmd.unknown_concept": "Unknown concept: %s",
   "adaptionwheel.cmd.registry_header": "Registered adaptation definitions (%s):",
   "adaptionwheel.cmd.usage": "Usage: /adaptionwheel <status | list [domain] | info <concept> | grant <concept> [level] | analyze <concept> | reset | registry>",
-  "adaptionwheel.cmd.usage_hint": "Concept examples: Type_FIRE, Move_Honey, Mine_Labor, Combat_Cooldown, Contact_minecraft:zombie, Debuff_weakness"
+  "adaptionwheel.cmd.usage_hint": "Concept examples: Type_FIRE, Move_Honey, Mine_Labor, Combat_Cooldown, Contact_minecraft:zombie, Debuff_weakness",
+  "adaptionwheel.concept.mutation.Fist": "Fist Mastery",
+  "adaptionwheel.concept.fist.Fist_Wood": "Wooden Fist",
+  "adaptionwheel.concept.fist.Fist_Stone": "Stone Fist",
+  "adaptionwheel.concept.fist.Fist_Copper": "Copper Fist",
+  "adaptionwheel.concept.fist.Fist_Iron": "Iron Fist",
+  "adaptionwheel.concept.fist.Fist_Diamond": "Diamond Fist",
+  "adaptionwheel.concept.fist.Fist_Netherite": "Netherite Fist",
+  "adaptionwheel.msg.fist_tier_up": "FIST ADAPTS: %s",
+  "adaptionwheel.msg.instabreak_unlocked": "INSTABREAK DECODED - toggle it with the Instabreak key in your controls",
+  "key.adaptionwheel.toggle_instabreak": "Toggle Instabreak",
+  "adaptionwheel.desc.Fist_Wood": "Break soft blocks bare-handed and still collect them.",
+  "adaptionwheel.desc.Fist_Stone": "Stone, sandstone, quartz and the deepslate family fall to the fist.",
+  "adaptionwheel.desc.Fist_Copper": "Ores and raw metals: coal, copper, iron, lapis.",
+  "adaptionwheel.desc.Fist_Iron": "Gold, redstone and the deepslate metal ores.",
+  "adaptionwheel.desc.Fist_Diamond": "Diamond, emerald, obsidian, lodestone.",
+  "adaptionwheel.desc.Fist_Netherite": "Netherite, ancient debris, basalt, blackstone, dragon egg.",
+  "adaptionwheel.desc.Mutation_Fist": "Unlocked by maxing Labor and breaking a stone block bare-handed. Grants a tool-less fist that grows through six materials, 8 levels each. Netherite 8 decodes Instabreak."
 }

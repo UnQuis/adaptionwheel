@@ -42,7 +42,7 @@ public class AdaptionHud {
             return;
         }
         if (ClientAdaption.TASKS.isEmpty() && !ClientAdaption.adversityActive
-                && ClientAdaption.EXISTENCE_PROGRESS.isEmpty()) {
+                && ClientAdaption.EXISTENCE_PROGRESS.isEmpty() && !hasFistRow()) {
             return;
         }
         GuiGraphics graphics = event.getGuiGraphics();
@@ -65,18 +65,24 @@ public class AdaptionHud {
         // Build row list: tasks + existence progress + adversity
         List<Row> rows = new ArrayList<>();
         if (ClientAdaption.adversityActive) {
-            rows.add(new Row(Concepts.ADVERSITY, ClientAdaption.adversityProgress(), false));
+            rows.add(new Row(Concepts.ADVERSITY, ClientAdaption.adversityProgress(), false, 0, 0));
         }
         for (AdaptionTask task : ClientAdaption.TASKS) {
-            rows.add(new Row(task.concept, ClientAdaption.taskProgress(task), false));
+            rows.add(new Row(task.concept, ClientAdaption.taskProgress(task), false, 0, 0));
         }
         // Existence progress bars (separate from tasks)
         for (Map.Entry<String, Integer> entry : ClientAdaption.EXISTENCE_PROGRESS.entrySet()) {
             String bossPath = entry.getKey();
             float progress = ClientAdaption.existenceProgress(bossPath);
             if (progress < 1f) {
-                rows.add(new Row(Concepts.existence(bossPath), progress, true));
+                rows.add(new Row(Concepts.existence(bossPath), progress, true, 0, 0));
             }
+        }
+        // Fist Mastery: counted in blocks rather than seconds, so it gets its own row shape.
+        if (hasFistRow()) {
+            int tier = ClientAdaption.fistTier();
+            rows.add(new Row(ru.adaptionwheel.category.FistTiers.concept(tier),
+                    fistProgress(), false, ClientAdaption.fistProgressDone, ClientAdaption.fistProgressTotal));
         }
         rows.sort(Comparator.comparingInt(r -> priority(r.concept)));
 
@@ -102,7 +108,7 @@ public class AdaptionHud {
         // Tinted row background
         graphics.fill(9, y - 2, 9 + ROW_WIDTH, y - 2 + ROW_HEIGHT, withAlpha(color, opacity * 15 / 100));
 
-        // "NAME [tag] : NN.N%"
+        // "NAME [tag] : NN.N%"  — block-counted rows show "done/total" instead of a percentage.
         String name = Concepts.chatName(row.concept).getString();
         String tag;
         if (row.rainbow) {
@@ -113,8 +119,10 @@ public class AdaptionHud {
             int level = ClientAdaption.LEVELS.getOrDefault(row.concept, 0);
             tag = " [Lv." + level + " > " + (level + 1) + "]";
         }
-        String text = name + tag + " : " + String.format("%.1f%%", row.progress * 100f);
-        graphics.drawString(font, text, 15, y, withAlpha(color, opacity), true);
+        String meter = row.blocksTotal > 0
+                ? row.blocksDone + "/" + row.blocksTotal + " blocks"
+                : String.format("%.1f%%", row.progress * 100f);
+        graphics.drawString(font, name + tag + " : " + meter, 15, y, withAlpha(color, opacity), true);
 
         // Progress bar: black background + colored fill
         graphics.fill(15, y + 24, 15 + BAR_WIDTH, y + 24 + BAR_HEIGHT, withAlpha(0x000000, opacity * 60 / 100));
@@ -158,6 +166,7 @@ public class AdaptionHud {
         if (concept.startsWith("Env_")) return 10;
         if (concept.startsWith("Move_")) return 12;
         if (concept.startsWith("Mine_")) return 13;
+        if (concept.startsWith("Fist_")) return 11;
         if (concept.startsWith("Combat_")) return 14;
         if (concept.startsWith("Percep_")) return 15;
         if (concept.contains("Debuff")) return 20;
@@ -173,6 +182,19 @@ public class AdaptionHud {
         return (rgb & 0xFFFFFF) | (alpha << 24);
     }
 
-    private record Row(String concept, float progress, boolean rainbow) {
+    private record Row(String concept, float progress, boolean rainbow, int blocksDone, int blocksTotal) {
+    }
+
+    /** True while the wearer's fist is working toward its next level. */
+    private static boolean hasFistRow() {
+        return ClientAdaption.fistProgressTotal > 0 && ClientAdaption.fistTier() >= 0;
+    }
+
+    private static float fistProgress() {
+        int total = ClientAdaption.fistProgressTotal;
+        if (total <= 0) {
+            return 0f;
+        }
+        return Math.min(1f, (float) ClientAdaption.fistProgressDone / total);
     }
 }

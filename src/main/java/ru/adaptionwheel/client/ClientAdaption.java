@@ -27,6 +27,11 @@ public final class ClientAdaption {
     public static final Map<String, Integer> EXISTENCE_PROGRESS = new HashMap<>();
     /** The tick threshold for existence adaptation completion (from config). */
     public static int existenceThreshold;
+    /** Server-authoritative Instabreak stance (Fist Mastery's terminal level). */
+    public static boolean instabreakActive;
+    /** Blocks of the current fist tier's own material counted toward the next level. */
+    public static int fistProgressDone;
+    public static int fistProgressTotal;
 
     /** Game time when the last server sync was received; used for smooth HUD progress. */
     private static long syncedAtGameTime;
@@ -57,11 +62,27 @@ public final class ClientAdaption {
         EXISTENCE_PROGRESS.clear();
         EXISTENCE_PROGRESS.putAll(payload.existenceProgress());
         existenceThreshold = payload.existenceThreshold();
+        instabreakActive = payload.instabreakActive();
+        fistProgressDone = payload.fistProgressDone();
+        fistProgressTotal = payload.fistProgressTotal();
         syncedAtGameTime = currentGameTime();
     }
 
     public static boolean isAdapted(String concept) {
         return ADAPTED.contains(concept);
+    }
+
+    /** Highest fist tier reached on the client mirror; {@code -1} when the fist is locked. */
+    public static int fistTier() {
+        if (!wearingWheel || !ADAPTED.contains(ru.adaptionwheel.category.Concepts.MUTATION_FIST)) {
+            return -1;
+        }
+        for (int i = ru.adaptionwheel.category.FistTiers.TIER_COUNT - 1; i >= 0; i--) {
+            if (LEVELS.getOrDefault(ru.adaptionwheel.category.FistTiers.concept(i), 0) > 0) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     /** Smooth task progress: advances locally between 1 Hz server syncs. */

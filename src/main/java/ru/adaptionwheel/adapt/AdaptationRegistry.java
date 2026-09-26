@@ -50,6 +50,12 @@ public final class AdaptationRegistry {
         register(AdaptationDefinition.oneTime("Combat_SkillIssue", AdaptationDomain.COMBAT));
         register(AdaptationDefinition.oneTime("Percep_SteadyGaze", AdaptationDomain.PERCEPTION));
 
+        // ---- Fist Mastery: the adaptation to breaking, plus its six material tiers ----
+        for (int i = 0; i < ru.adaptionwheel.category.FistTiers.TIER_COUNT; i++) {
+            register(AdaptationDefinition.leveled(ru.adaptionwheel.category.FistTiers.concept(i),
+                    AdaptationDomain.MINING));
+        }
+
         // ---- Environmental one-time adaptations ----
         for (String id : new String[]{
                 "Env_Lava", "Env_Drowning", "Env_Thorns", "Env_Darkness",
@@ -72,6 +78,8 @@ public final class AdaptationRegistry {
         register(AdaptationDefinition.oneTime("Mutation_Thermal", AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime("Mutation_Aquatic", AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime("Mutation_Impact", AdaptationDomain.SPECIAL));
+        register(AdaptationDefinition.oneTime(ru.adaptionwheel.category.Concepts.MUTATION_FIST,
+                AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime("Dimension_Destroy", AdaptationDomain.SPECIAL));
     }
 
@@ -123,6 +131,7 @@ public final class AdaptationRegistry {
         if (concept.startsWith("Move_")) return AdaptationDomain.MOVEMENT;
         if (concept.startsWith("Phys_")) return AdaptationDomain.PHYSICS;
         if (concept.startsWith("Mine_")) return AdaptationDomain.MINING;
+        if (concept.startsWith("Fist_")) return AdaptationDomain.MINING;
         if (concept.startsWith("Combat_")) return AdaptationDomain.COMBAT;
         if (concept.startsWith("Percep_")) return AdaptationDomain.PERCEPTION;
         if (concept.startsWith("Contact_") || concept.startsWith("Offense_NPC_") || concept.startsWith("Drop_NPC_")) {

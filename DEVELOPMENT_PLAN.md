@@ -42,6 +42,7 @@ Status legend: `[x]` done & verified · `[~]` partially done · `[ ]` planned
 - [x] Mutation_Thermal (existing) generalized into shared combo-grant flow
 - [x] Mutation_Aquatic — Env_Liquid + Env_Drowning → big swim-speed boost + faster underwater mining
 - [x] Mutation_Impact — Env_FallDamage + Env_Knockback → hard landings trigger a damaging shockwave
+- [x] Mutation_Fist — the adaptation to breaking and its six material tiers; see Phase 15
 - [x] Config toggles + tuning values under `mutations`
 - [x] All mutations included in All-Adaption item maxing
 
@@ -133,7 +134,8 @@ Status legend: `[x]` done & verified · `[~]` partially done · `[ ]` planned
 - [ ] Existential adaptation to `/kill` — analyzed, deliberately NOT implemented as auto-immunity
       (see docs/adaptation-system.md § Existential threats)
 - [ ] Datapack-driven custom discomfort definitions (JSON → registry)
-- [ ] GameTest coverage for the analysis-task lifecycle
+- [ ] GameTest coverage for the analysis-task lifecycle (blocked on the Curios/gametest clash
+      described in Phase 15 — any test that calls `makeMockServerPlayerInLevel` dies before its body runs)
 
 ## Phase 14 — Feedback iteration 7: visual overhaul (ldlib2 research)
 - [x] Explored `ldlib2/` (LDLib2/Photon editor assets): decoded `slash_trail`/`slash`/`fresnel`/`lightning`
@@ -152,3 +154,63 @@ Status legend: `[x]` done & verified · `[~]` partially done · `[ ]` planned
 - [x] 3D pass: slash = three crescents crossed at 0/+60/-60 deg around the flight axis
       (never fully edge-on); rift = crossed walls (across + along the path) with 3D bursting
       crack shards; verified by screenshots
+
+## Phase 15 — Adaptation to breaking: Fist Mastery
+
+The adaptation to breaking itself, plus the material ladder that grows out of it.
+
+- [x] `Mutation_Fist` — unlocked by maxing `Mine_Labor` **and** breaking a Stone-class block
+      bare-handed. The break is the analysis: vanilla already lets a bare hand mine stone, it is
+      just slow (7.5 s, or ~2.2 s with Labor 8) and yields nothing, which is the adversity being decoded.
+- [x] Six material tiers, 8 levels each: Wood → Stone → Copper → Iron → Diamond → Netherite,
+      stored as six leveled concepts `Fist_Wood` … `Fist_Netherite` in the MINING domain.
+      Maxing a tier opens the next one.
+- [x] A fist at tier *n* harvests every block of tiers `0..n`; a level is earned **only** by
+      breaking blocks of that tier's own material, so the ladder cannot be side-stepped by farming
+      the softest blocks. Difficulty rises three ways at once: rarer blocks, slower bare-hand
+      mining, and a per-tier cost multiplier.
+- [x] Material classes are plain block tags (`data/adaptionwheel/tags/block/fist_*.json`) built
+      from vanilla tags, so modpacks can retarget or extend any tier without touching code.
+- [x] **No mixin needed.** `PlayerEvent.HarvestCheck` is the single hook: vanilla gates both the
+      drops (`ServerPlayerGameMode.destroyBlock` → `canHarvestBlock`) and the destroy-speed divisor
+      (`/30` instead of `/100`) behind that one check, so answering true grants the drops *and*
+      the "correct tool" speed bonus in one place. Verified in the NeoForge 21.1.248 patches —
+      `Player.hasCorrectToolForDrops` is *not* the live gate any more.
+- [x] Mining speed per tier/level folded into the existing Mine_Labor `BreakSpeed` handler so the
+      two compose instead of overwriting each other.
+- [x] Instabreak: Netherite 8 removes any breakable block in one tick, toggled with a keybind
+      (default G). Stance is server-authoritative — the request is re-validated and a rejected
+      toggle is answered with a fresh sync. Blocks with destroy speed `-1` (bedrock, end portal)
+      stay unbreakable, as in vanilla.
+- [x] HUD row for the fist showing `Material [Lv.n > n+1] : done/total blocks`, plus `instabreakActive`
+      and the two progress counters added to the sync payload.
+- [x] 8 gametests in `test/FistGameTests` pinning the tag contents, the harvest gate, the cost curve
+      and the registry wiring. `structure/aw_empty5x5x5.nbt` is a hand-written gzipped binary NBT
+      (`data/<ns>/structure/`, **not** `structures/`, and binary NBT, not SNBT text).
+- [ ] **Still needs an in-game pass**: the unlock, the level-ups and the Instabreak stance all need
+      a real player. NeoForge's `makeMockServerPlayerInLevel()` logs the mock player in, Curios then
+      throws `Payload curios:sync_data may not be sent to the client`, and the test fails before its
+      body runs — so those paths cannot be covered headlessly until that is worked around.
+
+### Also fixed in this phase (from the code audit)
+- [x] Existence reflection was dead code: the immunity cancelled the hit in `LivingIncomingDamageEvent`,
+      which fires at the top of `LivingEntity.hurt()`, so the `LivingDamageEvent.Pre` branch that
+      called `reflectAttack` could never execute. Reflection moved into the incoming handler;
+      `existenceReflection.reflectMultiplier` is live again. The reflected hit is now excluded from
+      the wearer's own offense stacking.
+- [x] `Type_FIRE`, `Type_CONTACT`, `Type_MOB` and `Type_WITHER` could never be trained (the
+      `envCategory` list suppressed `Type_*` analysis), which also made Thermal Mastery unobtainable.
+- [x] `offenseScaling.flatDamageBonus` was applied as `damage * max(1, bonus/10)`, a no-op for
+      levels 1-6 and a multiplier for 7-8; it is now the flat add the config documents.
+- [x] Unequip / death-wipe wrote to the wheel through `getWheelStack()`, which is guaranteed empty
+      when the wheel is not equipped (`isEquipped(Item)` delegates to `findFirstCurio(...).isPresent()`).
+      Those paths now use the stack captured while worn, so `persistOnItem=false` and
+      `clearOnDeath` actually do something and cancelled analyses stay cancelled.
+- [x] `PENDING_RESPAWN_HEALTH` was written for every death, letting a non-wearer bank a free
+      top-up; it is now gated on wearing the wheel and only consumed on the first tick after a respawn.
+- [x] Lifesteal healed a share of the *pre*-reduction hit; adversity lowered the Lv8 i-frames it had
+      just granted; `ENABLE_EXISTENCE` was not honoured when consuming an existing immunity;
+      `Contact_*` used the raw multi-part entity type while offense/drop unwrapped the body;
+      `offenseHitAcceleration` was read by nobody; short config lists were silently ignored;
+      `hpPerSecond` was applied every 3 s; `onExperienceDrop` lacked the boss guard its siblings have;
+      Dimension Slash could chain without bound.

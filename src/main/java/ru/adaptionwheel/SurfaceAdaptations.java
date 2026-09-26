@@ -105,6 +105,53 @@ public final class SurfaceAdaptations {
         return has(player, Concepts.COMBAT_SHIELD_LOCK);
     }
 
+    // ================= Fist Mastery (adaptation to breaking) =================
+
+    /**
+     * Highest fist tier the player has reached, or {@code -1} when the fist is not unlocked.
+     * Resolved on whichever side is asking: the client reads the synced mirror.
+     */
+    public static int fistTier(Player player) {
+        if (player.level().isClientSide) {
+            return ru.adaptionwheel.client.ClientAdaption.fistTier();
+        }
+        if (!(player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)) {
+            return -1;
+        }
+        return ru.adaptionwheel.server.FistMastery.currentTier(
+                ru.adaptionwheel.server.AdaptionEvents.dataOf(serverPlayer));
+    }
+
+    /** Level inside a given fist tier; {@code 0} when that tier was never reached. */
+    public static int fistLevel(Player player, int tier) {
+        if (tier < 0) {
+            return 0;
+        }
+        return conceptLevel(player, ru.adaptionwheel.category.FistTiers.concept(tier));
+    }
+
+    /** True once the last level of the last tier (Netherite 8) has been decoded. */
+    public static boolean instabreakUnlocked(Player player) {
+        if (!ru.adaptionwheel.config.AdaptionConfig.FIST_INSTABREAK_ENABLED.get()) {
+            return false;
+        }
+        if (!has(player, Concepts.MUTATION_FIST)) {
+            return false;
+        }
+        int last = ru.adaptionwheel.category.FistTiers.TIER_COUNT - 1;
+        return conceptLevel(player, ru.adaptionwheel.category.FistTiers.concept(last))
+                >= ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
+    }
+
+    /** Whether the player currently has the Instabreak stance switched on. */
+    public static boolean instabreakActive(Player player) {
+        if (player.level().isClientSide) {
+            return ru.adaptionwheel.client.ClientAdaption.instabreakActive;
+        }
+        return player instanceof net.minecraft.server.level.ServerPlayer serverPlayer
+                && ru.adaptionwheel.server.FistMastery.instabreakStance(serverPlayer);
+    }
+
     private static boolean has(Player player, String concept) {
         if (player.level().isClientSide) {
             return ClientChecks.has(concept);

@@ -20,6 +20,14 @@ public final class Concepts {
     public static final String MUTATION_IMPACT = "Mutation_Impact";
 
     /**
+     * Fist Mastery: the adaptation to breaking itself. Unlocked by maxing
+     * {@link #MINE_LABOR} and breaking a stone block bare-handed; it then grants a
+     * bare-handed fist that harvests blocks without any tool, and opens the
+     * {@code Fist_*} tier progression (see {@link FistTiers}).
+     */
+    public static final String MUTATION_FIST = "Mutation_Fist";
+
+    /**
      * Transcendence-tier ultimate from the original mod ("Dimension Destroy"):
      * unlocked past the adaptation-count threshold; Sword of Extermination
      * swings then fire spatial rifts that sever lives outright.
@@ -150,6 +158,7 @@ public final class Concepts {
         if (concept.startsWith("Env_")) return COLOR_ENV;
         if (concept.startsWith("Move_")) return COLOR_MOVEMENT;
         if (concept.startsWith("Mine_")) return COLOR_MINING;
+        if (concept.startsWith("Fist_")) return fistColor(concept.substring("Fist_".length()));
         if (concept.startsWith("Combat_")) return COLOR_COMBAT;
         if (concept.startsWith("Percep_")) return COLOR_PERCEPTION;
         if (concept.startsWith("Mutation_")) return COLOR_MUTATION;
@@ -183,6 +192,9 @@ public final class Concepts {
         }
         if (concept.startsWith("Mine_")) {
             return Component.translatable("adaptionwheel.concept.mine." + concept);
+        }
+        if (concept.startsWith("Fist_")) {
+            return Component.translatable("adaptionwheel.concept.fist." + concept);
         }
         if (concept.startsWith("Combat_")) {
             return Component.translatable("adaptionwheel.concept.combat." + concept);
@@ -237,6 +249,9 @@ public final class Concepts {
         if (concept.startsWith("Mine_")) {
             return Component.translatable("adaptionwheel.concept.mine." + concept);
         }
+        if (concept.startsWith("Fist_")) {
+            return Component.translatable("adaptionwheel.concept.fist." + concept);
+        }
         if (concept.startsWith("Combat_")) {
             return Component.translatable("adaptionwheel.concept.combat." + concept);
         }
@@ -272,6 +287,16 @@ public final class Concepts {
 
     private static Component mutationName(String name) {
         return Component.translatable("adaptionwheel.concept.mutation." + name);
+    }
+
+    /** Per-material color for a {@code Fist_*} concept; falls back to the mining gray. */
+    private static int fistColor(String tier) {
+        for (int i = 0; i < FistTiers.TIER_COUNT; i++) {
+            if (FistTiers.concept(i).equals("Fist_" + tier)) {
+                return FistTiers.color(i);
+            }
+        }
+        return COLOR_MINING;
     }
 
     private static Component debuffName(String effectPath) {

@@ -53,6 +53,18 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_AQUATIC;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_IMPACT;
 
+    // ---- Fist Mastery (adaptation to breaking) ----
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_HARVEST_WITHOUT_TOOL;
+    public static final ModConfigSpec.ConfigValue<List<? extends Double>> FIST_TIER_COST_MULTIPLIER;
+    public static final ModConfigSpec.ConfigValue<List<? extends Double>> FIST_TIER_SPEED_BONUS;
+    public static final ModConfigSpec.ConfigValue<Integer> FIST_FIRST_LEVEL_BLOCKS;
+    public static final ModConfigSpec.ConfigValue<Double> FIST_LEVEL_COST_GROWTH;
+    public static final ModConfigSpec.ConfigValue<Double> FIST_SPEED_PER_LEVEL;
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> FIST_INSTABREAK_SPEED;
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_DEFAULT_ON;
+
     // ---- Mining scaling ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
 
@@ -244,6 +256,40 @@ public final class AdaptionConfig {
         AQUATIC_SWIM_SPEED_BONUS = s.comment("Flat swim speed bonus added by Aquatic Mastery.",
                         "(Base water swim acceleration is ~0.02; NeoForge swim-speed attribute scales it.)")
                 .defineInRange("aquaticSwimSpeedBonus", 2.5, 0.0, 20.0);
+
+        s.comment("--- Fist Mastery (Mutation_Fist: adaptation to breaking) ---").push("fistMastery");
+        FIST_ENABLED = s.comment("Fist Mastery: max Mine_Labor and break a stone block bare-handed to",
+                        "unlock a tool-less fist. The fist then advances through six materials",
+                        "(Wood > Stone > Copper > Iron > Diamond > Netherite), 8 levels each.")
+                .define("enabled", true);
+        FIST_HARVEST_WITHOUT_TOOL = s.comment("Let the fist actually collect the blocks it breaks.",
+                        "Off = the fist only mines faster but tool-gated blocks still drop nothing.")
+                .define("harvestWithoutTool", true);
+        FIST_FIRST_LEVEL_BLOCKS = s.comment("Blocks of the current tier's own material needed for its first level.")
+                .defineInRange("firstLevelBlocks", 10, 1, 100000);
+        FIST_LEVEL_COST_GROWTH = s.comment("Cost growth per level inside a tier (cost *= this each level).")
+                .defineInRange("levelCostGrowth", 1.35, 1.0, 10.0);
+        FIST_TIER_COST_MULTIPLIER = s.comment("Per-tier cost multiplier, Wood > Stone > Copper > Iron >",
+                        "Diamond > Netherite. This is what makes each new material progressively",
+                        "harder to reach on top of its blocks being rarer and slower to break.")
+                .defineList("tierCostMultiplier", doubleList(new double[]{1.0, 1.5, 2.0, 3.0, 4.0, 5.0}),
+                        AdaptionConfig::isDouble);
+        FIST_TIER_SPEED_BONUS = s.comment("Flat bare-hand mining speed added by each tier at level 1",
+                        "(each level adds fistSpeedPerLevel on top). Wood > Stone > ... > Netherite.")
+                .defineList("tierSpeedBonus", doubleList(new double[]{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}),
+                        AdaptionConfig::isDouble);
+        FIST_SPEED_PER_LEVEL = s.comment("Extra bare-hand mining speed added per fist level within a tier.")
+                .defineInRange("fistSpeedPerLevel", 0.5, 0.0, 20.0);
+        FIST_INSTABREAK_ENABLED = s.comment("Netherite level 8 grants Instabreak: every breakable block is",
+                        "removed in a single tick. Toggled in game with the Instabreak keybind.")
+                .define("instabreakEnabled", true);
+        FIST_INSTABREAK_SPEED = s.comment("Mining speed used while Instabreak is active. Must exceed the",
+                        "hardest block's destroy speed by a wide margin (obsidian is 50).",
+                        "Vanilla blocks with destroy speed -1, such as bedrock, stay unbreakable.")
+                .defineInRange("instabreakSpeed", 20000.0, 100.0, 1000000.0);
+        FIST_INSTABREAK_DEFAULT_ON = s.comment("Whether Instabreak starts switched on the moment it is unlocked.")
+                .define("instabreakDefaultOn", false);
+        s.pop();
 
         s.comment("--- Skill Issue (Combat_SkillIssue) ---").push("skillIssue");
         SKILL_ISSUE_ENABLED = s.comment("Skill Issue: projectiles from adapted bows/crossbows/tridents gently home in,",
@@ -438,6 +484,27 @@ public final class AdaptionConfig {
         return table(COOLDOWN_RECOVERY_LEVELS, level, new double[]{25, 42, 56, 70, 82, 91, 97, 100});
     }
 
+    /** Per-tier Fist Mastery cost multiplier (index 0 = Wood). */
+    public static double fistTierCost(int tier) {
+        return listValue(FIST_TIER_COST_MULTIPLIER, tier, new double[]{1.0, 1.5, 2.0, 3.0, 4.0, 5.0});
+    }
+
+    /** Per-tier bare-hand mining speed bonus at level 1 (index 0 = Wood). */
+    public static double fistTierSpeed(int tier) {
+        return listValue(FIST_TIER_SPEED_BONUS, tier, new double[]{1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
+    }
+
+    /**
+     * Blocks of the tier's own material needed to go from {@code currentLevel} to the next
+     * one. Doubles as the progress cap for the tier's analysis bar.
+     */
+    public static int fistBlocksForNextLevel(int tier, int currentLevel) {
+        double base = Math.max(1, FIST_FIRST_LEVEL_BLOCKS.get());
+        double growth = Math.max(1.0, FIST_LEVEL_COST_GROWTH.get());
+        double cost = base * Math.pow(growth, Math.max(0, currentLevel - 1)) * fistTierCost(tier);
+        return Math.max(1, (int) Math.round(cost));
+    }
+
     public static double defenseHealRatio(int level) {
         return table(DEFENSE_HEAL_RATIO_LEVELS, level, DEFENSE_HEAL_RATIO);
     }
@@ -482,15 +549,26 @@ public final class AdaptionConfig {
         if (level < 1) {
             return 0;
         }
-        List<? extends Double> values = config.get();
-        int idx = Math.min(level - 1, values.size() - 1);
-        if (idx < 0) {
+        return listValue(config, level - 1, fallback);
+    }
+
+    /**
+     * Reads a configured double list by index, clamping to whatever the user actually wrote.
+     *
+     * <p>A short list used to be silently discarded in favour of {@code fallback}, so a pack that
+     * trimmed {@code reductionPct} down to four entries saw no change and no warning. The
+     * fallback array is now only consulted when the list is missing or empty; otherwise the
+     * user's entries are honoured and the last one repeats past the end of the list.</p>
+     */
+    private static double listValue(ModConfigSpec.ConfigValue<List<? extends Double>> config, int index, double[] fallback) {
+        if (index < 0) {
             return 0;
         }
-        if (values.size() < 8) {
-            return fallback[Math.min(level - 1, fallback.length - 1)];
+        List<? extends Double> values = config.get();
+        if (values == null || values.isEmpty()) {
+            return fallback == null ? 0 : fallback[Math.min(index, fallback.length - 1)];
         }
-        return values.get(idx);
+        return values.get(Math.min(index, values.size() - 1));
     }
 
     private AdaptionConfig() {
