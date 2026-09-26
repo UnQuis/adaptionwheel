@@ -46,9 +46,11 @@ public final class DomainTriggers {
                 Concepts.MINE_LABOR,
                 (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
 
-        // Fist Mastery: a bare-handed break is the whole unlock ritual and the tier's
-        // training signal, so it is handled separately from the Labor analysis.
-        if (AdaptionConfig.FIST_ENABLED.get() && player.getMainHandItem().isEmpty()) {
+        // Fist Mastery: a hand-held break is the whole unlock ritual and the tier's
+        // training signal, so it is handled separately from the Labor analysis. Holding a
+        // non-tool item (a block, food) still counts; only tools and weapons take the fist out.
+        if (AdaptionConfig.FIST_ENABLED.get()
+                && ru.adaptionwheel.category.FistTiers.usableWith(player.getMainHandItem(), event.getState())) {
             FistMastery.onHandBreak(player, AdaptionEvents.dataOf(player), event.getState());
         }
     }

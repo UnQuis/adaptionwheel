@@ -3,6 +3,9 @@ package ru.adaptionwheel.test;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -128,6 +131,51 @@ public final class FistGameTests {
                                 + (tier - 1) + " (" + lower + ")");
             }
         }
+        helper.succeed();
+    }
+
+    // ================= what counts as a bare hand =================
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void anEmptyHandAlwaysUsesTheFist(GameTestHelper helper) {
+        helper.assertTrue(FistTiers.usableWith(ItemStack.EMPTY, Blocks.STONE.defaultBlockState()),
+                "an empty hand is the fist");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void nonToolItemsStillUseTheFist(GameTestHelper helper) {
+        // Holding a block, food or a random item must not disable the fist - only real tools
+        // and weapons do.
+        for (Item item : new Item[]{
+                Blocks.STONE.asItem(), Blocks.DIRT.asItem(), Items.APPLE, Items.BREAD,
+                Items.STICK, Items.FLINT, Items.COBBLESTONE.asItem(), Items.OAK_LOG.asItem()}) {
+            helper.assertTrue(FistTiers.usableWith(new ItemStack(item), Blocks.STONE.defaultBlockState()),
+                    item + " is not a tool or weapon, the fist should still work");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void toolsAndWeaponsTakeTheFistOutOfPlay(GameTestHelper helper) {
+        BlockState stone = Blocks.STONE.defaultBlockState();
+        for (Item item : new Item[]{
+                Items.DIAMOND_PICKAXE, Items.IRON_PICKAXE, Items.STONE_PICKAXE,
+                Items.DIAMOND_SWORD, Items.IRON_SWORD, Items.STONE_SWORD,
+                Items.IRON_AXE, Items.IRON_SHOVEL, Items.IRON_HOE, Items.SHEARS}) {
+            helper.assertTrue(!FistTiers.usableWith(new ItemStack(item), stone),
+                    item + " is a tool or weapon and should suppress the fist");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aToolOnlyCountsWhenItOutminesAFist(GameTestHelper helper) {
+        // A hoe cannot mine stone, so its mining speed on that block is a bare hand's — but the
+        // TOOL component still takes the fist out of play, because the fist is about tools in
+        // general rather than this one block.
+        helper.assertTrue(!FistTiers.usableWith(new ItemStack(Items.IRON_HOE), Blocks.STONE.defaultBlockState()),
+                "a hoe still counts as a tool even on a block it cannot mine");
         helper.succeed();
     }
 

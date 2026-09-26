@@ -192,6 +192,19 @@ The adaptation to breaking itself, plus the material ladder that grows out of it
       throws `Payload curios:sync_data may not be sent to the client`, and the test fails before its
       body runs — so those paths cannot be covered headlessly until that is worked around.
 
+### Fixes from the first playtest
+- [x] **Tier deadlock.** `currentTier` was "highest tier with a level above zero", so maxing Wood
+      announced the Stone fist while `Fist_Stone` was still 0 — and levelling it required stone
+      blocks that would not drop. Reach is now derived from the *previous* tier being maxed, so
+      stone starts dropping the moment Wood caps. Levels granted out of order via `/grant` still count.
+- [x] **"Bare hand" was "empty hand".** Holding a block, food or any other non-tool item disabled
+      the fist entirely. `FistTiers.usableWith` now treats "not a tool or weapon" as bare-handed:
+      the `DataComponents.TOOL` component catches every implement (vanilla and modded), a positive
+      main-hand attack-damage modifier catches weapons, and a mining speed above 1.0 on the targeted
+      block is the catch-all.
+- [x] **No guidance.** The unlock and every tier-up now name the material that trains the tier and
+      how many blocks the next level costs.
+
 ### Also fixed in this phase (from the code audit)
 - [x] Existence reflection was dead code: the immunity cancelled the hit in `LivingIncomingDamageEvent`,
       which fires at the top of `LivingEntity.hurt()`, so the `LivingDamageEvent.Pre` branch that

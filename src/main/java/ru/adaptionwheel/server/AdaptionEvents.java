@@ -1929,7 +1929,7 @@ public class AdaptionEvents {
         }
         // Fist Mastery: bare-hand speed from the current material tier, plus the Instabreak
         // override. Added after Mine_Labor so the two compose instead of overwriting.
-        speed = FistMastery.breakSpeedBonus(player, speed);
+        speed = FistMastery.breakSpeedBonus(player, speed, event.getState());
         if (speed != event.getNewSpeed()) {
             event.setNewSpeed(speed);
         }

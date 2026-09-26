@@ -54,17 +54,38 @@ public final class FistMastery {
 
     // ================= STATE =================
 
-    /** Highest tier index the wearer has reached; {@code 0} once the fist exists, {@code -1} if not. */
+    /**
+     * The material tier the fist currently reaches.
+     *
+     * <p>This is the highest tier whose <em>predecessor</em> is maxed, so reaching Stone means
+     * stone drops <em>immediately</em>, not only after the first fifteen stone blocks have been
+     * broken. Deriving it from "highest tier with a level above zero" instead deadlocks the
+     * ladder: maxing Wood announced the Stone fist while {@code Fist_Stone} was still level 0,
+     * and levelling it needed stone blocks that would not drop. That reported as "I maxed the
+     * wooden fist and stone still gives me nothing".</p>
+     *
+     * <p>Levels granted out of order (the {@code /adaptionwheel grant} command) still count, so
+     * a granted tier is never ignored.</p>
+     *
+     * @return {@code 0..5} once the fist exists, {@code -1} when it does not.
+     */
     public static int currentTier(PlayerAdaption data) {
         if (!data.isAdapted(Concepts.MUTATION_FIST)) {
             return -1;
         }
+        int progression = 0;
+        while (progression < FistTiers.TIER_COUNT - 1
+                && data.level(FistTiers.concept(progression)) >= PlayerAdaption.MAX_LEVEL) {
+            progression++;
+        }
+        int granted = 0;
         for (int i = FistTiers.TIER_COUNT - 1; i >= 0; i--) {
             if (data.level(FistTiers.concept(i)) > 0) {
-                return i;
+                granted = i;
+                break;
             }
         }
-        return 0;
+        return Math.max(progression, granted);
     }
 
     public static boolean isMaxed(PlayerAdaption data, int tier) {
@@ -133,7 +154,8 @@ public final class FistMastery {
         if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide) {
             return;
         }
-        if (!AdaptionEvents.isWearingWheel(player) || !player.getMainHandItem().isEmpty()) {
+        if (!AdaptionEvents.isWearingWheel(player)
+                || !FistTiers.usableWith(player.getMainHandItem(), event.getTargetBlock())) {
             return;
         }
         int tier = currentTier(AdaptionEvents.dataOf(player));
@@ -147,8 +169,8 @@ public final class FistMastery {
      * existing Mine_Labor {@code BreakSpeed} handler so the two mining adaptations compose
      * instead of overwriting each other.
      */
-    public static float breakSpeedBonus(Player player, float newSpeed) {
-        if (!enabled() || !player.getMainHandItem().isEmpty()) {
+    public static float breakSpeedBonus(Player player, float newSpeed, BlockState target) {
+        if (!enabled() || !FistTiers.usableWith(player.getMainHandItem(), target)) {
             return newSpeed;
         }
         int tier = SurfaceAdaptations.fistTier(player);
@@ -202,9 +224,16 @@ public final class FistMastery {
 
     private static void announceTierUp(ServerPlayer player, int tier) {
         if (tier + 1 < FistTiers.TIER_COUNT) {
+            int next = tier + 1;
             player.sendSystemMessage(Component.translatable("adaptionwheel.msg.fist_tier_up",
-                            Concepts.chatName(FistTiers.concept(tier + 1)))
-                    .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(FistTiers.color(tier + 1))).withBold(true)));
+                            Concepts.chatName(FistTiers.concept(next)))
+                    .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(FistTiers.color(next))).withBold(true)));
+            // Say what to actually mine, otherwise the player is left guessing why the
+            // announced material still gives nothing.
+            player.sendSystemMessage(Component.translatable("adaptionwheel.msg.fist_material_hint",
+                            Component.translatable("adaptionwheel.fist.material." + FistTiers.concept(next)),
+                            AdaptionConfig.fistBlocksForNextLevel(next, 0))
+                    .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(FistTiers.color(next)))));
             return;
         }
         if (!AdaptionConfig.FIST_INSTABREAK_ENABLED.get()) {
@@ -230,5 +259,11 @@ public final class FistMastery {
             return;
         }
         AdaptionEvents.grantComboMutation(player, data, Concepts.MUTATION_FIST);
+        // Point at the first thing worth doing: stone does not drop yet, the Wood tier does not
+        // need it, and without this the player has no idea what trains the fist from here.
+        player.sendSystemMessage(Component.translatable("adaptionwheel.msg.fist_material_hint",
+                        Component.translatable("adaptionwheel.fist.material." + FistTiers.concept(0)),
+                        AdaptionConfig.fistBlocksForNextLevel(0, 0))
+                .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(FistTiers.color(0)))));
     }
 }

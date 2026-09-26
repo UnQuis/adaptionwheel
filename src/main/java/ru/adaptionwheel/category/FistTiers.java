@@ -1,8 +1,12 @@
 package ru.adaptionwheel.category;
 
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -93,5 +97,46 @@ public final class FistTiers {
     public static boolean canHarvest(BlockState state, int tier) {
         int required = tierOf(state);
         return required < 0 || required <= tier;
+    }
+
+    // ================= what counts as a bare hand =================
+
+    /**
+     * Whether the fist still works while {@code stack} is held. An empty hand obviously does;
+     * so does anything that is not a tool or a weapon — a block, food, a modded trinket. Only a
+     * real digging implement or a weapon takes the fist out of play, because those are exactly
+     * what the fist is meant to replace.
+     *
+     * <p>Three independent checks so modded items are covered too:</p>
+     * <ol>
+     *   <li>the {@link DataComponents#TOOL} component, which in 1.21.1 is what every vanilla and
+     *       modded implement declares (pickaxes, axes, shovels, hoes, shears alike);</li>
+     *   <li>any positive main-hand attack-damage modifier, which is how a weapon declares itself
+     *       without carrying a tool component;</li>
+     *   <li>a mining speed above a bare hand's 1.0 for the block actually being looked at, as a
+     *       catch-all for items that dig well without declaring anything.</li>
+     * </ol>
+     */
+    public static boolean usableWith(ItemStack stack, BlockState target) {
+        if (stack.isEmpty()) {
+            return true;
+        }
+        if (stack.get(DataComponents.TOOL) != null) {
+            return false;
+        }
+        if (dealsExtraAttackDamage(stack)) {
+            return false;
+        }
+        return stack.getItem().getDestroySpeed(stack, target) <= 1.0f;
+    }
+
+    private static boolean dealsExtraAttackDamage(ItemStack stack) {
+        boolean[] weapon = {false};
+        stack.forEachModifier(EquipmentSlot.MAINHAND, (attribute, modifier) -> {
+            if (attribute.is(Attributes.ATTACK_DAMAGE) && modifier.amount() > 0.0) {
+                weapon[0] = true;
+            }
+        });
+        return weapon[0];
     }
 }
