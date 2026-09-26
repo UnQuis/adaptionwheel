@@ -160,9 +160,9 @@
   "adaptionwheel.desc.Mutation_Fist": "Unlocked by maxing Labor and breaking a stone block bare-handed. Grants a tool-less fist that grows through six materials, 8 levels each. Netherite 8 decodes Instabreak.",
   "adaptionwheel.msg.fist_material_hint": "Break %s by hand to train it - %s blocks for the next level.",
   "adaptionwheel.fist.material.Fist_Wood": "dirt, sand, gravel, planks, logs, wool or terracotta",
-  "adaptionwheel.fist.material.Fist_Stone": "stone, cobblestone, sandstone, deepslate, quartz or amethyst",
-  "adaptionwheel.fist.material.Fist_Copper": "coal, copper, iron or lapis ore, raw metal blocks",
-  "adaptionwheel.fist.material.Fist_Iron": "gold or redstone ore, gold and redstone blocks",
-  "adaptionwheel.fist.material.Fist_Diamond": "diamond or emerald ore, obsidian, crying obsidian",
-  "adaptionwheel.fist.material.Fist_Netherite": "ancient debris, netherite blocks, basalt, blackstone or a dragon egg"
+  "adaptionwheel.fist.material.Fist_Stone": "stone, cobblestone, deepslate, sandstone, quartz, coal, copper, iron or lapis ore",
+  "adaptionwheel.fist.material.Fist_Copper": "netherrack, basalt, blackstone, glowstone, magma, soul soil or crimson nylium",
+  "adaptionwheel.fist.material.Fist_Iron": "gold, redstone, diamond or emerald ore and their blocks",
+  "adaptionwheel.fist.material.Fist_Diamond": "obsidian, crying obsidian, ancient debris, netherite blocks or a lodestone",
+  "adaptionwheel.fist.material.Fist_Netherite": "dragon eggs, spawners and reinforced deepslate"
 }

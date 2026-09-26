@@ -1,11 +1,13 @@
 package ru.adaptionwheel.category;
 
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -32,6 +34,18 @@ public final class FistTiers {
     };
 
     private static final TagKey<Block>[] TAGS = new TagKey[TIER_COUNT];
+
+    /**
+     * The vanilla implement each tier stands in for, in the same order. Looked up by id rather
+     * than through {@code Items} constants on purpose: those constants are not all present in
+     * every mapping set, and a missing one would otherwise cost the whole tier its speed.
+     */
+    private static final String[] TIER_TOOL_IDS = {
+            "minecraft:wooden_pickaxe", "minecraft:stone_pickaxe", "minecraft:copper_pickaxe",
+            "minecraft:iron_pickaxe", "minecraft:diamond_pickaxe", "minecraft:netherite_pickaxe"
+    };
+
+    private static final float[] SPEED_CACHE = new float[TIER_COUNT];
 
     /** One HUD/chat color per tier, roughly following the material itself. */
     public static final int[] COLORS = {
@@ -77,6 +91,39 @@ public final class FistTiers {
 
     public static int color(int tier) {
         return COLORS[tier];
+    }
+
+    /**
+     * Bare-hand mining speed for a tier, taken straight from the vanilla tool that tier stands
+     * in for. Wooden/stone/copper/iron/diamond/netherite pickaxes mine at 2/4/4/6/8/9 in 1.21.1,
+     * but reading them beats copying those numbers: a modpack that retunes tool speed moves the
+     * fist with it, and there is no table here to fall out of date.
+     *
+     * <p>If a tool is missing (modded away, odd mapping), the tier inherits the speed of the one
+     * below it rather than dropping to a bare hand — the ladder stays monotone instead of a
+     * single tier suddenly becoming useless.</p>
+     */
+    public static float vanillaMiningSpeed(int tier) {
+        if (tier < 0 || tier >= TIER_COUNT) {
+            return 1.0f;
+        }
+        if (SPEED_CACHE[tier] > 0f) {
+            return SPEED_CACHE[tier];
+        }
+        float speed = 0f;
+        Item tool = BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(TIER_TOOL_IDS[tier]))
+                .orElse(null);
+        if (tool != null) {
+            var component = tool.getDefaultInstance().get(DataComponents.TOOL);
+            if (component != null) {
+                speed = component.defaultMiningSpeed();
+            }
+        }
+        if (speed <= 0f) {
+            speed = tier == 0 ? 1.0f : vanillaMiningSpeed(tier - 1);
+        }
+        SPEED_CACHE[tier] = speed;
+        return speed;
     }
 
     /**

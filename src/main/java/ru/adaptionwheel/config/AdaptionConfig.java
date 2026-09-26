@@ -57,10 +57,9 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_ENABLED;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_HARVEST_WITHOUT_TOOL;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> FIST_TIER_COST_MULTIPLIER;
-    public static final ModConfigSpec.ConfigValue<List<? extends Double>> FIST_TIER_SPEED_BONUS;
+    public static final ModConfigSpec.ConfigValue<Double> FIST_SPEED_SCALE;
     public static final ModConfigSpec.ConfigValue<Integer> FIST_FIRST_LEVEL_BLOCKS;
     public static final ModConfigSpec.ConfigValue<Double> FIST_LEVEL_COST_GROWTH;
-    public static final ModConfigSpec.ConfigValue<Double> FIST_SPEED_PER_LEVEL;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> FIST_INSTABREAK_SPEED;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_DEFAULT_ON;
@@ -274,12 +273,12 @@ public final class AdaptionConfig {
                         "harder to reach on top of its blocks being rarer and slower to break.")
                 .defineList("tierCostMultiplier", doubleList(new double[]{1.0, 1.5, 2.0, 3.0, 4.0, 5.0}),
                         AdaptionConfig::isDouble);
-        FIST_TIER_SPEED_BONUS = s.comment("Flat bare-hand mining speed added by each tier at level 1",
-                        "(each level adds fistSpeedPerLevel on top). Wood > Stone > ... > Netherite.")
-                .defineList("tierSpeedBonus", doubleList(new double[]{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}),
-                        AdaptionConfig::isDouble);
-        FIST_SPEED_PER_LEVEL = s.comment("Extra bare-hand mining speed added per fist level within a tier.")
-                .defineInRange("fistSpeedPerLevel", 0.5, 0.0, 20.0);
+        FIST_SPEED_SCALE = s.comment("Multiplier on the vanilla tool speed the fist copies.",
+                        "Each tier mines as fast as the pickaxe of the same material (wooden 2x,",
+                        "stone 4x, copper 4x, iron 6x, diamond 8x, netherite 9x in 1.21.1) — those",
+                        "numbers are READ from the items at runtime, not copied here. 1.0 = exact",
+                        "parity; raise it to make the fist outrun its tool equivalent.")
+                .defineInRange("fistSpeedScale", 1.0, 0.1, 20.0);
         FIST_INSTABREAK_ENABLED = s.comment("Netherite level 8 grants Instabreak: every breakable block is",
                         "removed in a single tick. Toggled in game with the Instabreak keybind.")
                 .define("instabreakEnabled", true);
@@ -489,9 +488,9 @@ public final class AdaptionConfig {
         return listValue(FIST_TIER_COST_MULTIPLIER, tier, new double[]{1.0, 1.5, 2.0, 3.0, 4.0, 5.0});
     }
 
-    /** Per-tier bare-hand mining speed bonus at level 1 (index 0 = Wood). */
+    /** Per-tier bare-hand mining speed is read from the vanilla tool; see {@link FistTiers}. */
     public static double fistTierSpeed(int tier) {
-        return listValue(FIST_TIER_SPEED_BONUS, tier, new double[]{1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
+        return ru.adaptionwheel.category.FistTiers.vanillaMiningSpeed(tier);
     }
 
     /**

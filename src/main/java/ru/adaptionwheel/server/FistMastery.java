@@ -165,11 +165,14 @@ public final class FistMastery {
     }
 
     /**
-     * Bare-hand mining speed from the fist, plus the Instabreak override. Folded into the
-     * existing Mine_Labor {@code BreakSpeed} handler so the two mining adaptations compose
-     * instead of overwriting each other.
+     * The fist's bare-hand mining speed, or {@code newSpeed} untouched when the fist is not in
+     * play (no wheel, locked, or a tool/weapon in hand — a held tool keeps its own speed).
+     *
+     * <p>This is an <em>absolute</em> value, not a bonus: the fist is meant to be as fast as the
+     * tool of the same material, so the base 1.0 of a bare hand is replaced rather than added to.
+     * Mine_Labor's trained multiplier is applied after this, so the two still compose.</p>
      */
-    public static float breakSpeedBonus(Player player, float newSpeed, BlockState target) {
+    public static float breakSpeed(Player player, float newSpeed, BlockState target) {
         if (!enabled() || !FistTiers.usableWith(player.getMainHandItem(), target)) {
             return newSpeed;
         }
@@ -182,10 +185,7 @@ public final class FistMastery {
                 && SurfaceAdaptations.instabreakActive(player)) {
             return (float) (double) AdaptionConfig.FIST_INSTABREAK_SPEED.get();
         }
-        int level = SurfaceAdaptations.fistLevel(player, tier);
-        double bonus = AdaptionConfig.fistTierSpeed(tier)
-                + Math.max(0, level - 1) * AdaptionConfig.FIST_SPEED_PER_LEVEL.get();
-        return bonus <= 0 ? newSpeed : newSpeed + (float) bonus;
+        return FistTiers.vanillaMiningSpeed(tier) * (float) (double) AdaptionConfig.FIST_SPEED_SCALE.get();
     }
 
     // ================= PROGRESSION =================

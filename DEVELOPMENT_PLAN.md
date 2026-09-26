@@ -205,6 +205,27 @@ The adaptation to breaking itself, plus the material ladder that grows out of it
 - [x] **No guidance.** The unlock and every tier-up now name the material that trains the tier and
       how many blocks the next level costs.
 
+### Second playtest: tool parity
+- [x] **Fist speed now equals the equivalent pickaxe** (wooden 2x, stone 4x, iron 6x, diamond 8x,
+      netherite 9x in 1.21.1) instead of a flat +1..+6 bonus, and the value is **read from
+      `DataComponents.TOOL` of the vanilla pickaxe at runtime** rather than hardcoded — nothing to
+      keep in sync, and a retuned tool speed moves the fist with it. A missing tool makes the tier
+      inherit the speed below it so the ladder never develops a hole.
+- [x] The fist speed is applied as an **absolute** base before Mine_Labor's multiplier, so the two
+      compose instead of the fist being added on top of the bare hand's 1.0.
+- [x] **Harvest bands rebuilt on vanilla's own tool tiers** via the `needs_*_tool` block tags, so
+      Stone = everything a stone pickaxe mines, Iron = `needs_iron_tool`, Diamond =
+      `needs_diamond_tool`. Vanilla leaves a few blocks untiered (any pickaxe works: coal ore,
+      redstone blocks, most metal blocks) and those follow vanilla rather than intuition.
+- [x] **Copper is the one deliberate deviation.** Vanilla has no copper tool band — copper is a
+      stone-band tool, and `copper_pickaxe` is absent from this mapping's item set entirely — so a
+      "Copper Fist" copied from vanilla would grant nothing at all. It is the **Nether band**
+      instead: the only material band left unclaimed, and a satisfying unlock. Netherite is what no
+      pickaxe can harvest; its level 8 remains Instabreak. Alternative if this is not wanted:
+      drop to five tiers, which is exactly vanilla's ladder.
+- [x] 14 gametests, including one that asserts each tier's speed equals its vanilla tool's and
+      that the speed ladder never decreases.
+
 ### Also fixed in this phase (from the code audit)
 - [x] Existence reflection was dead code: the immunity cancelled the hit in `LivingIncomingDamageEvent`,
       which fires at the top of `LivingEntity.hurt()`, so the `LivingDamageEvent.Pre` branch that

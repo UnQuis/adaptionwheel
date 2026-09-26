@@ -160,9 +160,9 @@
   "adaptionwheel.desc.Mutation_Fist": "Открывается при максимальном Труде и если сломать каменный блок голыми руками. Дает кулак без инструментов, растущий через шесть материалов по 8 уровней. Незерит 8 дает инстабрейк.",
   "adaptionwheel.msg.fist_material_hint": "Ломай %s голыми руками - %s блоков до следующего уровня.",
   "adaptionwheel.fist.material.Fist_Wood": "землю, песок, гравий, доски, бревна, шерсть или терракоту",
-  "adaptionwheel.fist.material.Fist_Stone": "камень, булыжник, песчаник, дипслейт, кварц или аметист",
-  "adaptionwheel.fist.material.Fist_Copper": "руду угля, меди, железа или лазурита, слитки сырого металла",
-  "adaptionwheel.fist.material.Fist_Iron": "руду золота или редстоуна, золотой и редстоуновый блоки",
-  "adaptionwheel.fist.material.Fist_Diamond": "руду алмаза или изумруда, обсидиан, плачущий обсидиан",
-  "adaptionwheel.fist.material.Fist_Netherite": "древний мусор, незеритовые блоки, базальт, чёрный камень или яйцо дракона"
+  "adaptionwheel.fist.material.Fist_Stone": "камень, булыжник, дипслейт, песчаник, кварц, руду угля, меди, железа или лазурита",
+  "adaptionwheel.fist.material.Fist_Copper": "незерит, базальт, чёрный камень, светокамень, магму, душевную почву или багровый нилиум",
+  "adaptionwheel.fist.material.Fist_Iron": "руду золота, редстоуна, алмаза или изумруда и их блоки",
+  "adaptionwheel.fist.material.Fist_Diamond": "обсидиан, плачущий обсидиан, древний мусор, незеритовые блоки или магнитный компас",
+  "adaptionwheel.fist.material.Fist_Netherite": "яйца дракона, спавнеры и укреплённый дипслейт"
 }

@@ -1,13 +1,7 @@
 {
   "values": [
+    "#minecraft:needs_diamond_tool",
     "#minecraft:diamond_ores",
-    "#minecraft:emerald_ores",
-    "minecraft:diamond_block",
-    "minecraft:emerald_block",
-    "minecraft:obsidian",
-    "minecraft:crying_obsidian",
-    "minecraft:respawn_anchor",
-    "minecraft:lodestone",
-    "minecraft:spawner"
+    "minecraft:lodestone"
   ]
 }

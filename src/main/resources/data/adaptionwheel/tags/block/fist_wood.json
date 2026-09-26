@@ -25,7 +25,6 @@
     "minecraft:bubble_column",
     "minecraft:glass",
     "minecraft:tinted_glass",
-    "minecraft:glowstone",
     "minecraft:sea_lantern",
     "minecraft:honeycomb_block",
     "minecraft:sponge",
@@ -52,11 +51,6 @@
     "minecraft:dried_kelp_block",
     "minecraft:moss_block",
     "minecraft:moss_carpet",
-    "minecraft:bone_block",
-    "minecraft:glow_lichen",
-    "minecraft:sculk",
-    "minecraft:sculk_vein",
-    "minecraft:soul_soil",
-    "minecraft:magma_block"
+    "minecraft:glow_lichen"
   ]
 }

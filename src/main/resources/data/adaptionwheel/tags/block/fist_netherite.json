@@ -1,22 +1,9 @@
 {
   "values": [
-    "minecraft:netherite_block",
-    "minecraft:ancient_debris",
-    "minecraft:basalt",
-    "minecraft:polished_basalt",
-    "minecraft:smooth_basalt",
-    "minecraft:blackstone",
-    "minecraft:polished_blackstone",
-    "minecraft:chiseled_polished_blackstone",
-    "minecraft:polished_blackstone_bricks",
-    "minecraft:cracked_polished_blackstone_bricks",
-    "minecraft:cracked_nether_bricks",
-    "minecraft:nether_bricks",
-    "minecraft:chiseled_nether_bricks",
-    "minecraft:red_nether_bricks",
+    "minecraft:spawner",
     "minecraft:dragon_egg",
     "minecraft:end_portal_frame",
-    "minecraft:end_portal",
-    "minecraft:bedrock"
+    "minecraft:bedrock",
+    "minecraft:reinforced_deepslate"
   ]
 }

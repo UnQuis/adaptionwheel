@@ -1,6 +1,8 @@
 package ru.adaptionwheel.test;
 
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.item.Item;
@@ -45,11 +47,70 @@ public final class FistGameTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void everyTierTagCoversItsOwnMaterial(GameTestHelper helper) {
         assertTier(helper, 0, Blocks.DIRT, Blocks.SAND, Blocks.OAK_PLANKS, Blocks.OAK_LOG, Blocks.WHITE_WOOL);
-        assertTier(helper, 1, Blocks.STONE, Blocks.DEEPSLATE, Blocks.COBBLESTONE, Blocks.SANDSTONE, Blocks.QUARTZ_BLOCK);
-        assertTier(helper, 2, Blocks.IRON_ORE, Blocks.COPPER_ORE, Blocks.COAL_ORE, Blocks.IRON_BLOCK, Blocks.LAPIS_ORE);
-        assertTier(helper, 3, Blocks.REDSTONE_ORE, Blocks.GOLD_ORE);
-        assertTier(helper, 4, Blocks.OBSIDIAN, Blocks.CRYING_OBSIDIAN, Blocks.DIAMOND_ORE, Blocks.DIAMOND_BLOCK);
-        assertTier(helper, 5, Blocks.ANCIENT_DEBRIS, Blocks.NETHERITE_BLOCK, Blocks.BASALT, Blocks.BLACKSTONE);
+        // Stone tier owns the whole stone family plus every ore a stone pickaxe gets.
+        assertTier(helper, 1, Blocks.STONE, Blocks.DEEPSLATE, Blocks.COBBLESTONE, Blocks.SANDSTONE,
+                Blocks.QUARTZ_BLOCK, Blocks.IRON_ORE, Blocks.COPPER_ORE, Blocks.COAL_ORE,
+                Blocks.DEEPSLATE_IRON_ORE, Blocks.LAPIS_ORE, Blocks.IRON_BLOCK, Blocks.COPPER_BLOCK);
+        // Copper tier is the Nether band (vanilla has no copper tool band of its own).
+        assertTier(helper, 2, Blocks.NETHERRACK, Blocks.BASALT, Blocks.BLACKSTONE, Blocks.GLOWSTONE,
+                Blocks.MAGMA_BLOCK, Blocks.CRIMSON_NYLIUM, Blocks.SOUL_SOIL, Blocks.BONE_BLOCK);
+        // Iron tier owns what needs an iron pickaxe, Diamond tier what needs a diamond one.
+        // Note vanilla leaves a few blocks untiered because any pickaxe suffices — redstone
+        // blocks, coal ore, most metal blocks — so those are deliberately NOT asserted here.
+        assertTier(helper, 3, Blocks.REDSTONE_ORE, Blocks.GOLD_ORE, Blocks.DEEPSLATE_REDSTONE_ORE,
+                Blocks.DEEPSLATE_GOLD_ORE, Blocks.DIAMOND_ORE, Blocks.EMERALD_ORE, Blocks.GOLD_BLOCK,
+                Blocks.RAW_GOLD_BLOCK);
+        // Vanilla gates ancient debris and netherite blocks behind a DIAMOND pickaxe, so the
+        // final band is what no pickaxe can harvest at all.
+        assertTier(helper, 4, Blocks.OBSIDIAN, Blocks.CRYING_OBSIDIAN, Blocks.ANCIENT_DEBRIS,
+                Blocks.NETHERITE_BLOCK, Blocks.RESPAWN_ANCHOR, Blocks.LODESTONE);
+        assertTier(helper, 5, Blocks.DRAGON_EGG, Blocks.SPAWNER);
+        helper.succeed();
+    }
+
+    /**
+     * A tier must mine exactly as fast as the vanilla tool it stands in for. Where that tool is
+     * absent from the registry the tier is documented to inherit the one below it instead, so
+     * that is what gets checked — the ladder must never develop a hole.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void tierSpeedMatchesItsVanillaTool(GameTestHelper helper) {
+        String[] ids = {"wooden_pickaxe", "stone_pickaxe", "copper_pickaxe",
+                "iron_pickaxe", "diamond_pickaxe", "netherite_pickaxe"};
+        float previous = 0f;
+        for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
+            Item tool = BuiltInRegistries.ITEM.getOptional(ResourceLocation.withDefaultNamespace(ids[tier]))
+                    .orElse(null);
+            float actual = FistTiers.vanillaMiningSpeed(tier);
+            if (tool != null) {
+                var component = tool.getDefaultInstance().get(DataComponents.TOOL);
+                helper.assertTrue(component != null, ids[tier] + " should carry a tool component");
+                helper.assertTrue(component.defaultMiningSpeed() == actual,
+                        "tier " + tier + " should mine at " + ids[tier] + "'s speed ("
+                                + component.defaultMiningSpeed() + ") but reports " + actual);
+            } else {
+                // Not in this registry: the documented fallback is the tier below.
+                helper.assertTrue(actual == previous,
+                        "tier " + tier + " has no " + ids[tier] + ", so it must inherit the speed below ("
+                                + previous + ") but reports " + actual);
+            }
+            previous = actual;
+        }
+        helper.succeed();
+    }
+
+    /** The ladder must never go backwards, whatever the tools turn out to be. */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void tierSpeedNeverDecreases(GameTestHelper helper) {
+        float previous = 0f;
+        for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
+            float speed = FistTiers.vanillaMiningSpeed(tier);
+            helper.assertTrue(speed > 0f, "tier " + tier + " must have a usable speed");
+            helper.assertTrue(speed >= previous,
+                    "tier " + tier + " (" + speed + ") must not be slower than tier " + (tier - 1)
+                            + " (" + previous + ")");
+            previous = speed;
+        }
         helper.succeed();
     }
 
@@ -84,12 +145,12 @@ public final class FistGameTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void harvestGateIsCumulativeAndStrict(GameTestHelper helper) {
         BlockState[] ladder = {
-                Blocks.DIRT.defaultBlockState(),      // 0
-                Blocks.STONE.defaultBlockState(),     // 1
-                Blocks.IRON_ORE.defaultBlockState(),  // 2
-                Blocks.REDSTONE_ORE.defaultBlockState(), // 3
-                Blocks.OBSIDIAN.defaultBlockState(),  // 4
-                Blocks.ANCIENT_DEBRIS.defaultBlockState(), // 5
+                Blocks.DIRT.defaultBlockState(),            // 0 wood
+                Blocks.IRON_ORE.defaultBlockState(),       // 1 stone   (needs a stone pickaxe)
+                Blocks.NETHERRACK.defaultBlockState(),      // 2 copper  (the Nether band)
+                Blocks.REDSTONE_ORE.defaultBlockState(),   // 3 iron    (needs an iron pickaxe)
+                Blocks.OBSIDIAN.defaultBlockState(),        // 4 diamond (needs a diamond pickaxe)
+                Blocks.DRAGON_EGG.defaultBlockState(),     // 5 netherite (no pickaxe at all)
         };
         for (int required = 0; required < ladder.length; required++) {
             for (int held = 0; held < FistTiers.TIER_COUNT; held++) {
