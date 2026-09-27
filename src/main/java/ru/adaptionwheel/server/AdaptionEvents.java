@@ -1451,10 +1451,16 @@ public class AdaptionEvents {
     }
 
     /**
-     * Sparkles around the floating wheel: sparse idle shimmer that grows with the
-     * adaptation count, dense shimmer plus sparks converging into the wheel while
-     * an analysis is running. Port of MahoragaWheelLayer.cs (dust 228, noGravity).
-     */    private static void spawnWheelParticles(ServerPlayer player, PlayerAdaption data) {
+     * Enchanting-table glyphs around the floating wheel: sparse idle shimmer that grows with the
+     * adaptation count, denser shimmer plus glyphs converging into the wheel while an analysis is
+     * running. Port of MahoragaWheelLayer.cs (dust 228, noGravity).
+     *
+     * <p>Swapped from END_ROD/CRIT to {@link net.minecraft.core.particles.ParticleTypes#ENCHANT}
+     * because the glyph sprite actually reads as arcane. An end rod is a generic white streak
+     * that could be coming off any source; the wheel is a magical analyser, and the runic
+     * characters sell that where the streak did not.</p>
+     */
+    private static void spawnWheelParticles(ServerPlayer player, PlayerAdaption data) {
         if (!(player.level() instanceof ServerLevel serverLevel)) return;
         boolean analyzing = !data.tasks.isEmpty();
         var random = player.getRandom();
@@ -1468,11 +1474,11 @@ public class AdaptionEvents {
         if (random.nextInt(denominator) == 0) {
             int count = analyzing ? 1 : 1 + adaptBonus;
             for (int i = 0; i < count; i++) {
-                serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
+                serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.ENCHANT,
                         cx + (random.nextDouble() - 0.5) * 2.1,
                         cy + (random.nextDouble() - 0.5) * 1.4,
                         cz + (random.nextDouble() - 0.5) * 2.1,
-                        1, 0, 0.02, 0, 0);
+                        1, 0.04, 0.04, 0.04, 0.0);
             }
         }
 
@@ -1482,9 +1488,9 @@ public class AdaptionEvents {
             double px = cx + Math.cos(angle) * dist;
             double pz = cz + Math.sin(angle) * dist;
             double py = cy + (random.nextDouble() - 0.5) * dist;
-            // CRIT sparks converge into the wheel; FIREWORK renders as a flat
-            // untextured quad and reads as an ugly white square up close.
-            serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.CRIT,
+            // count 0 with a non-zero speed spawns exactly one particle moving along that
+            // vector, which is what makes the glyphs stream in toward the wheel.
+            serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.ENCHANT,
                     px, py, pz, 0,
                     (cx - px) * 0.12, (cy - py) * 0.12, (cz - pz) * 0.12,
                     1.0);
@@ -1531,6 +1537,20 @@ public class AdaptionEvents {
                 v.z * decayRatio);
     }
 
+    /**
+     * Length of the rolling window the passive status effects are refreshed on. Short on purpose:
+     * the effect is a mirror of the adaptation state, so if the state changes the effect must
+     * follow promptly instead of trailing two minutes behind like the old 2400-tick grant did.
+     */
+    private static final int ENV_EFFECT_WINDOW = 200;
+    /**
+     * Top the effect up once it drops below this, rather than every tick. Re-adding an effect
+     * whose duration differs from the live one re-sends an effect packet to every client, so
+     * an unconditional per-tick refresh is 20 packets a second per player for nothing. Half the
+     * window is frequent enough that the visible duration never appears to move.
+     */
+    private static final int ENV_EFFECT_REFRESH_AT = 100;
+
     /** Apply all passive env adaptation effects. Called even during adversity. */
     private static void applyEnvEffects(ServerPlayer player, PlayerAdaption data) {
         if (data.isAdapted(Concepts.ENV_DROWN)) {
@@ -1539,15 +1559,48 @@ public class AdaptionEvents {
         if (data.isAdapted(Concepts.ENV_LAVA)) {
             player.clearFire();
         }
-        // Re-applying an identical effect every tick spams effect packets; 40 ticks
-        // keeps the duration comfortably topped up at zero visible difference.
-        if (data.isAdapted(Concepts.ENV_DARKNESS) && player.tickCount % 40 == 0) {
-            player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 2400, 0, false, false));
-        }
+        applyNightVision(player, data.isAdapted(Concepts.ENV_DARKNESS));
         if (data.isAdapted(Concepts.ENV_STARVE) && player.tickCount % 20 == 0) {
             player.getFoodData().setFoodLevel(20);
             player.getFoodData().setSaturation(20f);
             resetExhaustion(player.getFoodData());
+        }
+    }
+
+    /**
+     * Night vision, maintained as a mirror of the adaptation rather than granted once.
+     *
+     * <p>Follows how ProjectE does the gem helmet's night vision — see
+     * {@code moze_intel.projecte.handlers.InternalAbilities.tick}: a central tick owns the
+     * effect, tops it up on a rolling window, and takes it away again when the source is gone.
+     * The old code refreshed on {@code tickCount % 40 == 0}, so standing in a cave for up to
+     * two seconds after the adaptation landed before the screen changed at all — that is the
+     * "effects have to come on instantly" complaint, and it was a self-inflicted delay.</p>
+     *
+     * <p>Two details worth keeping over a straight copy of ProjectE's version:</p>
+     * <ul>
+     *   <li><b>Ambient</b>, so night vision arrives without a potion icon and swirl appearing
+     *       in the corner. It should read as part of the wheel, not as a drink.</li>
+     *   <li>The effect is only removed when the live instance is <em>ambient</em>, which is
+     *       precisely the shape this method writes. A night vision potion from a brewing stand
+     *       is not ambient, so losing the adaptation never deletes somebody's real potion.
+     *       ProjectE's version removes unconditionally and does delete it; there is no reason
+     *       to copy that part.</li>
+     * </ul>
+     */
+    private static void applyNightVision(ServerPlayer player, boolean wanted) {
+        MobEffectInstance active = player.getEffect(MobEffects.NIGHT_VISION);
+        if (wanted) {
+            // Absent, or close to lapsing: apply now. This is the branch that makes a freshly
+            // completed adaptation light up on the same tick it completed.
+            if (active == null || active.getDuration() < ENV_EFFECT_REFRESH_AT) {
+                player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION,
+                        ENV_EFFECT_WINDOW, 0, true, false));
+            }
+            return;
+        }
+        if (active != null && active.isAmbient()) {
+            player.removeEffect(MobEffects.NIGHT_VISION);
         }
     }
 
@@ -1682,6 +1735,11 @@ public class AdaptionEvents {
         }
         ru.adaptionwheel.api.events.AdaptationCompleteEvent.post(player, concept,
                 isLevelBased ? data.level(concept) : -1);
+        // An adaptation that grants a passive effect must grant it NOW, not whenever the next
+        // refresh window happens to fall. Night vision landing up to two seconds late is the
+        // difference between adapting to the dark and standing in a cave wondering why nothing
+        // happened.
+        applyEnvEffects(player, data);
         saveToItem(player, data);
         sync(player, data, true);
     }
@@ -1876,8 +1934,40 @@ public class AdaptionEvents {
         d.addHistory(concept);
         d.invalidateAdaptCount();
         applyStats(player, d);
+        applyEnvEffects(player, d);
         saveToItem(player, d);
         sync(player, d, true);
+    }
+
+    /**
+     * Drops a single adaptation: clears the one-time flag or zeroes the level, and tidies up
+     * anything that was counting on it. The counterpart to {@code debugGrant} — without it the
+     * only way to undo a grant was a full {@code reset}, which throws away every other
+     * adaptation too.
+     *
+     * @return {@code true} if something was actually removed.
+     */
+    public static boolean debugUngrant(ServerPlayer player, String concept) {
+        PlayerAdaption d = data(player);
+        boolean had = d.adapted.remove(concept);
+        Integer level = d.levels.remove(concept);
+        if (!had && level == null) {
+            return false;
+        }
+        d.invalidateAdaptCount();
+        applyStats(player, d);
+        // Recomputing stat modifiers needs the level gone first, and passive effects have to be
+        // re-evaluated or a removed adaptation keeps its night vision for the rest of the window.
+        applyEnvEffects(player, d);
+        // The fist's stance and block counter are runtime-only state keyed off the mutation; if
+        // the mutation is what went away, they have to go with it or the next unlock starts with
+        // a stale tally.
+        if (ru.adaptionwheel.category.Concepts.MUTATION_FIST.equals(concept)) {
+            FistMastery.forget(player.getUUID());
+        }
+        saveToItem(player, d);
+        sync(player, d, true);
+        return true;
     }
 
     /** Full wipe of both player attachment and wheel item data. */
@@ -1885,6 +1975,7 @@ public class AdaptionEvents {
         PlayerAdaption d = data(player);
         d.reset();
         applyStats(player, d);
+        applyEnvEffects(player, d);
         FistMastery.forget(player.getUUID());
         wipeWheelItem(player, d);
         sync(player, d, false);

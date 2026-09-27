@@ -320,6 +320,45 @@ player's.
       on their own blocks, and the player's own arithmetic as a duration: a diamond fist breaks
       dirt in at most 2 ticks against 15 for a bare hand.
 
+### Sixth playtest: particles, granting, and instant effects
+- [x] **Wheel particles are enchanting-table glyphs** (`ParticleTypes.ENCHANT`), idle and converging
+      alike, replacing END_ROD/CRIT. The runic sprite reads as arcane; an end rod read as a generic
+      white streak that could have come off anything.
+- [x] **The adaptation granting system was rebuilt, and the blocker was worse than a syntax error.**
+      The concept argument was `StringArgumentType.word()`, and word() does not *reject* a colon —
+      it stops reading at one. So `Existence_draconicevolution:draconic_guardian` was parsed as
+      `Existence_draconicevolution`, `Contact_minecraft:zombie` as `Contact_minecraft`, the command
+      cheerfully reported a successful grant, and nothing happened. No error, no symptom. That is
+      precisely "you simply cannot grant the adaptation I want", and it silently killed every
+      concept built from a namespaced id: the entire `Contact_<mob>` / `Offense_NPC_<mob>` /
+      `Drop_NPC_<mob>` families and every modded boss, the Chaos Guardian included.
+      `server/ConceptArgument.java` now reads word()'s charset plus `:` and `/`, stopping at
+      whitespace so a trailing `<target>` still parses. `ConceptArgumentTests` pins the whole
+      registry through the real parser and asserts, against word() itself, why it cannot be used.
+- [x] `grant` resolves the level per concept kind instead of demanding a number that means nothing
+      for a one-time adaptation (and now says so rather than discarding it silently); the level's
+      upper bound tracks `PlayerAdaption.MAX_LEVEL` rather than a literal 8.
+- [x] `grant all [domain] [target]` — dumps a whole domain, the only practical way to set up a
+      late-game state for testing.
+- [x] `ungrant <concept> [target]` — removes one adaptation. Previously the only undo was a full
+      `reset`, which throws away everything else; iterating on the fist needed all-or-nothing. It
+      also clears the fist's runtime stance/counter when the mutation is what was removed.
+- [x] An unknown concept now answers with near-matches by substring. With a registry this size a
+      flat "unknown concept" is a dead end.
+- [x] **Effects apply on the tick they are earned.** `Env_Darkness` night vision was refreshed on
+      `tickCount % 40 == 0`, so standing in a cave after adapting to the dark, nothing happened for
+      up to two seconds. `applyEnvEffects` is now called directly from `grantConceptLevel`,
+      `debugGrant`, `debugUngrant` and `debugReset`, so a completion takes hold immediately.
+- [x] **Night vision is maintained as a mirror of the adaptation, following ProjectE's gem helmet**
+      (`moze_intel.projecte.handlers.InternalAbilities.tick`: a central tick owns the effect, tops
+      it up on a rolling window, and removes it when the source is gone). Two details kept over a
+      straight copy: the effect is `ambient`, so no potion icon appears and it reads as part of the
+      wheel; and it is removed *only when the live instance is ambient*, which is exactly the shape
+      this code writes, so losing the adaptation never deletes a real night vision potion from a
+      brewing stand. ProjectE removes unconditionally and does delete it. The window is 200 ticks
+      refreshed below 100 — unconditional re-adding re-sends an effect packet to every client
+      every tick, because a differing duration is not equal to the live one.
+
 ### Also fixed in this phase (from the code audit)
 - [x] Existence reflection was dead code: the immunity cancelled the hit in `LivingIncomingDamageEvent`,
       which fires at the top of `LivingEntity.hurt()`, so the `LivingDamageEvent.Pre` branch that
