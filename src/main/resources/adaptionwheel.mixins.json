@@ -18,7 +18,8 @@
     "GuardianLaserMixin"
   ],
   "client": [
-    "HurtCamMixin"
+    "HurtCamMixin",
+    "LightTextureMixin"
   ],
   "injectors": {
     "defaultRequire": 1

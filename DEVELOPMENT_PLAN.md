@@ -434,6 +434,47 @@ outcome than the mangled argument it was meant to fix. `Commands.validate()` doe
       already in `26.3`, and that the only content they had beyond it was the *older* version of what
       `26.3` improved.
 
+## Phase 16 — Env_Darkness: the lightmap, not gamma
+
+Reported as "gamma does not work". It genuinely did not, and the reason is worth recording because
+all three obvious fixes are traps.
+
+- [x] **The gamma option cannot be used.** The brightness slider is a bounded `OptionInstance`, and
+      `OptionInstance.set` runs the value through `values.validateValue` first: out of range, it
+      logs only `Illegal option value` and reverts to `initialValue` (0.5). So a lift capped by
+      the slider is at the mercy of a cap the mod does not control, and the symptom is that
+      nothing happens at all. It also overwrites a setting the player owns, which is why the
+      first attempt had to remember and restore their Brightness. Removed.
+- [x] **The night vision effect flickers, and the source is exact.**
+      `GameRenderer.getNightVisionScale` returns `1.0F` only when the effect does *not* end within
+      200 ticks, and otherwise returns `0.7F + sin((duration - partialTick) * PI * 0.2F) * 0.3F` —
+      a full 0.4..1.0 swing on every window. The ProjectE-style rolling top-up therefore cannot
+      avoid it: there is always a window to cross. The original report ("blinks when less than 10
+      seconds are left") is this, to the tick.
+- [x] **Shipped: a lightmap lift** (`client/DarknessLightmap.java` + `mixin/LightTextureMixin`).
+      One `@ModifyArg` on the single `NativeImage.setPixelRGBA(III)V` call inside
+      `LightTexture.updateLightTexture`, raising every pixel darker than `darknessLightmapFloor`
+      (default 0.72) up to it and leaving brighter pixels untouched. That is the same normalisation
+      vanilla night vision applies to those pixels, with the target below 1.0 so it is not blown
+      out; relative shading and the day/night cycle both survive. Rejected a flat white overwrite,
+      which would throw both away. `LightTexture.tick()` sets the dirty flag every client tick, so
+      the change lands on the next frame and cannot drift.
+- [x] **Injection point chosen for what will not break.** A redirect of `player.hasEffect` would
+      have to declare the receiver as exactly `LocalPlayer` — the declared type of
+      `Minecraft.player` — or Mixin rejects a supertype at apply time, the same trap as the DE
+      laser mixin. `NativeImage` is a stable non-Minecraft type, so the handler signature is
+      certain. The colour is argument index **2** of `setPixelRGBA(x, y, rgba)`, not 0.
+- [x] **Verified in-game, not just compiled.** Carved a large sealed chamber, granted
+      `Env_Darkness` through RCON, captured the same view twice: 500k of 921k pixels changed and
+      the cave walls, ores and lava became readable. Instrumenting first was necessary, because the
+      default dev spawn puts the camera *inside solid stone*, where nothing renders and the screen
+      is black no matter what the lightmap says — two captures came back byte-identical and looked
+      like a dead mixin. Counting `lift()` calls showed 256 per tick (the whole 16x16 map) and ~45
+      actually lifted, i.e. the mixin had been working the entire time against an unrenderable
+      view. `Math.round(r * scale)` uses a float multiply on purpose: an `int` product of two
+      0..255 values overflows and wraps to a wrong colour on exactly the dimmest pixels the lift
+      exists to fix.
+
 ### Also fixed in this phase (from the code audit)
 - [x] Existence reflection was dead code: the immunity cancelled the hit in `LivingIncomingDamageEvent`,
       which fires at the top of `LivingEntity.hurt()`, so the `LivingDamageEvent.Pre` branch that

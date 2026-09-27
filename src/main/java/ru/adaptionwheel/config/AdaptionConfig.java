@@ -68,8 +68,8 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_LUCK_ENABLED;
 
     // ---- Client-side visuals ----
-    public static final ModConfigSpec.ConfigValue<Boolean> DARKNESS_GAMMA_ENABLED;
-    public static final ModConfigSpec.ConfigValue<Double> DARKNESS_GAMMA;
+    public static final ModConfigSpec.ConfigValue<Boolean> DARKNESS_LIGHTMAP_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> DARKNESS_LIGHTMAP_FLOOR;
 
     // ---- Mining scaling ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
@@ -467,14 +467,15 @@ public final class AdaptionConfig {
         WHEEL_SIZE = c.defineInRange("wheelModelScale", 0.45, 0.1, 2.0);
 
         c.comment("--- Adaptation to Darkness (Env_Darkness) ---").push("darkness");
-        DARKNESS_GAMMA_ENABLED = c.comment("Raise the brightness instead of granting night vision.",
-                        "Night vision has a duration, so it has to be refreshed as it runs down and",
-                        "the screen blinks out and back once per window. Gamma cannot flicker. Your",
-                        "own Brightness setting is remembered and put back when the adaptation ends.")
-                .define("darknessGammaEnabled", true);
-        DARKNESS_GAMMA = c.comment("Brightness to use while adapted. 1.0 is the vanilla Brightness",
-                        "slider's maximum; the default slider value is 0.5.")
-                .defineInRange("darknessGamma", 1.0, 0.0, 1.0);
+        DARKNESS_LIGHTMAP_ENABLED = c.comment("Light the wearer's surroundings by lifting the light map.",
+                        "Written on the frame the game already rebuilds the map, so it is steady:",
+                        "no duration to run out and nothing to flicker. Replaces the night vision",
+                        "effect, which blinked out and back once per refresh window.")
+                .define("darknessLightmapEnabled", true);
+        DARKNESS_LIGHTMAP_FLOOR = c.comment("How bright the darkest areas become. 1.0 is flat white and",
+                        "washes out all shading; 0.7 reads as night vision. Anything above this",
+                        "floor keeps its own brightness, so torches still read as brighter.")
+                .defineInRange("darknessLightmapFloor", 0.72, 0.0, 1.0);
         c.pop();
 
         c.pop();
