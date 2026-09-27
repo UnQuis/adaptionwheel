@@ -163,11 +163,11 @@
   "adaptionwheel.fist.material.Fist_Diamond": "deepslate, tuff, calcite, dripstone, obsidian, ancient debris, netherite blocks, or diamond and emerald ore",
   "adaptionwheel.fist.material.Fist_Netherite": "dragon eggs, spawners and reinforced deepslate",
   "adaptionwheel.msg.fist_luck": "LUCK x%s - that tier breaks ore %sx richer, experience included.",
-  "adaptionwheel.cmd.concept_empty": "Expected a concept id.",
   "adaptionwheel.cmd.grant_level_ignored": "%s is a one-time adaptation and has no levels; the number was ignored.",
   "adaptionwheel.cmd.grant_all_done": "Granted %s adaptations in domain '%s' to %s.",
   "adaptionwheel.cmd.ungrant_done": "Removed %s from %s.",
   "adaptionwheel.cmd.ungrant_absent": "%s is not adapted on %s; nothing to remove.",
   "adaptionwheel.cmd.did_you_mean": "Did you mean: %s",
-  "adaptionwheel.cmd.use_registry": "Run /adaptionwheel registry to see every adaptation."
+  "adaptionwheel.cmd.use_registry": "Run /adaptionwheel registry to see every adaptation.",
+  "adaptionwheel.cmd.looks_truncated": "'%s' looks like a concept that was cut at a colon. Namespaced concepts must be quoted: /adaptionwheel grant \"%s\" <level>"
 }

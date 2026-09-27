@@ -359,6 +359,39 @@ player's.
       refreshed below 100 — unconditional re-adding re-sends an effect packet to every client
       every tick, because a differing duration is not equal to the live one.
 
+### Immediate regression, caught in play: custom command argument types block login
+The fix for the silent truncation above (a custom `ArgumentType` accepting `:`) **made the game
+unplayable**, and it is worth recording because the failure mode is not obvious:
+
+    java.lang.IllegalArgumentException: Unrecognized argument type
+        ConceptArgument$ConceptType@... (class ConceptArgument$ConceptType)
+        at ArgumentTypeInfos.byClass(ArgumentTypeInfos.java:174)
+        at ClientboundCommandsPacket$ArgumentNodeStub.<init>(...:221)
+    Dev lost connection: Invalid player data
+
+The command tree is mirrored to the client, and the client rebuilds each node from a serializer
+looked up **by the argument type's class** in `ArgumentTypeInfos.BY_CLASS` — a private static map
+filled only from a hardcoded `bootstrap` list, registered into a registry that `byClass` never
+reads back. NeoForge 21.1 exposes no hook. So an unregistered argument type is simply
+**impossible** to use here, and it fails at player login, not at command execution: a far worse
+outcome than the mangled argument it was meant to fix. `Commands.validate()` does the same
+`findUsedArgumentTypes` + `isClassRecognized` check and throws `Unregistered argument types`.
+
+- [x] Reverted to `StringArgumentType.string()`, which carries a colon when quoted. Vanilla's own
+      way of passing a value that needs one.
+- [x] `truncationHint` detects the fingerprint of the old silent truncation — a key ending in a known
+      mod namespace, i.e. a string that was cut at its colon — and answers with the quoted form
+      instead of granting a dead key and reporting success.
+- [x] `test/CommandTreeSyncTests` builds the real registered tree and asserts every argument type in
+      it is client-serializable, using the same predicate the packet builder throws on. **Verified
+      the test actually fails** by temporarily reinstating a custom type, then reverted.
+- [x] Verified end to end: a real dev client joins a dedicated dev server, no
+      `Invalid player data`, zero errors, player stays in the world.
+
+  A dedicated-server boot and a unit test both miss this class of bug, because both are
+  server-side. Any future command-argument change needs a client in the loop, or the
+  serializability assertion.
+
 ### Also fixed in this phase (from the code audit)
 - [x] Existence reflection was dead code: the immunity cancelled the hit in `LivingIncomingDamageEvent`,
       which fires at the top of `LivingEntity.hurt()`, so the `LivingDamageEvent.Pre` branch that

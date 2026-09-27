@@ -12,6 +12,7 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
+import org.jetbrains.annotations.Nullable;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import ru.adaptionwheel.AdaptionWheel;
@@ -61,10 +62,33 @@ public final class AdaptionCommand {
                 return builder.buildFuture();
             };
 
-    /** Concept argument node with suggestions, reused by info/grant/ungrant/analyze. */
+    /**
+     * Concept argument node with suggestions, reused by info/grant/ungrant/analyze.
+     *
+     * <p>{@link StringArgumentType#string()}, not {@code word()}, and not a custom
+     * {@code ArgumentType}. Both of those were tried:</p>
+     * <ul>
+     *   <li>{@code word()} reads only {@code 0-9 A-Z a-z _ - . +} and does not <em>reject</em> a
+     *       colon, it stops reading at one, so {@code Existence_ns:path} arrived as
+     *       {@code Existence_ns}: the command reported a successful grant, nothing happened, no
+     *       error anywhere. That silently killed every namespaced concept.</li>
+     *   <li>A custom argument type fixes the parsing but is <b>impossible</b> here. The command
+     *       tree is mirrored to the client, and the client can only rebuild a node it has a
+     *       serializer for: {@code ArgumentTypeInfos.byClass} looks the class up in a private
+     *       static map filled from a hardcoded bootstrap list, with no NeoForge registration
+     *       hook. An unregistered type makes the client reject the whole packet
+     *       ({@code Unrecognized argument type}), which fails player login outright with
+     *       "Invalid player data" — a far worse outcome than a mangled argument.</li>
+     * </ul>
+     *
+     * <p>So: {@code string()} accepts a quoted argument, which is how vanilla itself carries any
+     * value containing a colon. {@code grant Type_Fire} still needs no quotes;
+     * {@code grant "Contact_minecraft:zombie"} does. {@link #reportUnknownConcept} turns a
+     * forgotten quote into an explicit message instead of silence.</p>
+     */
     private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String>
             conceptArg(String name) {
-        return net.minecraft.commands.Commands.argument(name, ConceptArgument.type())
+        return net.minecraft.commands.Commands.argument(name, StringArgumentType.string())
                 .suggests(CONCEPT_SUGGESTIONS);
     }
 
@@ -315,6 +339,11 @@ public final class AdaptionCommand {
      */
     private static int grant(CommandContext<CommandSourceStack> ctx, ServerPlayer target,
                              String concept, int level) {
+        Component truncated = truncationHint(concept);
+        if (truncated != null) {
+            ctx.getSource().sendFailure(truncated);
+            return 0;
+        }
         if (!isPlausibleConcept(concept)) {
             reportUnknownConcept(ctx, concept);
             return 0;
@@ -365,6 +394,11 @@ public final class AdaptionCommand {
     /** Removes a single adaptation, the counterpart to {@code grant}. */
     private static int ungrant(CommandContext<CommandSourceStack> ctx, ServerPlayer target,
                                String concept) {
+        Component truncated = truncationHint(concept);
+        if (truncated != null) {
+            ctx.getSource().sendFailure(truncated);
+            return 0;
+        }
         if (!AdaptionEvents.debugUngrant(target, concept)) {
             ctx.getSource().sendFailure(Component.translatable("adaptionwheel.cmd.ungrant_absent",
                     concept, target.getName()));
@@ -389,6 +423,43 @@ public final class AdaptionCommand {
         } else {
             ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.use_registry"), false);
         }
+    }
+
+    /**
+     * Detects the shape Brigadier's own unquoted-string reader leaves behind, and reports it as
+     * the forgotten quote it almost always is.
+     *
+     * <p>Without this the original bug is invisible: {@code grant Contact_minecraft:zombie} parses
+     * to {@code Contact_minecraft}, which is a perfectly plausible key prefix, so the command
+     * grants it, reports success, and the player concludes that granting does not work. A key that
+     * ends in a known mod namespace is the fingerprint of a string that was cut at its colon, so
+     * that is what gets checked.</p>
+     *
+     * @return the message to send, or {@code null} if the input does not look truncated.
+     */
+    @Nullable
+    private static Component truncationHint(String concept) {
+        for (String namespace : knownNamespaces()) {
+            if (concept.endsWith("_" + namespace)) {
+                return Component.translatable("adaptionwheel.cmd.looks_truncated",
+                        concept, concept + ":...");
+            }
+        }
+        return null;
+    }
+
+    /** Every namespace a concept key could have been built from: vanilla plus every loaded mod. */
+    private static java.util.Set<String> knownNamespaces() {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        out.add("minecraft");
+        try {
+            for (var mod : net.neoforged.fml.ModList.get().getMods()) {
+                out.add(mod.getModId());
+            }
+        } catch (Throwable ignored) {
+            // Mod list unavailable (very early call); vanilla alone still catches the common case.
+        }
+        return out;
     }
 
     /** Registered concepts containing {@code needle} case-insensitively, capped so chat stays readable. */
