@@ -434,6 +434,41 @@ outcome than the mangled argument it was meant to fix. `Commands.validate()` doe
       already in `26.3`, and that the only content they had beyond it was the *older* version of what
       `26.3` improved.
 
+## Phase 17 — Adaptations leaked between worlds
+
+Reported as "I made a new world and the diamond fist bar was already there". Two independent leaks
+had to line up, and neither was visible from the symptom alone.
+
+- [x] **The client mirror was never cleared, and nothing else ever cleared it.**
+      `ClientAdaption` is all static; the only writes are the per-payload field assignments in
+      `onSync`. On disconnect it kept the last world's `wearingWheel`, `ADAPTED`, `LEVELS` and the
+      fist counters indefinitely. `AdaptionHud` gates on `wearingWheel`, which was stale-**true**,
+      so a brand new world opened showing the previous world's HUD — a fist progress bar for a
+      material the new player had never touched. Fixed by making `ClientAdaption` an
+      `@EventBusSubscriber` that calls a new `clear()` on `LoggingOut`, listing every mutable field
+      explicitly: a field added later and not listed is the same bug again, one field narrower.
+      (Deliberately *not* put in `DarknessLightmap`, which also has a `LoggingOut` handler — the
+      mirror clearing itself is the right ownership, and a hidden cross-class wipe is how a
+      disconnect fix turns into a maintenance trap.)
+- [x] **The server only pushed a sync while the wheel was worn.** `onPlayerLogin` was
+      `if (wearingWheel(player)) { ...; sync(...); }` and the 1 Hz tick sync is likewise gated on
+      `wearing`. So the second half of the bug was self-inflicted: even with a wiped mirror, a new
+      world would show nothing until the first time the player put the wheel on. Login now syncs
+      unconditionally, which makes "this world starts empty" true by construction rather than
+      depending on a later wheel equip to overwrite stale data.
+- [x] **The server side was already clean** — `onPlayerLogout` calls `FistMastery.forget(id)` and
+      clears the UUID-keyed runtime caches, and `PlayerAdaption` is a `Player` attachment with a
+      Codec, so it lands in that world's `player.dat`. No adaptation levels live in any static map;
+      all of those are runtime caches (slash cooldowns, respawn health, instabreak stance, fist
+      block counter). Worth having checked, because "static maps keyed by UUID" looked like the
+      obvious culprit and there are thirteen of them.
+- [x] **Verified by actually switching worlds**, not by reading the code: populated a wheel in
+      world A, killed the client, moved world A aside, started a fresh world B and rejoined. World
+      A's mirror read `wearing=true adapted=1 levels=2`; the disconnect read
+      `cleared wearing=false adapted=0 levels=0`; world B received exactly one sync,
+      `wearing=false adapted=0 levels=0` — the login sync that makes the empty state explicit,
+      and the reason there is nothing to inherit.
+
 ## Phase 16 — Env_Darkness: the lightmap, not gamma
 
 Reported as "gamma does not work". It genuinely did not, and the reason is worth recording because
