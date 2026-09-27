@@ -219,3 +219,20 @@ raises `LightmapRenderState.nightVisionEffectIntensity` to the configured floor,
 shader do exactly what vanilla night vision does. Verified by compilation and a clean dedicated
 server boot; like the rest of this branch there is no automated coverage, and client rendering
 cannot be exercised from a headless server.
+
+## Phase 17 — Adaptations leaked between worlds
+
+Same bug as `main`, same two halves: the client mirror was never cleared on disconnect (it is all
+static, and the only writes are the field assignments in `onSync`), and the server only pushed a
+sync while the wheel was worn, so a new world had nothing to overwrite the stale data with.
+`ClientAdaption` is now a subscriber that calls `clear()` on `LoggingOut`, and `onPlayerLogin`
+syncs unconditionally.
+
+One 26.3-only detail: `Level.isClientSide` is a private final field here with no accessor, so the
+1.21.1 `player.level().isClientSide` guard does not compile. `instanceof ServerPlayer` already
+guarantees the server side and is used alone.
+
+Verified on `main` by actually switching worlds (populated wheel in world A, disconnect, fresh
+world B, rejoin: `wearing=true adapted=1 levels=2` then `cleared ... 0 0` then one login sync
+`wearing=false adapted=0 levels=0`). On this branch it is verified by compilation and a clean
+server boot only, per the standing gap in Phase 15.

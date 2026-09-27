@@ -120,3 +120,12 @@ Two traps when touching that injection:
 The gamma approach is dead on this branch for the same reason as on 1.21.1: `Options.gamma()` is a
 bounded `OptionInstance` and an out-of-range `set` reverts silently. See DEVELOPMENT_PLAN.md
 Phase 15/16 on `main` for the full reasoning.
+- **The client mirror must be wiped on disconnect here too.** `ClientAdaption` is an
+  `@EventBusSubscriber` whose `ClientPlayerNetworkEvent.LoggingOut` handler calls `clear()`,
+  listing every mutable field explicitly. Without it the static mirror outlives the world it
+  described and a freshly created world opens showing the previous world's HUD.
+- **`onPlayerLogin` syncs unconditionally**, not only while wearing the wheel. The 1 Hz sync is
+  gated on `wearing`, so a world where the wheel is not worn would never send anything at all.
+- **`Level.isClientSide` is a private final field on 26.3 with no accessor**, and
+  `Entity.level()` returns `Level` — so the 1.21.1 guard `player.level().isClientSide` does not
+  compile here. `instanceof ServerPlayer` already guarantees the server side; use that alone.

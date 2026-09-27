@@ -1,5 +1,10 @@
 package ru.adaptionwheel.client;
 
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.data.AdaptionTask;
 import ru.adaptionwheel.network.AdaptionSyncPayload;
 
@@ -10,8 +15,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Client-side mirror of the server's adaptation state. */
+/**
+ * Client-side mirror of the server's adaptation state.
+ *
+ * <p>An event subscriber purely so it can wipe itself on disconnect. The mirror is all static
+ * and nothing else resets it, which is the whole bug: see {@link #clear()}.</p>
+ */
+@EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class ClientAdaption {
+
+    @SubscribeEvent
+    public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
+        clear();
+    }
 
     /** Broken-block tally for the fist, pushed immediately on each break by FistProgressPayload. */
     public static int fistProgressDone;
@@ -40,6 +56,39 @@ public final class ClientAdaption {
     public static long adversityTriggeredAtGameTime = Long.MIN_VALUE;
 
     private ClientAdaption() {
+    }
+
+    /**
+     * Wipes the whole mirror back to "no world, no wheel, no adaptations".
+     *
+     * <p>Called on disconnect. Without it the mirror outlives the world it described, because
+     * nothing else ever resets it: the server only pushes a sync while the player is wearing the
+     * wheel, so a world where they are not wearing one sends nothing and the previous world's
+     * levels sit in these static collections indefinitely. The HUD gates on
+     * {@link #wearingWheel}, which was stale-true, so a freshly created world opened with the
+     * previous world's HUD — a fist progress bar for a material the new player has never touched.
+     * That is the report this exists to fix.</p>
+     *
+     * <p>Every mutable field is listed explicitly rather than looped, so a field added later
+     * cannot be quietly forgotten: an unlisted field is the same bug again, one field narrower.</p>
+     */
+    public static void clear() {
+        wearingWheel = false;
+        adversityActive = false;
+        adaptedCount = 0;
+        adversityTimer = 0;
+        adversityCooldownTimer = 0;
+        wheelRotation = 0.0F;
+        TASKS.clear();
+        LEVELS.clear();
+        ADAPTED.clear();
+        HISTORY.clear();
+        EXISTENCE_PROGRESS.clear();
+        existenceThreshold = 0;
+        instabreakActive = false;
+        fistProgressDone = 0;
+        fistProgressTotal = 0;
+        adversityTriggeredAtGameTime = Long.MIN_VALUE;
     }
 
     public static void onSync(AdaptionSyncPayload payload) {

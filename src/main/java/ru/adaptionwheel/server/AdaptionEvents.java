@@ -759,15 +759,33 @@ public class AdaptionEvents {
 
     // ================= LOGIN / DEATH =================
 
-    /** Avoid treating re-login while wearing the wheel as a fresh equip (clears tasks / reloads stale item data). */
+    /**
+     * Avoid treating re-login while wearing the wheel as a fresh equip (clears tasks /
+     * reloads stale item data).
+     *
+     * <p>Syncs unconditionally rather than only while wearing. The client mirror is static and
+     * the periodic sync is gated on {@code wearing}, so a world where the player is not wearing
+     * the wheel would otherwise never send anything and the client would keep the previous
+     * world's levels indefinitely — which showed up as a freshly created world opening with
+     * the last world's fist progress bar still on the HUD. One packet on login makes "this
+     * world starts empty" true by construction rather than by the next world happening to wipe
+     * it.</p>
+     *
+     * <p>No client-side check: {@code instanceof ServerPlayer} already guarantees the server
+     * side, and on 26.3 {@code Level.isClientSide} is a private field with no accessor, so the
+     * old {@code player.level().isClientSide} guard no longer compiles here anyway.</p>
+     */
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide()) return;
-        if (wearingWheel(player)) {
-            PlayerAdaption data = data(player);
-            data.wasWearing = true;
-            sync(player, data, true);
+        if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
+            return;
         }
+        ru.adaptionwheel.data.PlayerAdaption data = data(player);
+        boolean wearing = wearingWheel(player);
+        if (wearing) {
+            data.wasWearing = true;
+        }
+        sync(player, data, wearing);
     }
 
     @SubscribeEvent
