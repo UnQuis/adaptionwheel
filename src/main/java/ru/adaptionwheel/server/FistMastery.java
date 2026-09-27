@@ -200,7 +200,12 @@ public final class FistMastery {
         }
         // Only the current tier's own material trains it, otherwise the ladder would be
         // side-stepped by farming the softest blocks forever.
-        if (FistTiers.tierOf(state) != tier) {
+        //
+        // Membership in the *current* tier's tag, not "the lowest tier that claims this block".
+        // Those differ wherever a material is deliberately shared, which is what makes a tier
+        // with too little to mine trainable at all: the whole deepslate family is stone-band, so
+        // tierOf() calls all of it stone and a diamond fist could never be raised on any of it.
+        if (!state.is(FistTiers.tag(tier))) {
             return;
         }
         int need = AdaptionConfig.fistBlocksForNextLevel(tier, level);

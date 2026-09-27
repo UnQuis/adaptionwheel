@@ -1,7 +1,7 @@
 package ru.adaptionwheel.category;
 
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
@@ -9,6 +9,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.Tool;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -44,17 +45,26 @@ public final class FistTiers {
 
     private static final TagKey<Block>[] TAGS = new TagKey[TIER_COUNT];
 
-    /**
-     * The vanilla implement each tier stands in for, in the same order. Looked up by id rather
-     * than through {@code Items} constants on purpose: those constants are not all present in
-     * every mapping set, and a missing one would otherwise cost the whole tier its speed.
-     */
-    private static final String[] TIER_TOOL_IDS = {
-            "minecraft:wooden_pickaxe", "minecraft:stone_pickaxe",
-            "minecraft:iron_pickaxe", "minecraft:diamond_pickaxe", "minecraft:netherite_pickaxe"
-    };
+    /** The vanilla material each tier stands in for, in the same order. */
+    private static final String[] MATERIALS = {"wooden", "stone", "iron", "diamond", "netherite"};
 
-    private static final float[] SPEED_CACHE = new float[TIER_COUNT];
+    /**
+     * The tool classes a fist can impersonate. Vanilla divides the mining world between them:
+     * stone and ore belong to the pickaxe, logs to the axe, soil to the shovel, foliage to the
+     * hoe. A fist has to pick the class that owns the block in front of the player, or it ends up
+     * measuring itself against a tool that cannot mine that block at all.
+     */
+    private static final String[] TOOL_CLASSES = {"pickaxe", "axe", "shovel", "hoe"};
+
+    /**
+     * Drop and experience luck per tier. Only a handful of steps so the HUD can state it in one
+     * number, and deliberately steep at the end: the last tier is meant to feel like a reward
+     * rather than one more rung.
+     */
+    private static final float[] LUCK = {1.0f, 2.0f, 3.0f, 5.0f, 10.0f};
+
+    /** Cached declared tool speed, indexed [tier][tool class]. Block-independent, so always valid. */
+    private static final float[][] DECLARED_SPEED = new float[TIER_COUNT][TOOL_CLASSES.length];
 
     /**
      * Block the per-tier speed is measured against when no specific block is at hand. Stone is
@@ -62,6 +72,10 @@ public final class FistTiers {
      */
     private static final BlockState REFERENCE_BLOCK =
             net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
+
+    /** Blocks the tier's luck applies to. Ores by default; a pack can retarget the whole thing. */
+    private static final TagKey<Block> LUCK_TAG = TagKey.create(Registries.BLOCK,
+            ResourceLocation.fromNamespaceAndPath(ru.adaptionwheel.AdaptionWheel.MODID, "fist_luck"));
 
     /** One HUD/chat color per tier, roughly following the material itself. */
     public static final int[] COLORS = {
@@ -95,9 +109,18 @@ public final class FistTiers {
         };
     }
 
-    /** The vanilla tool id a tier mirrors; exposed for diagnostics and tests. */
+    /**
+     * Id of the tool a tier uses for a given class. Built from the material name rather than
+     * taken from {@code Items} constants: those constants are not all present in every mapping
+     * set, and a missing one would cost the whole tier its speed.
+     */
+    public static String toolId(int tier, String toolClass) {
+        return "minecraft:" + MATERIALS[tier] + "_" + toolClass;
+    }
+
+    /** The pickaxe a tier mirrors, the tool used for the generic tier speed; for tests. */
     public static String toolId(int tier) {
-        return TIER_TOOL_IDS[tier];
+        return toolId(tier, "pickaxe");
     }
 
     public static String concept(int tier) {
@@ -113,50 +136,110 @@ public final class FistTiers {
     }
 
     /**
-     * Bare-hand mining speed for a tier, taken from the vanilla tool that tier stands in for.
-     * Wooden/stone/iron/diamond/netherite pickaxes mine at 2/4/6/8/9 in 1.21.1, but reading them
-     * beats copying those numbers: a pack that retunes tool speed moves the fist with it.
+     * A tool's declared mining speed, read from its own rules rather than from any block.
      *
-     * <p>Measured with {@link Item#getDestroySpeed} against a reference block rather than by
-     * reading {@code DataComponents.TOOL} directly. A tool's real speed lives in the matching
-     * {@code Tool.Rule}, and {@code defaultMiningSpeed} is only the fallback for blocks no rule
-     * covers — reading that field returns 1.0 for every vanilla tool, which silently reduced the
-     * whole ladder to bare-hand speed.</p>
+     * <p>Reading it off a block is a trap, and it is the trap this class already fell into twice.
+     * {@link Item#getDestroySpeed} only returns anything above 1.0 when one of the tool's rules
+     * actually <em>covers</em> the block, and every vanilla tool's rules name exactly one class of
+     * blocks. So a diamond pickaxe reports {@code 1.0} on dirt: in 1.21.1 dirt is shovel-only, not
+     * in {@code #minecraft:mineable/pickaxe} at all. A fist that measured itself against a pickaxe
+     * on the block in front of the player therefore mined soil at bare-hand speed — a diamond fist
+     * taking 15 ticks on dirt when a diamond shovel takes 2.</p>
      *
-     * <p>If a tool is missing (modded away, odd mapping), the tier inherits the speed of the one
-     * below it rather than dropping to a bare hand, so the ladder stays monotone.</p>
+     * <p>Also not {@code defaultMiningSpeed}: that field is only the fallback for blocks no rule
+     * covers and reads 1.0 for every vanilla tool.</p>
+     *
+     * <p>The rules themselves are the tier's real number, so this is block-independent and correct
+     * for every material at once.</p>
+     */
+    public static float declaredSpeed(Item tool) {
+        Tool component = tool.getDefaultInstance().get(DataComponents.TOOL);
+        if (component == null) {
+            return 1.0f;
+        }
+        float best = 0f;
+        for (Tool.Rule rule : component.rules()) {
+            best = Math.max(best, rule.speed().orElse(0f));
+        }
+        return best > 0f ? best : component.defaultMiningSpeed();
+    }
+
+    /**
+     * Bare-hand mining speed for a tier, measured against a reference block the pickaxe owns.
+     * Wooden/stone/iron/diamond/netherite mine at 2/4/6/8/9 in 1.21.1, read from the tools rather
+     * than copied, so a pack that retunes tool speed moves the fist with it.
      */
     public static float vanillaMiningSpeed(int tier) {
         return vanillaMiningSpeed(tier, REFERENCE_BLOCK);
     }
 
     /**
-     * Speed of this tier's tool on one specific block. Preferred at runtime: a tool may carry
-     * per-block speeds, and the fist should match the tool it stands in for on the block actually
-     * being mined.
+     * Speed of this tier's fist on one specific block, taken from whichever vanilla tool class
+     * owns that block: the shovel's number for soil, the axe's for logs, the pickaxe's for stone
+     * and ore. In practice all four classes of a tier declare the same speed, but asking the tool
+     * that can actually mine the block is what makes that true by construction rather than by luck.
      */
     public static float vanillaMiningSpeed(int tier, BlockState target) {
         if (tier < 0 || tier >= TIER_COUNT) {
             return 1.0f;
         }
-        if (target == REFERENCE_BLOCK && SPEED_CACHE[tier] > 0f) {
-            return SPEED_CACHE[tier];
+        float best = 0f;
+        for (int c = 0; c < TOOL_CLASSES.length; c++) {
+            Item tool = toolOf(tier, c);
+            if (tool == null) {
+                continue;
+            }
+            // Above 1.0 exactly when a rule covers the block, i.e. this is the right prototype.
+            if (tool.getDestroySpeed(tool.getDefaultInstance(), target) <= 1.0f) {
+                continue;
+            }
+            best = Math.max(best, declaredSpeedOf(tier, c));
         }
-        float speed = 0f;
-        Item tool = BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(TIER_TOOL_IDS[tier]))
+        if (best > 1.0f) {
+            return best;
+        }
+        // No tool in the set claims this block (bedrock, a portal frame). The tier's own pickaxe
+        // number is the honest answer: the harvest gate is what stops the fist taking the block,
+        // and that gate already passed. Falling to the tier below would be arbitrary.
+        float own = declaredSpeedOf(tier, 0);
+        if (own > 1.0f) {
+            return own;
+        }
+        // Only if the tool itself is missing does the ladder step down, so it stays monotone.
+        return tier == 0 ? 1.0f : vanillaMiningSpeed(tier - 1, target);
+    }
+
+    private static Item toolOf(int tier, int classIndex) {
+        return BuiltInRegistries.ITEM
+                .getOptional(ResourceLocation.parse(toolId(tier, TOOL_CLASSES[classIndex])))
                 .orElse(null);
-        if (tool != null) {
-            speed = tool.getDestroySpeed(tool.getDefaultInstance(), target);
+    }
+
+    private static float declaredSpeedOf(int tier, int classIndex) {
+        float cached = DECLARED_SPEED[tier][classIndex];
+        if (cached > 0f) {
+            return cached;
         }
-        if (speed <= 1.0f) {
-            // A tool that does not out-mine a bare hand on this block tells us nothing; fall
-            // back to the tier below so the ladder still climbs.
-            speed = tier == 0 ? 1.0f : vanillaMiningSpeed(tier - 1, target);
-        }
-        if (target == REFERENCE_BLOCK) {
-            SPEED_CACHE[tier] = speed;
-        }
+        Item tool = toolOf(tier, classIndex);
+        float speed = tool == null ? 1.0f : declaredSpeed(tool);
+        DECLARED_SPEED[tier][classIndex] = speed;
         return speed;
+    }
+
+    /**
+     * Drop and experience luck this tier grants, {@code 1} (none) up to {@code 10}. Read on both
+     * sides: the server applies it, and the HUD states it.
+     */
+    public static int luckMultiplier(int tier) {
+        if (tier < 0 || tier >= TIER_COUNT) {
+            return 1;
+        }
+        return (int) LUCK[tier];
+    }
+
+    /** Blocks the tier's luck applies to. Ores by default. */
+    public static TagKey<Block> luckTag() {
+        return LUCK_TAG;
     }
 
     /**

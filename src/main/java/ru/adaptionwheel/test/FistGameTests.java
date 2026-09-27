@@ -239,6 +239,15 @@ public final class FistGameTests {
         helper.succeed();
     }
 
+    /**
+     * Same, for a block state, reading its hardness from the block itself. Every block used here
+     * has a constant hardness, so an empty level view is enough to read it.
+     */
+    private static int ticksToBreak(float speed, BlockState state) {
+        return ticksToBreak(speed, state.getDestroySpeed(
+                net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
+    }
+
     /** Ticks to break a block, reproducing vanilla's progress formula for a correct tool. */
     private static int ticksToBreak(float speed, float hardness) {
         float progressPerTick = speed / hardness / 30f; // 30 = correct-tool divisor from the harvest check
@@ -358,6 +367,213 @@ public final class FistGameTests {
                     "tier " + FistTiers.suffix(tier) + " costs " + cost
                             + ", which is not harder than the tier below it (" + previous + ")");
             previous = cost;
+        }
+        helper.succeed();
+    }
+
+    // ================= the four tool classes =================
+
+    /**
+     * A fist has to be as fast as whichever vanilla tool owns the block: shovel for soil, axe for
+     * logs, hoe for foliage, pickaxe for stone and ore.
+     *
+     * <p>This is the test for the "my diamond fist should break dirt instantly" report. The
+     * measurement was being taken with a pickaxe, and 1.21.1 keeps dirt out of
+     * {@code #minecraft:mineable/pickaxe} entirely — it is shovel-only — so a pickaxe reports
+     * {@code 1.0} there, which is bare-hand speed. The fist duly took 15 ticks on dirt where a
+     * diamond shovel takes 2.</p>
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void everyToolClassGetsItsOwnTiersSpeed(GameTestHelper helper) {
+        for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
+            float expected = FistTiers.vanillaMiningSpeed(tier);
+            helper.assertTrue(expected > 1.0f,
+                    "tier " + tier + " must out-mine a bare hand, got " + expected);
+            // One representative block per vanilla tool class.
+            for (String[] pair : new String[][]{
+                    {"shovel", "dirt"}, {"shovel", "sand"}, {"axe", "oak_log"},
+                    {"axe", "oak_planks"}, {"hoe", "wheat"}, {"pickaxe", "stone"},
+                    {"pickaxe", "deepslate"}, {"pickaxe", "coal_ore"}}) {
+                var block = BuiltInRegistries.BLOCK.getOptional(
+                                ResourceLocation.parse("minecraft:" + pair[1]))
+                        .orElse(null);
+                helper.assertTrue(block != null, pair[1] + " must exist in this version");
+                BlockState state = block.defaultBlockState();
+                float actual = FistTiers.vanillaMiningSpeed(tier, state);
+                helper.assertTrue(actual == expected,
+                        "tier " + tier + " (" + FistTiers.suffix(tier) + ") on " + pair[1]
+                                + " should copy the " + pair[0] + " at " + expected
+                                + "x but reports " + actual);
+            }
+        }
+        helper.succeed();
+    }
+
+    /**
+     * The player's own arithmetic, pinned: a diamond fist breaks dirt in about two ticks, against
+     * fifteen for a bare hand. Stated as a duration because that is the number a player feels, and
+     * a wrong speed still produces a plausible-looking figure.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void diamondFistBreaksDirtEssentiallyInstantly(GameTestHelper helper) {
+        BlockState dirt = Blocks.DIRT.defaultBlockState();
+        int bareHand = ticksToBreak(1.0f, dirt);
+        int wooden = ticksToBreak(FistTiers.vanillaMiningSpeed(0, dirt), dirt);
+        int diamond = ticksToBreak(FistTiers.vanillaMiningSpeed(3, dirt), dirt);
+
+        helper.assertTrue(diamond <= 2,
+                "a diamond fist should take at most 2 ticks on dirt, but takes " + diamond);
+        helper.assertTrue(wooden < bareHand,
+                "even a wooden fist must beat a bare hand (" + wooden + " vs " + bareHand + ")");
+        helper.assertTrue(diamond < wooden,
+                "a higher tier must be faster on the same block (" + diamond + " vs " + wooden + ")");
+        helper.succeed();
+    }
+
+    /**
+     * Same expectation for the other classes, at the top tier. Wheat is deliberately absent: it
+     * has zero hardness, so a bare hand already breaks it in zero ticks and there is nothing to
+     * compare — its speed parity is covered by {@link #everyToolClassGetsItsOwnTiersSpeed}.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void netheriteFistCutsLogsAndSoilLikeItsTools(GameTestHelper helper) {
+        int top = FistTiers.TIER_COUNT - 1;
+        float speed = FistTiers.vanillaMiningSpeed(top);
+        for (Block block : new Block[]{Blocks.OAK_LOG, Blocks.DIRT, Blocks.SAND}) {
+            BlockState state = block.defaultBlockState();
+            float actual = FistTiers.vanillaMiningSpeed(top, state);
+            helper.assertTrue(actual == speed,
+                    "netherite fist on " + blockName(block) + " should be " + speed + "x but is " + actual);
+            helper.assertTrue(ticksToBreak(actual, state) < ticksToBreak(1.0f, state),
+                    blockName(block) + " must be faster than a bare hand");
+        }
+        helper.succeed();
+    }
+
+    // ================= luck =================
+
+    /** The published ladder: 1/2/3/5/10 by tier, and nothing above 10. */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void luckScalesToTenAtTheFinalTier(GameTestHelper helper) {
+        int[] expected = {1, 2, 3, 5, 10};
+        helper.assertTrue(FistTiers.TIER_COUNT == expected.length,
+                "the tier table and this expectation must stay in step");
+        int previous = 0;
+        for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
+            int luck = FistTiers.luckMultiplier(tier);
+            helper.assertTrue(luck == expected[tier],
+                    "tier " + tier + " (" + FistTiers.suffix(tier) + ") should have x" + expected[tier]
+                            + " luck but has x" + luck);
+            helper.assertTrue(luck > previous, "luck must strictly climb the ladder");
+            previous = luck;
+        }
+        helper.assertTrue(FistTiers.luckMultiplier(-1) == 1, "no fist means no luck");
+        helper.assertTrue(FistTiers.luckMultiplier(FistTiers.TIER_COUNT) == 1,
+                "an out-of-range tier must not grant luck");
+        helper.succeed();
+    }
+
+    /**
+     * Luck is scoped to ores on purpose. The whole point of the tier ladder is that stone and
+     * wood stay meaningful, so a x10 multiplier must not touch them.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void luckCoversOresAndNothingElse(GameTestHelper helper) {
+        for (Block block : new Block[]{Blocks.COAL_ORE, Blocks.DEEPSLATE_COAL_ORE, Blocks.IRON_ORE,
+                Blocks.DEEPSLATE_IRON_ORE, Blocks.COPPER_ORE, Blocks.GOLD_ORE, Blocks.DEEPSLATE_GOLD_ORE,
+                Blocks.REDSTONE_ORE, Blocks.DEEPSLATE_REDSTONE_ORE, Blocks.LAPIS_ORE,
+                Blocks.DEEPSLATE_LAPIS_ORE, Blocks.DIAMOND_ORE, Blocks.DEEPSLATE_DIAMOND_ORE,
+                Blocks.EMERALD_ORE, Blocks.DEEPSLATE_EMERALD_ORE, Blocks.NETHER_GOLD_ORE,
+                Blocks.NETHER_QUARTZ_ORE}) {
+            helper.assertTrue(block.defaultBlockState().is(FistTiers.luckTag()),
+                    blockName(block) + " is an ore and must be covered by fist_luck");
+        }
+        for (Block block : new Block[]{Blocks.STONE, Blocks.DEEPSLATE, Blocks.DIRT, Blocks.OAK_LOG,
+                Blocks.SAND, Blocks.OBSIDIAN, Blocks.ANCIENT_DEBRIS, Blocks.NETHERITE_BLOCK}) {
+            helper.assertTrue(!block.defaultBlockState().is(FistTiers.luckTag()),
+                    blockName(block) + " is not an ore and must be left alone by luck");
+        }
+        helper.succeed();
+    }
+
+    /**
+     * A lucky block must be harvestable at the tier that owns it, or the multiplier would apply to
+     * something the player cannot mine.
+     *
+     * <p>Two things this deliberately does not assume. Not every ore needs a pickaxe: vanilla lets
+     * a bare hand take nether gold ore, so {@code tierOf} answers {@code -1} and that is the
+     * correct result, not a gap. And vanilla bands ore further than "one band for all of it" —
+     * gold, redstone, diamond and emerald ore only need an <em>iron</em> pickaxe, so they sit in
+     * the iron band, not the stone one.</p>
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void everyLuckyOreIsHarvestableAtItsOwnTier(GameTestHelper helper) {
+        for (Block block : new Block[]{Blocks.COAL_ORE, Blocks.DEEPSLATE_COAL_ORE, Blocks.IRON_ORE,
+                Blocks.DEEPSLATE_IRON_ORE, Blocks.COPPER_ORE, Blocks.GOLD_ORE, Blocks.DEEPSLATE_GOLD_ORE,
+                Blocks.REDSTONE_ORE, Blocks.DEEPSLATE_REDSTONE_ORE, Blocks.LAPIS_ORE,
+                Blocks.DEEPSLATE_LAPIS_ORE, Blocks.DIAMOND_ORE, Blocks.DEEPSLATE_DIAMOND_ORE,
+                Blocks.EMERALD_ORE, Blocks.DEEPSLATE_EMERALD_ORE, Blocks.NETHER_GOLD_ORE,
+                Blocks.NETHER_QUARTZ_ORE}) {
+            BlockState state = block.defaultBlockState();
+            int required = FistTiers.tierOf(state);
+            helper.assertTrue(required == -1 || required >= 0,
+                    blockName(block) + " resolved to an impossible tier " + required);
+            helper.assertTrue(FistTiers.canHarvest(state, Math.max(required, 0)),
+                    blockName(block) + " must be harvestable by the fist that owns it");
+            // Sanity: the fist at that tier really is the one that trains on it.
+            if (required > 0) {
+                helper.assertTrue(state.is(FistTiers.tag(required)),
+                        blockName(block) + " is owned by tier " + required + " but is not in that tag");
+            }
+        }
+        helper.succeed();
+    }
+
+    // ================= the deep family as diamond training =================
+
+    /**
+     * The diamond tier had almost nothing to mine — obsidian, ancient debris, a netherite block —
+     * which made it the hardest rung by a wide margin. The whole deepslate family now trains it.
+     *
+     * <p>Those blocks are also stone-band, so {@code tierOf} still reports them as stone. That
+     * overlap is the mechanism, not an accident: it keeps them harvestable from the stone tier on,
+     * while the levelling check asks whether the block belongs to the <em>current</em> tier's tag.
+     * A single-tier reading would either make deepslate unminable until diamond or make it
+     * untrainable there.</p>
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theDeepFamilyTrainsTheDiamondTier(GameTestHelper helper) {
+        int diamond = 3;
+        for (Block block : new Block[]{Blocks.DEEPSLATE, Blocks.COBBLED_DEEPSLATE,
+                Blocks.POLISHED_DEEPSLATE, Blocks.DEEPSLATE_BRICKS, Blocks.CRACKED_DEEPSLATE_BRICKS,
+                Blocks.DEEPSLATE_TILES, Blocks.CRACKED_DEEPSLATE_TILES, Blocks.CHISELED_DEEPSLATE,
+                Blocks.INFESTED_DEEPSLATE, Blocks.TUFF, Blocks.CHISELED_TUFF, Blocks.POLISHED_TUFF,
+                Blocks.CALCITE, Blocks.DRIPSTONE_BLOCK, Blocks.POINTED_DRIPSTONE}) {
+            BlockState state = block.defaultBlockState();
+            helper.assertTrue(state.is(FistTiers.tag(diamond)),
+                    blockName(block) + " must be listed in the diamond tag or the diamond tier cannot be levelled");
+            helper.assertTrue(FistTiers.tierOf(state) < diamond,
+                    blockName(block) + " must stay harvestable below diamond, so deep caves never lock");
+        }
+        helper.succeed();
+    }
+
+    /**
+     * The diamond tier's original, very thin material list must still be there.
+     *
+     * <p>No diamond or emerald ore in the {@code assertTier} call: vanilla only asks for an
+     * <em>iron</em> pickaxe for those, so they belong to the iron band and {@code tierOf} reports
+     * them as tier 2. They are in the diamond tag too, so they train whichever tier the player is
+     * actually on — the same overlap the deepslate family relies on.</p>
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void diamondTierKeepsItsOriginalBand(GameTestHelper helper) {
+        assertTier(helper, 3, Blocks.OBSIDIAN, Blocks.CRYING_OBSIDIAN, Blocks.ANCIENT_DEBRIS,
+                Blocks.NETHERITE_BLOCK, Blocks.RESPAWN_ANCHOR, Blocks.LODESTONE);
+        for (Block block : new Block[]{Blocks.DIAMOND_ORE, Blocks.DEEPSLATE_DIAMOND_ORE,
+                Blocks.EMERALD_ORE, Blocks.DEEPSLATE_EMERALD_ORE}) {
+            helper.assertTrue(block.defaultBlockState().is(FistTiers.tag(3)),
+                    blockName(block) + " must still train the diamond tier where it is reachable");
         }
         helper.succeed();
     }

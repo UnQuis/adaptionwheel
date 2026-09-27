@@ -65,6 +65,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> FIST_INSTABREAK_SPEED;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_DEFAULT_ON;
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_LUCK_ENABLED;
 
     // ---- Mining scaling ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
@@ -291,6 +292,12 @@ public final class AdaptionConfig {
                 .defineInRange("instabreakSpeed", 20000.0, 100.0, 1000000.0);
         FIST_INSTABREAK_DEFAULT_ON = s.comment("Whether Instabreak starts switched on the moment it is unlocked.")
                 .define("instabreakDefaultOn", false);
+        FIST_LUCK_ENABLED = s.comment("The fist's luck: every tier that much more of whatever an ore",
+                        "drops, and the same multiple of its experience. Scales 1/2/3/5/10x by tier",
+                        "(wood/stone/iron/diamond/netherite) and applies only to the blocks in the",
+                        "adaptionwheel:fist_luck block tag, which ships holding #minecraft:ores.",
+                        "Wood and stone are untouched, so stone farming stays where vanilla left it.")
+                .define("luckEnabled", true);
         s.pop();
 
         s.comment("--- Skill Issue (Combat_SkillIssue) ---").push("skillIssue");

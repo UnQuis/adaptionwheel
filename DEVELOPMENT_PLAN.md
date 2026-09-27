@@ -279,6 +279,47 @@ Three separate bugs stacked, none of them visible server-side:
 - [x] 22 gametests, including the copper→iron migration (merge, clamp, and no-op on current
       saves) and an assertion that the copper blocks all landed in the iron tag.
 
+### Fifth playtest: luck, the deep family, and the tool-class prototypes
+Three requests, and the middle one turned out to rest on a wrong premise that was mine, not the
+player's.
+
+- [x] **Luck, 1/2/3/5/10x by tier, on ore drops and ore XP.** `server/FistLuck.java` hooks
+      `BlockDropsEvent`, reached by `Block.playerDestroy -> Block.dropResources ->
+      CommonHooks.handleBlockDrops`. That event sits after the loot table has produced its list
+      but before anything enters the world, and it exposes the items *and* the XP on one object,
+      so fortune and silk touch are already baked in and the two cannot drift apart. Stacks are
+      merged up to their stack limit instead of spawning N item entities. Scope is the
+      `adaptionwheel:fist_luck` block tag, stated on the HUD row so the multiplier is not invisible.
+- [x] **The speed prototype is now chosen per block across pickaxe/axe/shovel/hoe.** The report
+      was "my diamond fist should break dirt instantly" — the arithmetic was right and the code
+      was wrong. The speed was measured with a *pickaxe* against whatever block was in front of
+      the player, and 1.21.1 puts dirt in `mineable/shovel` only, so `Item.getDestroySpeed` answers
+      1.0 there: bare-hand speed. A diamond fist took 15 ticks on soil where a diamond shovel
+      takes 2. The fix reads each tool's declared `Tool.Rule` speed, which is block-independent,
+      and asks only which class claims the block. A side effect worth knowing: all four classes of
+      a tier declare the *same* speed in vanilla (2/4/6/8/9), so the per-class probe is belt and
+      braces rather than a correction — but it makes the property true by construction instead of
+      by coincidence.
+- [x] **The diamond tier was ungrindable and now trains on the whole deepslate family.** Its list
+      was obsidian, crying obsidian, ancient debris, netherite blocks, respawn anchors, lodestone
+      and diamond ore — ancient debris barely spawns, and a respawn anchor is a one-time item.
+      Added deepslate and every cut variant, infested deepslate, tuff, calcite and dripstone, plus
+      `#minecraft:emerald_ores`. This required changing the levelling test from
+      `tierOf(state) == tier` to `state.is(FistTiers.tag(tier))`: the deepslate family is
+      stone-band, so `tierOf` reports all of it as Stone and a diamond fist could never be trained
+      on any of it. A material may now be reachable from the lower tier and trainable at the
+      higher one, which is what makes an under-stocked tier fixable at all.
+- [x] **Data bug found by the tests:** `fist_iron.json` carried a `{value: value}` mapping at the
+      top level next to its real `values` list, left behind by the earlier tag merge. Harmless to
+      the tag loader, but it was junk in a shipped resource.
+- [x] **There is no `minecraft:ores` block tag in 1.21.1.** The luck tag was written against it
+      and silently resolved to nothing — the gametest asserting coal ore is covered is what
+      caught it. The tag now lists the eight vanilla `*_ores` tags explicitly; `nether_gold_ore`
+      is inside `gold_ores`, but `nether_quartz_ore` has no tag of its own and is named outright.
+- [x] 31 gametests, including a matrix pinning that all four tool classes yield the tier's speed
+      on their own blocks, and the player's own arithmetic as a duration: a diamond fist breaks
+      dirt in at most 2 ticks against 15 for a bare hand.
+
 ### Also fixed in this phase (from the code audit)
 - [x] Existence reflection was dead code: the immunity cancelled the hit in `LivingIncomingDamageEvent`,
       which fires at the top of `LivingEntity.hurt()`, so the `LivingDamageEvent.Pre` branch that
