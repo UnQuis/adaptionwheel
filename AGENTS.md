@@ -90,3 +90,33 @@
   `RegisterGameTestsEvent`. See DEVELOPMENT_PLAN.md Phase 15. This branch therefore has no
   automated coverage — do not treat a green build as a green suite.
 - **No gametest/lint task exists on this branch**, unlike `main`. `./gradlew build` only compiles.
+
+### The lightmap is not a `LightTexture` any more
+
+`Env_Darkness` is a lightmap lift, but **26.3 rewrote the whole lightmap path**: `LightTexture`
+became `Lightmap` + `LightmapRenderStateExtractor` + `UiLightmap`, the map is a `GpuTexture` rather
+than a `NativeImage`, and the arithmetic now lives in `assets/minecraft/shaders/core/lightmap.fsh`.
+There are no CPU-side per-pixel colours to rewrite, so the 1.21.1 `@ModifyArg` on `setPixelRGBA`
+has no equivalent here.
+
+What 26.3 does have is `net.minecraft.client.renderer.state.LightmapRenderState` — a plain mutable
+object with public `brightness`, `nightVisionEffectIntensity`, `darknessEffectScale` and tint
+fields that the shader reads. `mixin/LightmapRenderStateExtractorMixin` therefore `@Inject`s into
+`LightmapRenderStateExtractor.extract` and raises `nightVisionEffectIntensity` to
+`DarknessLightmap.intensity()` (default floor 0.72). The shader then does exactly what vanilla
+night vision does — scale toward `nightVisionColor`, which is white — so relative shading and the
+day/night cycle survive, same intent as the 1.21.1 branch.
+
+Two traps when touching that injection:
+
+- **Anchor on the last field assigned, not on `needsUpdate`.** `needsUpdate` is assigned at the
+  very top of `extract` (into the *state* object) and read on the *extractor*, so anchoring there
+  runs before any value is computed and the vanilla assignment overwrites the lift on the same
+  call. `bossOverlayWorldDarkening` is the final one written and sits inside the `needsUpdate`
+  branch, which is what is wanted.
+- **`Math.max` against the existing value, not `=`.** A real night vision potion must still be
+  able to win; an unconditional assignment would stomp it.
+
+The gamma approach is dead on this branch for the same reason as on 1.21.1: `Options.gamma()` is a
+bounded `OptionInstance` and an out-of-range `set` reverts silently. See DEVELOPMENT_PLAN.md
+Phase 15/16 on `main` for the full reasoning.

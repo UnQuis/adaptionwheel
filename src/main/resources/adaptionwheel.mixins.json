@@ -19,7 +19,8 @@
     "GuardianLaserMixin"
   ],
   "client": [
-    "HurtCamMixin"
+    "HurtCamMixin",
+    "LightmapRenderStateExtractorMixin"
   ],
   "injectors": {
     "defaultRequire": 1

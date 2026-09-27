@@ -208,3 +208,14 @@ Until that happens the 26.3 port has no automated coverage, so its behaviour is 
 compilation and a clean server boot**. The data-driven parts the tests pinned on `main` — the six
 material tags, the `fist_luck` tag, the cost table, the reach rule, the speed ladder — were ported
 by copying, so they are identical to the tested versions rather than independently verified.
+
+## Phase 16 — Env_Darkness on 26.3
+
+Same fix as `main`, a different door. 26.3 split `LightTexture` into `Lightmap` +
+`LightmapRenderStateExtractor` + `UiLightmap` and moved the lightmap arithmetic into
+`shaders/core/lightmap.fsh`, so there are no CPU-side pixels to rewrite and the 1.21.1
+`@ModifyArg(setPixelRGBA)` has no equivalent. `mixin/LightmapRenderStateExtractorMixin` instead
+raises `LightmapRenderState.nightVisionEffectIntensity` to the configured floor, which makes the
+shader do exactly what vanilla night vision does. Verified by compilation and a clean dedicated
+server boot; like the rest of this branch there is no automated coverage, and client rendering
+cannot be exercised from a headless server.
