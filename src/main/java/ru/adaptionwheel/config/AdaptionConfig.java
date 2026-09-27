@@ -67,6 +67,10 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_DEFAULT_ON;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_LUCK_ENABLED;
 
+    // ---- Client-side visuals ----
+    public static final ModConfigSpec.ConfigValue<Boolean> DARKNESS_GAMMA_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> DARKNESS_GAMMA;
+
     // ---- Mining scaling ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
 
@@ -461,6 +465,17 @@ public final class AdaptionConfig {
         HUD_SHOW_HISTORY = c.define("showAdaptationLog", true);
         WHEEL_ABOVE_HEAD = c.define("renderWheelAboveHead", true);
         WHEEL_SIZE = c.defineInRange("wheelModelScale", 0.45, 0.1, 2.0);
+
+        c.comment("--- Adaptation to Darkness (Env_Darkness) ---").push("darkness");
+        DARKNESS_GAMMA_ENABLED = c.comment("Raise the brightness instead of granting night vision.",
+                        "Night vision has a duration, so it has to be refreshed as it runs down and",
+                        "the screen blinks out and back once per window. Gamma cannot flicker. Your",
+                        "own Brightness setting is remembered and put back when the adaptation ends.")
+                .define("darknessGammaEnabled", true);
+        DARKNESS_GAMMA = c.comment("Brightness to use while adapted. 1.0 is the vanilla Brightness",
+                        "slider's maximum; the default slider value is 0.5.")
+                .defineInRange("darknessGamma", 1.0, 0.0, 1.0);
+        c.pop();
 
         c.pop();
 

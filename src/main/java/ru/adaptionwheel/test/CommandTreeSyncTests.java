@@ -17,6 +17,7 @@ import ru.adaptionwheel.adapt.AdaptationDefinition;
 import ru.adaptionwheel.adapt.AdaptationRegistry;
 import ru.adaptionwheel.server.AdaptionCommand;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -89,6 +90,51 @@ public final class CommandTreeSyncTests {
         helper.assertTrue(grant.getChild("all") != null, "/adaptionwheel grant all must exist");
         helper.assertTrue(grant.getChild("concept") != null,
                 "/adaptionwheel grant <concept> must exist");
+        helper.succeed();
+    }
+
+    /**
+     * Every form of {@code grant} has to be reachable, and {@code <concept> <player>} in
+     * particular: without it the only way to name another player was to invent a level as well,
+     * so the command answered "Expected integer" while pointing at the player's name.
+     *
+     * <p>Purely structural — no player is needed to check that a branch exists, which is the whole
+     * point, since the player-dependent path cannot be exercised here.</p>
+     *
+     * <p>Written against the child <em>names</em> rather than by dereferencing each node in turn:
+     * a missing node threw a NullPointerException out of the test body, and a gametest that dies
+     * that way never reaches a terminal state — the whole 38-test batch hangs instead of reporting
+     * one failure.</p>
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void grantAcceptsATargetWithoutALevel(GameTestHelper helper) {
+        var concept = modDispatcher().getRoot().getChild("adaptionwheel")
+                .getChild("grant").getChild("concept");
+        helper.assertTrue(concept != null, "the concept node must exist");
+        List<String> kids = childNames(concept);
+        helper.assertTrue(kids.contains("target"),
+                "grant <concept> <player> must exist; nesting it under <level> leaves "
+                        + "'Expected integer' pointing at the player's name. Children: " + kids);
+        helper.assertTrue(kids.contains("level"), "grant <concept> <level> must exist: " + kids);
+        var level = concept.getChild("level");
+        helper.assertTrue(level != null && childNames(level).contains("target"),
+                "grant <concept> <level> <player> must exist");
+        helper.succeed();
+    }
+
+private static List<String> childNames(com.mojang.brigadier.tree.CommandNode<?> node) {
+        return node.getChildren().stream().map(com.mojang.brigadier.tree.CommandNode::getName)
+                .sorted().toList();
+    }
+
+    /** {@code ungrant} takes a concept and an optional target, like {@code info}. */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void ungrantAcceptsAConceptAndTarget(GameTestHelper helper) {
+        var ungrant = modDispatcher().getRoot().getChild("adaptionwheel").getChild("ungrant");
+        helper.assertTrue(ungrant != null, "/adaptionwheel ungrant must exist");
+        helper.assertTrue(ungrant.getChild("concept") != null, "ungrant <concept> must exist");
+        helper.assertTrue(ungrant.getChild("concept").getChild("target") != null,
+                "ungrant <concept> <player> must exist");
         helper.succeed();
     }
 

@@ -392,6 +392,48 @@ outcome than the mangled argument it was meant to fix. `Commands.validate()` doe
   server-side. Any future command-argument change needs a client in the loop, or the
   serializability assertion.
 
+### Seventh playtest: GUI reskin, gamma instead of night vision, branch sync
+- [x] **The adaptation screen is drawn in vanilla's GUI style.** It was entirely `g.fill()`
+      rectangles with gold-on-black text, which read as a debug overlay. Now a container panel using
+      the exact pixel values read out of `textures/gui/container/generic_54.png` (1 px `#000000`
+      outline, 2 px `#FFFFFF` highlight, flat `#C6C6C6` body), domain tabs raised 2 px when
+      selected the way vanilla's own tabs are, dark `#404040` text on the light panel, and progress
+      bars in vanilla's XP-bar colours. Concept colours are scaled to 52 % for the light panel so the
+      per-domain grouping still reads; the HUD's own colours are untouched.
+- [x] **The bars and scrollbar are drawn with `fill()`, deliberately.** The first attempt blitted
+      `experience_bar_*` through `GuiGraphics.blitSprite` and produced a bar split in half with a gap
+      plus a magenta tint. `blitSprite`'s overloads cannot be read reliably from decompiled sources
+      — the parameter names are meaningless and two overloads differ only in arity — so a wrong guess
+      compiled, ran, and looked plausible enough to be worth two screenshot rounds. Sampled colours
+      are deterministic. Only `blit(rl, x, y, u, v, w, h)` (7-arg, 1:1) is confirmed from a vanilla
+      callsite (`BeaconScreen.renderBg`); that is the one plain-texture form worth trusting.
+- [x] **Real bug the screenshot exposed: the list was built once in `init()`.** The client mirror
+      arrives on the 1 Hz sync, so a screen opened in the first second after joining rendered an empty
+      list under a header reading "Adaptations: 51". Now rebuilt per frame when the concept set
+      changes (`refreshIfStale`). The eager build was pre-existing, not something the reskin caused.
+- [x] **`Env_Darkness` is a gamma lift, not the night vision effect** (`client/DarknessGamma.java`).
+      A status effect has a duration and must be refreshed as it runs down, so the screen blinked out
+      and back once per window — the report. Gamma has no duration, no packets, and
+      `LightTexture.tick()` rebuilds the light map every client tick, so it simply cannot flicker and
+      lands on the next frame. The player's own Brightness is remembered and restored on loss and on
+      `ClientPlayerNetworkEvent.LoggingOut`; NeoForge 21.1 has no client-stopping event, and leaving a
+      world always goes through a disconnect, so that is what keeps `options.txt` clean. Config
+      `visual.darkness.darknessGammaEnabled` / `darknessGamma`.
+- [x] **`grant <concept> <player>` existed only as `<concept> <level> <player>`.** Naming another
+      player meant inventing a level, and omitting it produced "Expected integer" pointing at the
+      player's name. The target branch is a **sibling** of the `level` node; nested under `level` it
+      only ever matched the form that already existed, which is exactly what the first fix attempt
+      did and why it appeared to do nothing.
+- [x] **A gametest whose body throws does not fail, it hangs the batch.** The new command-tree tests
+      dereferenced nodes directly; a missing one threw a `NullPointerException` out of the test body
+      and the 38-test batch sat there printing `+` forever instead of reporting one failure. They now
+      assert on child *names*, and every node is null-checked. Worth remembering: a hang here is a
+      test bug, not an engine problem, and the 500k-line log is the tell.
+- [x] Branches: the unpushed `26.3` commit is pushed and its stale worktree registration pruned. The
+      `arena/*` branches are deleted after verifying by patch-id that every one of their commits is
+      already in `26.3`, and that the only content they had beyond it was the *older* version of what
+      `26.3` improved.
+
 ### Also fixed in this phase (from the code audit)
 - [x] Existence reflection was dead code: the immunity cancelled the hit in `LivingIncomingDamageEvent`,
       which fires at the top of `LivingEntity.hurt()`, so the `LivingDamageEvent.Pre` branch that

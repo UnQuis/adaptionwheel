@@ -165,10 +165,17 @@ public final class AdaptionCommand {
                                                 concept(ctx))))))
                 .then(conceptArg("concept")
                         // No level given: max for a leveled concept, plain grant for a one-time one.
-                        .executes(ctx -> grant(ctx, selfOrTarget(ctx, "target"), concept(ctx), -1))
+                        .executes(ctx -> grant(ctx, selfOrTarget(ctx, "target"), concept(ctx), LEVEL_DEFAULT))
+                        // `grant <concept> <player>` — a SIBLING of the level node, not a child of
+                        // it. Nested under `level` it only ever matched `<concept> <level> <player>`,
+                        // which already existed, so naming another player without inventing a level
+                        // still died with "Expected integer" pointing at the player's name.
+                        .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
+                                .requires(s -> s.hasPermission(2))
+                                .executes(ctx -> grant(ctx, EntityArgument.getPlayer(ctx, "target"),
+                                        concept(ctx), LEVEL_DEFAULT)))
                         .then(net.minecraft.commands.Commands.argument("level", LEVEL_ARG)
-                                .executes(ctx -> grant(ctx, selfOrTarget(ctx, "target"), concept(ctx),
-                                        level(ctx)))
+                                .executes(ctx -> grant(ctx, self(ctx), concept(ctx), level(ctx)))
                                 .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
                                         .executes(ctx -> grant(ctx, EntityArgument.getPlayer(ctx, "target"),
                                                 concept(ctx), level(ctx)))))));

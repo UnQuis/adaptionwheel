@@ -1538,20 +1538,14 @@ public class AdaptionEvents {
     }
 
     /**
-     * Length of the rolling window the passive status effects are refreshed on. Short on purpose:
-     * the effect is a mirror of the adaptation state, so if the state changes the effect must
-     * follow promptly instead of trailing two minutes behind like the old 2400-tick grant did.
+     * Apply all passive env adaptation effects. Called even during adversity.
+     *
+     * <p>{@code Env_Darkness} is deliberately absent: it is granted as a client-side gamma lift by
+     * {@code client/DarknessGamma}, not as a status effect. A rolling night-vision window had to
+     * be topped up as it ran down, and the last second of every window visibly flickered — the
+     * screen went dark and came back once per cycle. Gamma has no duration, so it cannot
+     * flicker, and it costs no effect packets.</p>
      */
-    private static final int ENV_EFFECT_WINDOW = 200;
-    /**
-     * Top the effect up once it drops below this, rather than every tick. Re-adding an effect
-     * whose duration differs from the live one re-sends an effect packet to every client, so
-     * an unconditional per-tick refresh is 20 packets a second per player for nothing. Half the
-     * window is frequent enough that the visible duration never appears to move.
-     */
-    private static final int ENV_EFFECT_REFRESH_AT = 100;
-
-    /** Apply all passive env adaptation effects. Called even during adversity. */
     private static void applyEnvEffects(ServerPlayer player, PlayerAdaption data) {
         if (data.isAdapted(Concepts.ENV_DROWN)) {
             player.setAirSupply(player.getMaxAirSupply());
@@ -1559,48 +1553,10 @@ public class AdaptionEvents {
         if (data.isAdapted(Concepts.ENV_LAVA)) {
             player.clearFire();
         }
-        applyNightVision(player, data.isAdapted(Concepts.ENV_DARKNESS));
         if (data.isAdapted(Concepts.ENV_STARVE) && player.tickCount % 20 == 0) {
             player.getFoodData().setFoodLevel(20);
             player.getFoodData().setSaturation(20f);
             resetExhaustion(player.getFoodData());
-        }
-    }
-
-    /**
-     * Night vision, maintained as a mirror of the adaptation rather than granted once.
-     *
-     * <p>Follows how ProjectE does the gem helmet's night vision — see
-     * {@code moze_intel.projecte.handlers.InternalAbilities.tick}: a central tick owns the
-     * effect, tops it up on a rolling window, and takes it away again when the source is gone.
-     * The old code refreshed on {@code tickCount % 40 == 0}, so standing in a cave for up to
-     * two seconds after the adaptation landed before the screen changed at all — that is the
-     * "effects have to come on instantly" complaint, and it was a self-inflicted delay.</p>
-     *
-     * <p>Two details worth keeping over a straight copy of ProjectE's version:</p>
-     * <ul>
-     *   <li><b>Ambient</b>, so night vision arrives without a potion icon and swirl appearing
-     *       in the corner. It should read as part of the wheel, not as a drink.</li>
-     *   <li>The effect is only removed when the live instance is <em>ambient</em>, which is
-     *       precisely the shape this method writes. A night vision potion from a brewing stand
-     *       is not ambient, so losing the adaptation never deletes somebody's real potion.
-     *       ProjectE's version removes unconditionally and does delete it; there is no reason
-     *       to copy that part.</li>
-     * </ul>
-     */
-    private static void applyNightVision(ServerPlayer player, boolean wanted) {
-        MobEffectInstance active = player.getEffect(MobEffects.NIGHT_VISION);
-        if (wanted) {
-            // Absent, or close to lapsing: apply now. This is the branch that makes a freshly
-            // completed adaptation light up on the same tick it completed.
-            if (active == null || active.getDuration() < ENV_EFFECT_REFRESH_AT) {
-                player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION,
-                        ENV_EFFECT_WINDOW, 0, true, false));
-            }
-            return;
-        }
-        if (active != null && active.isAmbient()) {
-            player.removeEffect(MobEffects.NIGHT_VISION);
         }
     }
 
