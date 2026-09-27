@@ -38,9 +38,23 @@ public final class DomainTriggers {
         if (!AdaptionConfig.ENABLE_MINING.get() || !AdaptionEvents.isWearingWheel(player)) {
             return;
         }
+        // Creative and spectator players generate no adaptation progress from mining.
+        if (player.isCreative() || player.isSpectator()) {
+            return;
+        }
         AdaptionEvents.startOrAccelerate(player, AdaptionEvents.dataOf(player),
                 Concepts.MINE_LABOR,
                 (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
+
+        // Fist Mastery: a hand-held break is the whole unlock ritual and the tier's training
+        // signal, so it is handled separately from the Labor analysis. Holding a non-tool item (a
+        // block, food) still counts; only tools and weapons take the fist out of play.
+        if (AdaptionConfig.FIST_ENABLED.get()
+                && ru.adaptionwheel.category.FistTiers.usableWith(player.getMainHandItem(),
+                        event.getState())) {
+            ru.adaptionwheel.server.FistMastery.onHandBreak(player, AdaptionEvents.dataOf(player),
+                    event.getState());
+        }
     }
 
     @SubscribeEvent

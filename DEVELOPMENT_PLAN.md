@@ -152,3 +152,59 @@ Status legend: `[x]` done & verified · `[~]` partially done · `[ ]` planned
 - [x] 3D pass: slash = three crescents crossed at 0/+60/-60 deg around the flight axis
       (never fully edge-on); rift = crossed walls (across + along the path) with 3D bursting
       crack shards; verified by screenshots
+
+## Phase 15 — Porting main's 1.21.1 work to 26.3
+
+`26.3` forked from `80bec4a` and had missed all eight commits since, so the Fist Mastery feature,
+the grant-command rework, the enchanting-table particles and the gamma-based darkness adaptation were
+ported across. The dedicated server boots clean and the mod loads with no adaptionwheel errors.
+
+### API renames that had to be applied
+
+| 1.21.1 | 26.3 | where it bit |
+|---|---|---|
+| `net.minecraft.resources.ResourceLocation` | `net.minecraft.resources.Identifier` | every id in the ported files; factory methods (`parse`, `withDefaultNamespace`, `fromNamespaceAndPath`) are unchanged |
+| `CommandSourceStack.hasPermission(2)` | `Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)` | every `.requires(...)` in `AdaptionCommand` |
+| `PacketDistributor.sendToServer` | `net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer` | the Instabreak stance payload |
+| `Minecraft.setScreen` | `Minecraft.gui.setScreen` | closing the adaptation screen |
+| `GLFW` keycodes | `InputConstants.KEY_*` SDL scancodes | the Instabreak keybind (already true of the screen keybind here) |
+| `AdaptionEvents.syncAdaption` / `grantConceptLevel` | `sync` / `completeTask` | the fist's own grant and sync calls |
+
+### The good news: the tool API survived
+
+`Tiers` is gone, but `ToolMaterial` replaces it with the same ladder — `WOOD 2.0, STONE 4.0,
+COPPER 5.0, IRON 6.0, DIAMOND 8.0, GOLD 12.0, NETHERITE 9.0` — and `Tool` is still
+`record Tool(List<Tool.Rule> rules, float defaultMiningSpeed, int damagePerBlock, boolean
+canDestroyBlocksInCreative)` with `Rule(HolderSet<Block>, Optional<Float> speed,
+Optional<Boolean> correctForDrops)`. `Item.getDestroySpeed(ItemStack, BlockState)` is still there.
+So `FistTiers`'s rule-speed reading ports essentially unchanged, which was the riskiest part of
+the whole job.
+
+**26.3 also gives copper a real tool band** (`BlockTags.INCORRECT_FOR_COPPER_TOOL`, speed 5.0),
+which 1.21.1 did not — that is what a sixth tier would mean here. The ladder stays at five
+(wood/stone/iron/diamond/netherite) so a player's progress means the same thing on both branches.
+
+`PlayerEvent.HarvestCheck`, `PlayerEvent.BreakSpeed` and `BlockDropsEvent` all still exist with the
+same accessors, so the fist's only hook and the luck multiplier needed no rework at all.
+
+### Screens render through a different model
+
+26.3 replaced `render(GuiGraphics, ...)` with `extractRenderState(GuiGraphicsExtractor, ...)` and
+`GuiGraphicsExtractor.text(...)` for text. The vanilla-styled adaptation screen was ported to that;
+its panel and bar drawing use `fill()` with sampled vanilla colours, so nothing depended on the
+blit overloads whose parameter order could not be read reliably on 1.21.1.
+
+### Known gap: the gametests did not come across
+
+**The 38 gametests on `main` have no equivalent here and were deliberately not ported yet.** 26.3
+replaced the annotation-driven framework outright: there is no `@GameTest`, no
+`@GameTestHolder`, no `@PrefixGameTestTemplate`. Tests are now `GameTestInstance` objects
+registered through the mod-bus `RegisterGameTestsEvent` with a `TestData` describing the structure,
+and the runtime is built around `GameTestTicker`/`GlobalTestReporter`. That is a rewrite of the
+harness, not a package rename, and porting product code first was the right order — the tests
+verify the product, not the other way round.
+
+Until that happens the 26.3 port has no automated coverage, so its behaviour is **verified only by
+compilation and a clean server boot**. The data-driven parts the tests pinned on `main` — the six
+material tags, the `fist_luck` tag, the cost table, the reach rule, the speed ladder — were ported
+by copying, so they are identical to the tested versions rather than independently verified.

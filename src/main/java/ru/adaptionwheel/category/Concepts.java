@@ -18,6 +18,7 @@ public final class Concepts {
     public static final String MUTATION_THERMAL = "Mutation_Thermal";
     public static final String MUTATION_AQUATIC = "Mutation_Aquatic";
     public static final String MUTATION_IMPACT = "Mutation_Impact";
+    public static final String MUTATION_FIST = "Mutation_Fist";
 
     /**
      * Transcendence-tier ultimate from the original mod ("Dimension Destroy"):

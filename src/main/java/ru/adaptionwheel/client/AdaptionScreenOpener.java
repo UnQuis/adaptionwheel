@@ -6,6 +6,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import ru.adaptionwheel.AdaptionWheel;
+import ru.adaptionwheel.SurfaceAdaptations;
 
 /** Opens the adaptation browser screen when the keybind is pressed in-game. */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
@@ -23,6 +24,20 @@ public final class AdaptionScreenOpener {
             } else if (mc.gui.screen() instanceof AdaptationScreen screen) {
                 screen.onClose();
             }
+        }
+
+        while (AdaptionKeybinds.TOGGLE_INSTABREAK_KEY.consumeClick()) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || !ClientAdaption.wearingWheel) {
+                return;
+            }
+            if (!SurfaceAdaptations.instabreakUnlocked(mc.player)) {
+                return;
+            }
+            // Optimistic local flip so the mining speed reacts on the same tick; the next
+            // server sync corrects it if the server rejected the request.
+            ClientAdaption.instabreakActive = !ClientAdaption.instabreakActive;
+            ru.adaptionwheel.network.FistInstabreakPayload.send(ClientAdaption.instabreakActive);
         }
     }
 }

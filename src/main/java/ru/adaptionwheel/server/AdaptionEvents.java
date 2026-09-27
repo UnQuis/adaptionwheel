@@ -475,7 +475,7 @@ public class AdaptionEvents {
             for (int i = 0; i < 16; i++) {
                 double ang = i / 16.0 * Math.PI * 2;
                 double dx = Math.cos(ang), dz = Math.sin(ang);
-                serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
+                serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.ENCHANT,
                         ex + dx * 0.4, ey + (random.nextDouble() - 0.5) * 0.4, ez + dz * 0.4,
                         0, dx * 0.35, (random.nextDouble() - 0.5) * 0.1, dz * 0.35, 1.0);
             }
@@ -1193,7 +1193,7 @@ public class AdaptionEvents {
      * adaptations. Pure combo concepts: no new damage type, no immunities —
      * each mutation carries its own passive ability.
      */
-    private static void grantComboMutation(ServerPlayer player, PlayerAdaption data, String concept) {
+    public static void grantComboMutation(ServerPlayer player, PlayerAdaption data, String concept) {
         grantOneTime(player, data, concept);
         player.sendSystemMessage(Component.translatable("adaptionwheel.msg.mutation_unlocked",
                         Concepts.chatName(concept))
@@ -1212,7 +1212,7 @@ public class AdaptionEvents {
             case Concepts.MUTATION_AQUATIC -> net.minecraft.core.particles.ParticleTypes.SPLASH;
             case Concepts.MUTATION_IMPACT -> net.minecraft.core.particles.ParticleTypes.POOF;
             case Concepts.DIMENSION_DESTROY -> net.minecraft.core.particles.ParticleTypes.SONIC_BOOM;
-            default -> net.minecraft.core.particles.ParticleTypes.END_ROD;
+            default -> net.minecraft.core.particles.ParticleTypes.ENCHANT;
         };
         double ex = player.getX(), ey = player.getEyeY() - 0.3, ez = player.getZ();
         for (int i = 0; i < 24; i++) {
@@ -1359,7 +1359,7 @@ public class AdaptionEvents {
         if (random.nextInt(denominator) == 0) {
             int count = analyzing ? 1 : 1 + adaptBonus;
             for (int i = 0; i < count; i++) {
-                serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
+                serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.ENCHANT,
                         cx + (random.nextDouble() - 0.5) * 2.1,
                         cy + (random.nextDouble() - 0.5) * 1.4,
                         cz + (random.nextDouble() - 0.5) * 2.1,
@@ -1375,7 +1375,7 @@ public class AdaptionEvents {
             double py = cy + (random.nextDouble() - 0.5) * dist;
             // CRIT sparks converge into the wheel; FIREWORK renders as a flat
             // untextured quad and reads as an ugly white square up close.
-            serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.CRIT,
+            serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.ENCHANT,
                     px, py, pz, 0,
                     (cx - px) * 0.12, (cy - py) * 0.12, (cz - pz) * 0.12,
                     1.0);
@@ -1526,7 +1526,8 @@ public class AdaptionEvents {
         }
     }
 
-    private static void completeTask(ServerPlayer player, PlayerAdaption data, String concept) {
+    /** Public for the same reason as {@link #sync}: the fist tiers grant levels through it. */
+    public static void completeTask(ServerPlayer player, PlayerAdaption data, String concept) {
         Style style = Style.EMPTY.withColor(TextColor.fromRgb(Concepts.color(concept)));
         boolean isLevelBased = Concepts.isLevelBased(concept);
         if (isLevelBased) {
@@ -1745,6 +1746,37 @@ public class AdaptionEvents {
         sync(player, d, true);
     }
 
+    /**
+     * Drops a single adaptation: clears the one-time flag or zeroes the level, and tidies up
+     * anything that was counting on it. The counterpart to {@code debugGrant} — without it the
+     * only way to undo a grant was a full {@code reset}, which throws away every other
+     * adaptation too.
+     *
+     * @return {@code true} if something was actually removed.
+     */
+    public static boolean debugUngrant(ServerPlayer player, String concept) {
+        PlayerAdaption d = data(player);
+        boolean had = d.adapted.remove(concept);
+        Integer level = d.levels.remove(concept);
+        if (!had && level == null) {
+            return false;
+        }
+        d.invalidateAdaptCount();
+        applyStats(player, d);
+        // Recomputing stat modifiers needs the level gone first, and passive effects have to be
+        // re-evaluated or a removed adaptation keeps its night vision for the rest of the window.
+        applyEnvEffects(player, d);
+        // The fist's stance and block counter are runtime-only state keyed off the mutation; if
+        // the mutation is what went away, they have to go with it or the next unlock starts with
+        // a stale tally.
+        if (ru.adaptionwheel.category.Concepts.MUTATION_FIST.equals(concept)) {
+            FistMastery.forget(player.getUUID());
+        }
+        saveToItem(player, d);
+        sync(player, d, true);
+        return true;
+    }
+
     /** Full wipe of both player attachment and wheel item data. */
     public static void debugReset(ServerPlayer player) {
         PlayerAdaption d = data(player);
@@ -1874,7 +1906,9 @@ public class AdaptionEvents {
 
     // ================= SYNC =================
 
-    private static void sync(ServerPlayer player, PlayerAdaption data, boolean wearing) {
+    /** Public so progression fed by counters rather than an analysis timer (the fist tiers)
+     *  can reuse the full completion ceremony. */
+    public static void sync(ServerPlayer player, PlayerAdaption data, boolean wearing) {
         // Only send existence progress for bosses that are nearby and not yet adapted.
         // Reuses the per-tick proximity scan instead of issuing its own entity query.
         Map<String, Integer> existenceProgress = null;
@@ -1902,7 +1936,10 @@ public class AdaptionEvents {
                 new ArrayList<>(data.adapted),
                 new ArrayList<>(data.history),
                 existenceProgress != null ? existenceProgress : java.util.Map.of(),
-                (int) (AdaptionConfig.EXISTENCE_REQUIRED_SECONDS.get() * 20)
+                (int) (AdaptionConfig.EXISTENCE_REQUIRED_SECONDS.get() * 20),
+                ru.adaptionwheel.server.FistMastery.instabreakStance(player),
+                ru.adaptionwheel.server.FistMastery.tierProgress(player.getUUID()),
+                ru.adaptionwheel.server.FistMastery.fistProgressTotal(data)
         );
         AdaptionSyncPayload.sendTo(player, payload);
     }

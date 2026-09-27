@@ -64,18 +64,28 @@ public class AdaptionHud {
         // Build row list: tasks + existence progress + adversity
         List<Row> rows = new ArrayList<>();
         if (ClientAdaption.adversityActive) {
-            rows.add(new Row(Concepts.ADVERSITY, ClientAdaption.adversityProgress(), false));
+            rows.add(Row.of(Concepts.ADVERSITY, ClientAdaption.adversityProgress()));
         }
         for (AdaptionTask task : ClientAdaption.TASKS) {
-            rows.add(new Row(task.concept, ClientAdaption.taskProgress(task), false));
+            rows.add(Row.of(task.concept, ClientAdaption.taskProgress(task)));
         }
         // Existence progress bars (separate from tasks)
         for (Map.Entry<String, Integer> entry : ClientAdaption.EXISTENCE_PROGRESS.entrySet()) {
             String bossPath = entry.getKey();
             float progress = ClientAdaption.existenceProgress(bossPath);
             if (progress < 1f) {
-                rows.add(new Row(Concepts.existence(bossPath), progress, true));
+                rows.add(Row.of(Concepts.existence(bossPath), progress, true));
             }
+        }
+        // Fist Mastery: counted in blocks rather than seconds, so it gets its own row shape.
+        if (hasFistRow()) {
+            int tier = ClientAdaption.fistTier();
+            int luck = ru.adaptionwheel.category.FistTiers.luckMultiplier(tier);
+            // Stated on the row because an invisible multiplier is indistinguishable from a bug.
+            String suffix = luck > 1 ? " - LUCK x" + luck : null;
+            rows.add(new Row(ru.adaptionwheel.category.FistTiers.concept(tier),
+                    fistProgress(), false, ClientAdaption.fistProgressDone,
+                    ClientAdaption.fistProgressTotal, suffix));
         }
         rows.sort(Comparator.comparingInt(r -> priority(r.concept)));
 
@@ -112,7 +122,11 @@ public class AdaptionHud {
             int level = ClientAdaption.LEVELS.getOrDefault(row.concept, 0);
             tag = " [Lv." + level + " > " + (level + 1) + "]";
         }
-        String text = name + tag + " : " + String.format("%.1f%%", row.progress * 100f);
+        String meter = row.blocksTotal > 0
+                ? row.blocksDone + "/" + row.blocksTotal + " blocks"
+                : String.format("%.1f%%", row.progress * 100f);
+        String suffix = row.suffix == null ? "" : " " + row.suffix;
+        String text = name + tag + " : " + meter + suffix;
         graphics.text(font, text, 15, y, withAlpha(color, opacity), true);
 
         // Progress bar: black background + colored fill
@@ -172,6 +186,28 @@ public class AdaptionHud {
         return (rgb & 0xFFFFFF) | (alpha << 24);
     }
 
-    private record Row(String concept, float progress, boolean rainbow) {
+    /**
+     * A HUD line. {@code blocksTotal} > 0 marks a row counted in blocks rather than seconds,
+     * which changes the meter text and needs the exact done/total the fist pushes.
+     */
+    private record Row(String concept, float progress, boolean rainbow, int blocksDone, int blocksTotal,
+                       String suffix) {
+        private static Row of(String concept, float progress) {
+            return new Row(concept, progress, false, 0, 0, null);
+        }
+
+        private static Row of(String concept, float progress, boolean rainbow) {
+            return new Row(concept, progress, rainbow, 0, 0, null);
+        }
+    }
+
+    /** True while the wearer's fist is working toward its next level. */
+    private static boolean hasFistRow() {
+        return ClientAdaption.fistProgressTotal > 0 && ClientAdaption.fistTier() >= 0;
+    }
+
+    private static float fistProgress() {
+        int total = ClientAdaption.fistProgressTotal;
+        return total <= 0 ? 0f : Math.min(1f, (float) ClientAdaption.fistProgressDone / total);
     }
 }

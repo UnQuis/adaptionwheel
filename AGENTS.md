@@ -69,3 +69,24 @@
 - Mixin quirks hit with the DE laser mixin: an `@Redirect` handler parameter must match the **exact** receiver type in the target bytecode (`Player`, not `LivingEntity` — supertypes are rejected at apply time with `InvalidInjectionException`); `@At(target = "setHealth(F)V")` without an owner matches any receiver, which keeps the injection resilient; optional mixins into another mod's classes must be gated through an `IMixinConfigPlugin` (`shouldApplyMixin` → `FMLLoader.getLoadingModList().getModFileById(...)`) or Mixin logs errors for the missing target class.
 - Draconic Evolution facts (from the jar at the repo root): the Chaos Guardian (`draconicevolution:draconic_guardian`) is NOT in any boss tag — recognition is hardcoded via string id; its parts are NeoForge `PartEntity`s, so generic part unwrapping covers them; ALL guardian damage types bypass armor/resistance/effects/shields/cooldowns and most are tagged `is_explosion`/`is_projectile` (so vanilla-tag categories already partially apply); the charged twin laser writes health directly (handled by mixin). DE needs CodeChickenLib + BrandonsCore at runtime for dev-server testing (fetchable from Modrinth).
 - Not a git repo; no commits or branches to manage here.
+## 26.3-specific notes (added by the Phase 15 port)
+
+- **`ResourceLocation` is `net.minecraft.resources.Identifier` here.** Factory methods are unchanged.
+  A global rename is the first thing any ported file needs.
+- **Permission checks are `Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)`**, a
+  `Predicate<CommandSourceStack>`; `CommandSourceStack.hasPermission(int)` no longer exists.
+- **Screens render via `extractRenderState(GuiGraphicsExtractor, ...)`** and draw text with
+  `g.text(...)`. There is no `render(GuiGraphics, ...)` and no `GuiGraphics.drawString`.
+- **`Minecraft.setScreen` is `Minecraft.gui.setScreen`.**
+- **Client-to-server payloads go through
+  `net.neoforged.neoforge.client.network.ClientPacketDistributor`**, not `PacketDistributor`.
+- **`ToolMaterial` replaced `Tiers`** with the same speed ladder, and `Tool`/`Tool.Rule`/
+  `Item.getDestroySpeed` are unchanged, so `FistTiers` ports as-is. `PlayerEvent.HarvestCheck`,
+  `PlayerEvent.BreakSpeed` and `BlockDropsEvent` also survived with the same accessors.
+- **`AdaptionEvents` names differ from 1.21.1**: `sync` (not `syncAdaption`) and `completeTask`
+  (not `grantConceptLevel`). Both are public for the fist.
+- **The gametest framework was rewritten and the 38 tests from `main` are NOT ported.** No
+  `@GameTest`/`@GameTestHolder` exists; tests are `GameTestInstance`s registered via the mod-bus
+  `RegisterGameTestsEvent`. See DEVELOPMENT_PLAN.md Phase 15. This branch therefore has no
+  automated coverage — do not treat a green build as a green suite.
+- **No gametest/lint task exists on this branch**, unlike `main`. `./gradlew build` only compiles.

@@ -50,6 +50,12 @@ public final class AdaptationRegistry {
         register(AdaptationDefinition.oneTime("Combat_SkillIssue", AdaptationDomain.COMBAT));
         register(AdaptationDefinition.oneTime("Percep_SteadyGaze", AdaptationDomain.PERCEPTION));
 
+        // ---- Fist Mastery: the adaptation to breaking, plus its material tiers ----
+        for (int i = 0; i < ru.adaptionwheel.category.FistTiers.TIER_COUNT; i++) {
+            register(AdaptationDefinition.leveled(ru.adaptionwheel.category.FistTiers.concept(i),
+                    AdaptationDomain.MINING));
+        }
+
         // ---- Environmental one-time adaptations ----
         for (String id : new String[]{
                 "Env_Lava", "Env_Drowning", "Env_Thorns", "Env_Darkness",
@@ -72,6 +78,8 @@ public final class AdaptationRegistry {
         register(AdaptationDefinition.oneTime("Mutation_Thermal", AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime("Mutation_Aquatic", AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime("Mutation_Impact", AdaptationDomain.SPECIAL));
+        register(AdaptationDefinition.oneTime(ru.adaptionwheel.category.Concepts.MUTATION_FIST,
+                AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime("Dimension_Destroy", AdaptationDomain.SPECIAL));
     }
 

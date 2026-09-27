@@ -25,6 +25,16 @@ public final class AdaptionKeybinds {
             InputConstants.KEY_K, // 26.3 uses SDL scancodes (GLFW is gone)
             CATEGORY);
 
+    /**
+     * Instabreak stance toggle. Only meaningful once the fist has reached Netherite level 8;
+     * the server re-validates the request either way.
+     */
+    public static final KeyMapping TOGGLE_INSTABREAK_KEY = new KeyMapping(
+            "key.adaptionwheel.toggle_instabreak",
+            InputConstants.Type.KEYBOARD,
+            InputConstants.KEY_G, // 26.3 uses SDL scancodes (GLFW is gone)
+            CATEGORY);
+
     private AdaptionKeybinds() {
     }
 
@@ -32,6 +42,7 @@ public final class AdaptionKeybinds {
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.registerCategory(CATEGORY);
         event.register(OPEN_SCREEN_KEY);
+        event.register(TOGGLE_INSTABREAK_KEY);
     }
 
     /** Translated name of the bound key, or null when unbound. Client only. */

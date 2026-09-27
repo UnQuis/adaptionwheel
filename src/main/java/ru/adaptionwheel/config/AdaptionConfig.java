@@ -20,6 +20,9 @@ public final class AdaptionConfig {
     private static final double[] DROP_RATE_KILLS = {1, 5, 10, 30, 100, 300, 500, 1000};
 
     // ---- General ----
+    /** One cost multiplier per fist material; a wrong-length user list is repaired against this. */
+    private static final double[] DEFAULT_FIST_TIER_COST = {1.0, 1.5, 2.5, 4.0, 5.0};
+
     public static final ModConfigSpec.ConfigValue<Integer> MAX_SIMULTANEOUS_ADAPTATIONS;
     public static final ModConfigSpec.ConfigValue<Integer> ADAPTATION_HEAL_AMOUNT;
     public static final ModConfigSpec.ConfigValue<Boolean> RESET_ADAPTATIONS_ON_DEATH;
@@ -58,6 +61,22 @@ public final class AdaptionConfig {
 
     // ---- Combat scaling ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> COOLDOWN_RECOVERY_LEVELS;
+
+    // ---- Fist Mastery (adaptation to breaking) ----
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_HARVEST_WITHOUT_TOOL;
+    public static final ModConfigSpec.ConfigValue<List<? extends Double>> FIST_TIER_COST_MULTIPLIER;
+    public static final ModConfigSpec.ConfigValue<Double> FIST_SPEED_SCALE;
+    public static final ModConfigSpec.ConfigValue<Integer> FIST_FIRST_LEVEL_BLOCKS;
+    public static final ModConfigSpec.ConfigValue<Double> FIST_LEVEL_COST_GROWTH;
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> FIST_INSTABREAK_SPEED;
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_DEFAULT_ON;
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_LUCK_ENABLED;
+
+    // ---- Client-side visuals ----
+    public static final ModConfigSpec.ConfigValue<Boolean> DARKNESS_GAMMA_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> DARKNESS_GAMMA;
 
     // ---- Impact Mastery stomp ----
     public static final ModConfigSpec.ConfigValue<Double> IMPACT_STOMP_MIN_FALL;
@@ -245,6 +264,41 @@ public final class AdaptionConfig {
                         "(Base water swim acceleration is ~0.02; NeoForge swim-speed attribute scales it.)")
                 .defineInRange("aquaticSwimSpeedBonus", 2.5, 0.0, 20.0);
 
+        s.comment("--- Fist Mastery (Mutation_Fist) ---").push("fistMastery");
+        FIST_ENABLED = s.comment("Fist Mastery: max Mine_Labor and break a stone block bare-handed to",
+                        "unlock a tool-less fist. The fist then advances through five materials",
+                        "(Wood > Stone > Iron > Diamond > Netherite), 8 levels each.")
+                .define("enabled", true);
+        FIST_HARVEST_WITHOUT_TOOL = s.comment("Let the fist actually collect the blocks it breaks.",
+                        "Off = the fist only mines faster but tool-gated blocks still drop nothing.")
+                .define("harvestWithoutTool", true);
+        FIST_FIRST_LEVEL_BLOCKS = s.comment("Blocks of the current tier's own material needed for its first level.")
+                .defineInRange("firstLevelBlocks", 10, 1, 100000);
+        FIST_LEVEL_COST_GROWTH = s.comment("Cost growth per level inside a tier (cost *= this each level).")
+                .defineInRange("levelCostGrowth", 1.35, 1.0, 10.0);
+        FIST_TIER_COST_MULTIPLIER = s.comment("Per-tier cost multiplier, Wood > Stone > Iron >",
+                        "Diamond > Netherite. Must have exactly one entry per material; a",
+                        "wrong-length list is ignored and repaired.")
+                .defineList("tierCostMultiplier", doubleList(DEFAULT_FIST_TIER_COST), AdaptionConfig::isDouble);
+        FIST_SPEED_SCALE = s.comment("Multiplier on the vanilla tool speed the fist copies.",
+                        "1.0 = exact parity with the matching tool; raise it to make the fist",
+                        "outrun its tool equivalent.")
+                .defineInRange("fistSpeedScale", 1.0, 0.1, 20.0);
+        FIST_INSTABREAK_ENABLED = s.comment("Netherite level 8 grants Instabreak: every breakable block is",
+                        "removed in a single tick. Toggled in game with the Instabreak keybind.")
+                .define("instabreakEnabled", true);
+        FIST_INSTABREAK_SPEED = s.comment("Mining speed used while Instabreak is active. Must exceed the",
+                        "hardest block's destroy speed by a wide margin (obsidian is 50).")
+                .defineInRange("instabreakSpeed", 20000.0, 100.0, 1000000.0);
+        FIST_INSTABREAK_DEFAULT_ON = s.comment("Whether Instabreak starts switched on the moment it is unlocked.")
+                .define("instabreakDefaultOn", false);
+        FIST_LUCK_ENABLED = s.comment("The fist's luck: every tier that much more of whatever an ore",
+                        "drops, and the same multiple of its experience. Scales 1/2/3/5/10x by",
+                        "tier and applies only to the blocks in the adaptionwheel:fist_luck",
+                        "block tag.")
+                .define("luckEnabled", true);
+        s.pop();
+
         s.comment("--- Skill Issue (Combat_SkillIssue) ---").push("skillIssue");
         SKILL_ISSUE_ENABLED = s.comment("Skill Issue: projectiles from adapted bows/crossbows/tridents gently home in,",
                         "but ONLY onto entities whose bodies lie close to the arrow's flight path.",
@@ -409,7 +463,52 @@ public final class AdaptionConfig {
 
         c.pop();
 
+        c.comment("--- Adaptation to Darkness (Env_Darkness) ---").push("darkness");
+        DARKNESS_GAMMA_ENABLED = c.comment("Raise the brightness instead of granting night vision.",
+                        "Night vision has a duration, so it has to be refreshed as it runs down and",
+                        "the screen blinks out and back once per window. Gamma cannot flicker. Your",
+                        "own Brightness setting is remembered and put back when the adaptation ends.")
+                .define("darknessGammaEnabled", true);
+        DARKNESS_GAMMA = c.comment("Brightness to use while adapted. 1.0 is the vanilla Brightness",
+                        "slider's maximum; the default slider value is 0.5.")
+                .defineInRange("darknessGamma", 1.0, 0.0, 1.0);
+        c.pop();
+
         CLIENT_SPEC = c.build();
+    }
+
+    /**
+     * Per-tier cost multiplier, repaired when the user's list is the wrong length.
+     *
+     * <p>{@code defineList} takes only an <em>element</em> validator — there is no length
+     * validator overload — so a stale list from an older material count is accepted and kept
+     * forever. Tier 0 still reads entry 0, but every later tier would read the wrong multiplier,
+     * so the size is checked here and the default restored once.</p>
+     */
+    public static double fistTierCost(int tier) {
+        List<? extends Double> configured = FIST_TIER_COST_MULTIPLIER.get();
+        if (configured.size() != ru.adaptionwheel.category.FistTiers.TIER_COUNT) {
+            repairTierCostTable();
+            configured = FIST_TIER_COST_MULTIPLIER.get();
+        }
+        int index = Math.max(0, Math.min(configured.size() - 1, tier));
+        return configured.get(index);
+    }
+
+    private static void repairTierCostTable() {
+        org.slf4j.LoggerFactory.getLogger("AdaptionWheel/Config").warn(
+                "mutations.fistMastery.tierCostMultiplier had {} entries but there are {} fist materials; "
+                        + "restoring the default",
+                FIST_TIER_COST_MULTIPLIER.get().size(), ru.adaptionwheel.category.FistTiers.TIER_COUNT);
+        FIST_TIER_COST_MULTIPLIER.set(doubleList(DEFAULT_FIST_TIER_COST));
+    }
+
+    /** Blocks of the current tier's material needed to go from {@code currentLevel} to the next. */
+    public static int fistBlocksForNextLevel(int tier, int currentLevel) {
+        double base = Math.max(1, FIST_FIRST_LEVEL_BLOCKS.get());
+        double growth = Math.max(1.0, FIST_LEVEL_COST_GROWTH.get());
+        double cost = base * Math.pow(growth, Math.max(0, currentLevel - 1)) * fistTierCost(tier);
+        return Math.max(1, (int) Math.round(cost));
     }
 
     private static List<? extends Double> doubleList(double[] values) {

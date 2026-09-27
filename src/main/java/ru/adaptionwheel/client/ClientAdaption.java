@@ -13,6 +13,12 @@ import java.util.Set;
 /** Client-side mirror of the server's adaptation state. */
 public final class ClientAdaption {
 
+    /** Broken-block tally for the fist, pushed immediately on each break by FistProgressPayload. */
+    public static int fistProgressDone;
+    public static int fistProgressTotal;
+    /** Instabreak stance; a local prediction the server validates. */
+    public static boolean instabreakActive;
+
     public static boolean wearingWheel;
     public static boolean adversityActive;
     public static int adaptedCount;
@@ -57,6 +63,9 @@ public final class ClientAdaption {
         EXISTENCE_PROGRESS.clear();
         EXISTENCE_PROGRESS.putAll(payload.existenceProgress());
         existenceThreshold = payload.existenceThreshold();
+        instabreakActive = payload.instabreakActive();
+        fistProgressDone = payload.fistProgressDone();
+        fistProgressTotal = payload.fistProgressTotal();
         syncedAtGameTime = currentGameTime();
     }
 
@@ -110,5 +119,18 @@ public final class ClientAdaption {
     private static long currentGameTime() {
         var mc = net.minecraft.client.Minecraft.getInstance();
         return mc.level != null ? mc.level.getGameTime() : syncedAtGameTime;
+    }
+
+    /**
+     * Highest fist tier reachable, or {@code -1} when locked. Shares one implementation with the
+     * server so the two can never disagree — the client is what accumulates break progress, so a
+     * disagreement makes the player mine at the wrong speed for a whole tier.
+     */
+    public static int fistTier() {
+        if (!wearingWheel || !ADAPTED.contains(ru.adaptionwheel.category.Concepts.MUTATION_FIST)) {
+            return -1;
+        }
+        return ru.adaptionwheel.category.FistTiers.reachTier(
+                tier -> LEVELS.getOrDefault(ru.adaptionwheel.category.FistTiers.concept(tier), 0));
     }
 }
