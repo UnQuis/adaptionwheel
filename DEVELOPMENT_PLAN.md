@@ -236,3 +236,43 @@ Verified on `main` by actually switching worlds (populated wheel in world A, dis
 world B, rejoin: `wearing=true adapted=1 levels=2` then `cleared ... 0 0` then one login sync
 `wearing=false adapted=0 levels=0`). On this branch it is verified by compilation and a clean
 server boot only, per the standing gap in Phase 15.
+
+## Phase 18 — Seven gaps the port had been hiding
+
+Two of these were reported; the other five came out of a method-level sweep of every java file the
+branches share. The port had been signed off as synchronised on the strength of a green build and a
+clean server boot, which on this branch proves very little — there is no test task here at all.
+
+- [x] `grantAllAdaptations` never granted the fist. Reported as "fists are not granted after eating
+      the all-adaptations item". The block granting `MUTATION_FIST` and the five `Fist_*` tiers was
+      simply not ported.
+- [x] `taskProgress` called `elapsedTicksSinceSync()`. Reported as "bars still move during
+      Adversity". **The helper it should have called, `progressElapsedTicks()`, had been copied to
+      26.3 and left unused** — the worst possible shape for a missing port, because it looks present.
+- [x] `Concepts.color()` did not route `"Fist_"`, so every fist concept fell through to
+      `COLOR_GENERIC` and lost its per-material colour. `FistTiers.color()` was already there.
+- [x] **The Dimension Slash had no rate limit at all** — neither the 20-tick `DIMENSION_SLASH_LAST`
+      map nor `claimDimensionSlash()`. A slash is itself a `playerAttack`, so it re-enters
+      `applyOffense` and re-rolls the same chance, and it is deferred through `server.execute`, so a
+      durable boss could chain slashes without bound.
+- [x] **The Offense damage formula was still the pre-fix one**: `damage * max(1, bonus / 10)` clamps
+      every level below 7 to a x1.0 multiplier, so Offense levels 1-6 did literally nothing, while
+      7-8 became a multiplier even though `flatDamageBonus` is documented as a flat add. This is
+      probably the most player-visible of the five.
+- [x] `debugReset` and `onPlayerDeath` cleared the wheel through `getWheelStack()`, which searches
+      the equipment slot and is therefore always empty when the wheel is not worn: the attachment
+      was cleared while every adaptation stayed on the item and returned on re-equip. Both now go
+      through `wipeWheelItem()`, preferring `data.equippedStack`.
+- [x] The respawn health restore had neither the `PENDING_RESPAWN_ARMED` gate nor the `applyStats`
+      call before reading the max. Without the first it fires on any later tick and undoes damage
+      taken since; without the second the target is computed from the **vanilla** max, so an adapted
+      player was restored to the wrong fraction of their health.
+
+Deliberately **not** ported, after checking rather than assuming: `SurfaceAdaptations.fistLevel` and
+`AdaptionConfig.fistTierSpeed` (dead code on main, zero callers), and
+`WheelData.migrateLegacyConcepts` (26.3 forked before the fist existed, so no 26.3 save can contain
+the `Fist_Copper` it migrates).
+
+The lesson is not "check harder" — it is that a green build on a branch with no test task is not
+evidence of parity, and that a copied but uncalled helper is worse than an absent one. The sweep is
+checked in as `tools/branch_parity.py`.

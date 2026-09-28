@@ -129,3 +129,24 @@ Phase 15/16 on `main` for the full reasoning.
 - **`Level.isClientSide` is a private final field on 26.3 with no accessor**, and
   `Entity.level()` returns `Level` — so the 1.21.1 guard `player.level().isClientSide` does not
   compile here. `instanceof ServerPlayer` already guarantees the server side; use that alone.
+
+## Branch parity: run `python3 tools/branch_parity.py`
+
+**Do not assume the branches are in sync.** The Phase 15/16 port was signed off as
+"synchronised" while **seven** main-side fixes had never landed — see DEVELOPMENT_PLAN.md Phase 18
+for the list. The worst of them was invisible: `progressElapsedTicks()` *had* been copied to 26.3,
+but `taskProgress` still called the pre-fix `elapsedTicksSinceSync()`, so every grep for the helper
+found it present.
+
+`tools/branch_parity.py` walks every java file the two branches share and diffs the **method
+names**, which is the cheap signal. Two deliberate shapes of result:
+
+- **Expected differences, do not "fix" them**: API renames (`syncAdaption` -> `sync`,
+  `grantConceptLevel` -> `completeTask`, `render` -> `extractRenderState`, `getTextureLocation` ->
+  `SlashRenderState`/`submit`), 26.3-only files (`CuriosCompat`, `WheelSlots`, `SlashRenderState`,
+  `SlimeBounceMixin`, `boundKeyName`), and code that is main-only *by design*
+  (`WheelData.migrateLegacyConcepts` — 26.3 forked before the fist existed, so no 26.3 save can hold
+  a `Fist_Copper` to migrate; `SurfaceAdaptations.fistLevel` and `AdaptionConfig.fistTierSpeed` —
+  dead code on main, zero callers).
+- **Real gaps**: a method on main with a 26.3 counterpart that was *supposed* to exist. Every one
+  found this way was a behaviour, not a refactor.
