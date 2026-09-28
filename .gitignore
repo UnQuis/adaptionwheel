@@ -5,6 +5,7 @@ out/
 
 # Dev runs & worlds
 runs/
+run/
 
 # IDE
 .idea/
