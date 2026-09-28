@@ -1906,11 +1906,16 @@ public class AdaptionEvents {
     @SubscribeEvent
     public static void onBreakSpeed(PlayerEvent.BreakSpeed event) {
         Player player = event.getEntity();
+        // Fist Mastery first: it replaces the bare-hand base speed with the equivalent tool's
+        // speed, so Mine_Labor's trained multiplier has to come after it to compose correctly.
+        float speed = FistMastery.breakSpeed(player, event.getNewSpeed(), event.getState());
         // Mine_Labor: trained mining speed bonus (any block, any conditions).
         int laborLevel = SurfaceAdaptations.conceptLevel(player, Concepts.MINE_LABOR);
         if (laborLevel > 0 && AdaptionConfig.ENABLE_MINING.get()) {
-            event.setNewSpeed(event.getNewSpeed()
-                    * (float) (1.0 + AdaptionConfig.miningSpeedBonus(laborLevel) / 100.0));
+            speed *= (float) (1.0 + AdaptionConfig.miningSpeedBonus(laborLevel) / 100.0);
+        }
+        if (speed != event.getNewSpeed()) {
+            event.setNewSpeed(speed);
         }
         if (!player.isEyeInFluid(net.minecraft.tags.FluidTags.WATER)) return;
         if (SurfaceAdaptations.hasLiquidAdaptation(player) && !player.onGround()) {

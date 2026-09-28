@@ -472,7 +472,7 @@ public final class AdaptionConfig {
         DARKNESS_LIGHTMAP_FLOOR = c.comment("How bright the darkest areas become. 1.0 is flat white and",
                         "washes out all shading; 0.7 reads as night vision. Anything above this",
                         "floor keeps its own brightness, so torches still read as brighter.")
-                .defineInRange("darknessLightmapFloor", 1.0, 0.0, 1.0);
+                .defineInRange("darknessLightmapFloor", 0.72, 0.0, 1.0);
         c.pop();
 
         CLIENT_SPEC = c.build();

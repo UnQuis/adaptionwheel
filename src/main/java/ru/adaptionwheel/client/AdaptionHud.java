@@ -42,7 +42,7 @@ public class AdaptionHud {
             return;
         }
         if (ClientAdaption.TASKS.isEmpty() && !ClientAdaption.adversityActive
-                && ClientAdaption.EXISTENCE_PROGRESS.isEmpty()) {
+                && ClientAdaption.EXISTENCE_PROGRESS.isEmpty() && !hasFistRow()) {
             return;
         }
         GuiGraphicsExtractor graphics = event.getGuiGraphics();
@@ -171,6 +171,7 @@ public class AdaptionHud {
         if (concept.startsWith("Env_")) return 10;
         if (concept.startsWith("Move_")) return 12;
         if (concept.startsWith("Mine_")) return 13;
+        if (concept.startsWith("Fist_")) return 11;
         if (concept.startsWith("Combat_")) return 14;
         if (concept.startsWith("Percep_")) return 15;
         if (concept.contains("Debuff")) return 20;

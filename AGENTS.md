@@ -150,3 +150,32 @@ names**, which is the cheap signal. Two deliberate shapes of result:
   dead code on main, zero callers).
 - **Real gaps**: a method on main with a 26.3 counterpart that was *supposed* to exist. Every one
   found this way was a behaviour, not a refactor.
+
+### The three parity tools, and what each one cannot see
+
+Run all three after touching anything that exists on both branches. Each found gaps the other
+two structurally cannot:
+
+- `tools/branch_parity.py` — diffs **method names** on shared files. Found the seven Phase 18 gaps.
+- `tools/branch_audit.py` — **call sites** (a mod method with N references on main and 0 on 26.3),
+  **config defaults** (same key, different value), **lang key→value** (not just key presence), and
+  **block tag contents**. Found `darknessLightmapFloor` defaulting to 1.0 instead of 0.72.
+- `tools/branch_bodies.py` — **statement-level** diff with comments and formatting stripped. This
+  is the one that finds the nastiest class: a method present on *both* branches whose body is still
+  the pre-fix version.
+
+**What none of them can see, and what bit twice:**
+
+- **A pre-fix body behind a present method.** `PlayerEvent.BreakSpeed` was subscribed on 26.3 and
+  non-empty — it was just the version from *before* the fist existed, so it never called
+  `FistMastery.breakSpeed`. Instabreak, and the fist's whole mining-speed multiplier, were dead and
+  both a method diff and a call-site diff called the file identical. Only reading the body found it.
+- **A copied-but-uncalled helper.** `progressElapsedTicks()` was present and unused while the caller
+  still used the old helper.
+- **An early return that omits a newly relevant clause.** The HUD bailed out when tasks, adversity
+  and existence progress were all empty — which is exactly the state where the fist row is the only
+  thing left to draw, so the bar never appeared. Adding a row means auditing the *conditions* that
+  decide whether drawing happens at all, not just the drawing code.
+
+So: a green build, a clean boot, and three green audits still do not mean the feature works on this
+branch. It has no test task; runtime behaviour needs a playtest.

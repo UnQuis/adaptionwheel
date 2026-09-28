@@ -135,8 +135,16 @@ public final class SurfaceAdaptations {
 
     /** Instabreak is unlocked by reaching Netherite level 8. */
     public static boolean instabreakUnlocked(Player player) {
-        return conceptLevel(player, ru.adaptionwheel.category.FistTiers
-                .concept(ru.adaptionwheel.category.FistTiers.TIER_COUNT - 1))
+        if (!ru.adaptionwheel.config.AdaptionConfig.FIST_INSTABREAK_ENABLED.get()) {
+            return false;
+        }
+        // The mutation gates the tiers: without it FistMastery.currentTier is -1 and the level
+        // lookup below would pass on a level that no longer means anything.
+        if (!has(player, Concepts.MUTATION_FIST)) {
+            return false;
+        }
+        int last = ru.adaptionwheel.category.FistTiers.TIER_COUNT - 1;
+        return conceptLevel(player, ru.adaptionwheel.category.FistTiers.concept(last))
                 >= ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
     }
 

@@ -276,3 +276,38 @@ the `Fist_Copper` it migrates).
 The lesson is not "check harder" — it is that a green build on a branch with no test task is not
 evidence of parity, and that a copied but uncalled helper is worse than an absent one. The sweep is
 checked in as `tools/branch_parity.py`.
+
+## Phase 19 — The fist's speed pipeline was never wired, and four more
+
+Reported as "Instabreak does not switch on, and therefore does not work". The cause is bigger than
+Instabreak.
+
+- [x] **`PlayerEvent.BreakSpeed` on 26.3 was the pre-fist version.** The handler existed, was
+      subscribed, and handled `Mine_Labor`, the `Env_Liquid` ×5 and `Mutation_Aquatic` ×1.5 — but it
+      never called `FistMastery.breakSpeed`, so `breakSpeed` was a method with no callers. That kills
+      Instabreak *and* the fist's whole mining-speed multiplier: on 26.3 the fist mined at bare-hand
+      speed at every tier. Wired in, with the fist applied first so `Mine_Labor`'s trained
+      multiplier composes on top of it rather than before it.
+- [x] **`instabreakUnlocked` had lost its guards** — no `FIST_INSTABREAK_ENABLED` check and no
+      `MUTATION_FIST` check, so the level test could pass on a level that no longer meant anything
+      (without the mutation, `currentTier` is −1).
+- [x] **The HUD never drew the fist row.** Its early return was
+      `TASKS.isEmpty() && !adversityActive && EXISTENCE_PROGRESS.isEmpty()` with no `!hasFistRow()`
+      clause — and "nothing else is running" is precisely the state where the fist bar is the only
+      thing left to show. The bar, including the per-tier `LUCK xN`, was invisible.
+- [x] **The fist row sorted to the bottom of the HUD.** `priority()` had no `Fist_` case, so it fell
+      through to the catch-all 50 instead of 11 — below `Move_`, `Mine_`, `Combat_`, `Percep_` and
+      most of the rest, where the "and N more" cutoff can hide it entirely.
+- [x] **`darknessLightmapFloor` defaulted to 1.0 here and 0.72 on main** — a regression introduced
+      in this port, washing the darkness adaptation out to flat white. Caught by comparing config
+      *defaults* rather than key presence.
+
+### The three tools, and the class of bug none of them can see
+
+`tools/branch_parity.py` (method names), `tools/branch_audit.py` (call sites, config defaults, lang
+values, tag contents) and `tools/branch_bodies.py` (statement-level diff, comments stripped) are all
+checked in. Between them they found eleven gaps. The instructive one is the BreakSpeed handler:
+the method existed on both branches, the file was subscribed on both, and every automated check
+called the file equivalent — because the *body* was the version from before the fist was ported.
+That is not something a name diff, a call count or a build can see, and it is why a build plus a
+clean boot is not evidence on a branch with no test task.
