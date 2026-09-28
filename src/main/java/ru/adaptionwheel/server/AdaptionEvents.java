@@ -89,6 +89,7 @@ public class AdaptionEvents {
 
     /** Health fraction at the moment of death; restored (scaled) once the wheel is worn again. */
     private static final Map<UUID, Float> PENDING_RESPAWN_HEALTH = new HashMap<>();
+    private static final Set<UUID> PENDING_RESPAWN_ARMED = new HashSet<>();
 
     /** XP levels charged for the anvil upgrade wooden wheel + gold ingot -> Mahoraga Wheel. */
     private static final long WHEEL_GOLD_COST = 10L;
@@ -101,6 +102,8 @@ public class AdaptionEvents {
      */
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("AdaptionWheel/Events");
 
+    private static final Map<UUID, Long> DIMENSION_SLASH_LAST = new HashMap<>();
+    private static final int DIMENSION_SLASH_COOLDOWN_TICKS = 20;
     private static final Map<UUID, long[]> WEARING_CACHE = new HashMap<>();
 
     /** Ticks a wheel mismatch has to persist before it counts as a real wheel swap. */
@@ -586,6 +589,16 @@ public class AdaptionEvents {
 
     // ================= OFFENSE =================
 
+    private static boolean claimDimensionSlash(ServerPlayer attacker) {
+        long now = attacker.level().getGameTime();
+        Long last = DIMENSION_SLASH_LAST.get(attacker.getUUID());
+        if (last != null && now - last < DIMENSION_SLASH_COOLDOWN_TICKS) {
+            return false;
+        }
+        DIMENSION_SLASH_LAST.put(attacker.getUUID(), now);
+        return true;
+    }
+
     private static void applyOffense(ServerPlayer attacker, LivingEntity target, LivingDamageEvent.Pre event) {
         PlayerAdaption data = data(attacker);
         // Unwrap multi-part bodies so hits on a Chaos Guardian part count for the guardian.
@@ -595,7 +608,10 @@ public class AdaptionEvents {
         float damage = event.getNewDamage();
 
         if (level > 0) {
-            float base = damage * Math.max(1f, (float) (AdaptionConfig.offenseDamageBonus(level) / 10.0));
+            // flatDamageBonus is documented as a FLAT add, so add it. The old form was
+            // `damage * max(1, bonus / 10)`, which clamped every level below 7 to a x1.0
+            // multiplier -- i.e. no bonus at all -- and turned 7-8 into a multiplier.
+            float base = damage + (float) AdaptionConfig.offenseDamageBonus(level);
             double armor = target.getArmorValue();
             base += (float) (armor * (AdaptionConfig.offenseArmorPen(level) / 100.0));
             double crit = AdaptionConfig.offenseCrit(level) + data.getAdaptCount() * AdaptionConfig.BONUS_CRIT_PCT.get();
@@ -605,7 +621,12 @@ public class AdaptionEvents {
             base *= (float) (1.0 + data.getAdaptCount() * AdaptionConfig.BONUS_DAMAGE_PCT.get() / 100.0);
             event.setNewDamage(base);
 
-            if (level >= 8 && attacker.getRandom().nextFloat() * 100f < AdaptionConfig.DIMENSION_SLASH_CHANCE.get()) {
+            // A Dimension Slash is itself a playerAttack, so it re-enters applyOffense and
+            // re-rolls the same chance. It is deferred via server.execute, so a durable boss
+            // could chain slashes without bound. One per second per attacker closes that off.
+            if (level >= 8 && attacker.getRandom().nextFloat() * 100f
+                    < AdaptionConfig.DIMENSION_SLASH_CHANCE.get()
+                    && claimDimensionSlash(attacker)) {
                 float slashDamage = Math.max(1f, (float) (target.getMaxHealth()
                         * AdaptionConfig.DIMENSION_SLASH_HP_PERCENT.get() / 100.0));
                 attacker.level().getServer().execute(() -> {
@@ -792,6 +813,7 @@ public class AdaptionEvents {
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         UUID id = event.getEntity().getUUID();
         PENDING_RESPAWN_HEALTH.remove(id);
+        PENDING_RESPAWN_ARMED.remove(id);
         PROXIMITY_HEAT_CACHE.remove(id);
         WEARING_CACHE.remove(id);
         NEARBY_BOSS_CACHE.remove(id);
@@ -814,10 +836,18 @@ public class AdaptionEvents {
         data.reset();
         data.wasWearing = wearingWheel(player);
         applyStats(player, data);
-        getWheelStack(player).ifPresent(stack -> stack.set(ModDataComponents.WHEEL_DATA.get(), WheelData.EMPTY));
+        wipeWheelItem(player, data);
     }
 
     // ================= TICK =================
+
+    /** Arms the pending health restore for exactly the first tick of the new life. */
+    @SubscribeEvent
+    public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (PENDING_RESPAWN_HEALTH.containsKey(event.getEntity().getUUID())) {
+            PENDING_RESPAWN_ARMED.add(event.getEntity().getUUID());
+        }
+    }
 
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
@@ -1065,14 +1095,26 @@ public class AdaptionEvents {
      * to the adapted max) once, while the wheel is worn.
      */
     private static void restorePendingRespawnHealth(ServerPlayer player) {
-        Float fraction = PENDING_RESPAWN_HEALTH.get(player.getUUID());
-        if (fraction == null) return;
+        // Exactly the first tick of the new life. Restoring on any later tick would also undo
+        // damage taken in between, and on a tick where applyStats has not run yet the target is
+        // computed from the vanilla max rather than the adapted one.
+        if (!PENDING_RESPAWN_ARMED.remove(player.getUUID())) {
+            return;
+        }
+        Float fraction = PENDING_RESPAWN_HEALTH.remove(player.getUUID());
+        if (fraction == null) {
+            return;
+        }
+        // Re-apply the modifiers first: the target is derived from the adapted max health.
+        applyStats(player, data(player));
         float max = player.getMaxHealth();
+        if (max <= 0f) {
+            return;
+        }
         float target = Mth.clamp(max * fraction, 1f, max);
         if (player.getHealth() < target - 0.01f) {
             player.setHealth(target);
         }
-        PENDING_RESPAWN_HEALTH.remove(player.getUUID());
     }
 
     /**
@@ -1641,6 +1683,16 @@ public class AdaptionEvents {
         data.addHistory(Concepts.MUTATION_AQUATIC);
         data.adapted.add(Concepts.MUTATION_IMPACT);
         data.addHistory(Concepts.MUTATION_IMPACT);
+        // Fist Mastery and its five material tiers. Without the mutation the tiers are inert
+        // (FistMastery.currentTier returns -1), so granting the tiers alone would show a bar
+        // that never fills -- the report was "the fists are not granted after eating the item".
+        data.adapted.add(Concepts.MUTATION_FIST);
+        data.addHistory(Concepts.MUTATION_FIST);
+        for (int tier = 0; tier < ru.adaptionwheel.category.FistTiers.TIER_COUNT; tier++) {
+            String concept = ru.adaptionwheel.category.FistTiers.concept(tier);
+            data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
+            data.addHistory(concept);
+        }
 
         for (AdaptionCategory category : AdaptionCategory.values()) {
             String concept = Concepts.type(category);
@@ -1796,11 +1848,30 @@ public class AdaptionEvents {
     }
 
     /** Full wipe of both player attachment and wheel item data. */
+    /**
+     * Clears the wheel's stored data, preferring the stack reference captured while worn.
+     *
+     * <p>{@code getWheelStack} searches the equipment slot, so on a player who is not wearing
+     * the wheel it is always empty and the reset would clear the attachment while leaving every
+     * adaptation sitting on the item -- which all comes back the moment it is re-equipped.
+     * {@code data.equippedStack} is the last stack seen worn, and unlike the slot lookup it is
+     * still valid off-equip.</p>
+     */
+    private static void wipeWheelItem(ServerPlayer player, PlayerAdaption data) {
+        ItemStack equipped = data.equippedStack;
+        if (equipped != null) {
+            equipped.set(ModDataComponents.WHEEL_DATA.get(), WheelData.EMPTY);
+        } else {
+            getWheelStack(player)
+                    .ifPresent(stack -> stack.set(ModDataComponents.WHEEL_DATA.get(), WheelData.EMPTY));
+        }
+    }
+
     public static void debugReset(ServerPlayer player) {
         PlayerAdaption d = data(player);
         d.reset();
         applyStats(player, d);
-        getWheelStack(player).ifPresent(stack -> stack.set(ModDataComponents.WHEEL_DATA.get(), WheelData.EMPTY));
+        wipeWheelItem(player, d);
         sync(player, d, false);
     }
 

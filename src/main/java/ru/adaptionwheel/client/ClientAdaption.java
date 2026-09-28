@@ -124,7 +124,7 @@ public final class ClientAdaption {
 
     /** Smooth task progress: advances locally between 1 Hz server syncs. */
     public static float taskProgress(AdaptionTask task) {
-        int elapsed = elapsedTicksSinceSync();
+        int elapsed = progressElapsedTicks();
         int remaining = Math.max(0, task.timer - elapsed);
         return 1f - (float) remaining / Math.max(1, task.maxTimer);
     }

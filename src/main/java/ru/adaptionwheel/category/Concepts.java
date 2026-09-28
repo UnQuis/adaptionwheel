@@ -141,6 +141,16 @@ public final class Concepts {
         return concept.startsWith("Offense_");
     }
 
+    /** Per-material color for a {@code Fist_*} concept; falls back to the mining gray. */
+    private static int fistColor(String tier) {
+        for (int i = 0; i < ru.adaptionwheel.category.FistTiers.TIER_COUNT; i++) {
+            if (ru.adaptionwheel.category.FistTiers.concept(i).equals("Fist_" + tier)) {
+                return ru.adaptionwheel.category.FistTiers.color(i);
+            }
+        }
+        return COLOR_MINING;
+    }
+
     /** Bar/text color for a concept, mirroring the original HUD colors. */
     public static int color(String concept) {
         if (concept.startsWith("Contact_")) return COLOR_CONTACT;
@@ -151,6 +161,7 @@ public final class Concepts {
         if (concept.startsWith("Env_")) return COLOR_ENV;
         if (concept.startsWith("Move_")) return COLOR_MOVEMENT;
         if (concept.startsWith("Mine_")) return COLOR_MINING;
+        if (concept.startsWith("Fist_")) return fistColor(concept.substring("Fist_".length()));
         if (concept.startsWith("Combat_")) return COLOR_COMBAT;
         if (concept.startsWith("Percep_")) return COLOR_PERCEPTION;
         if (concept.startsWith("Mutation_")) return COLOR_MUTATION;
