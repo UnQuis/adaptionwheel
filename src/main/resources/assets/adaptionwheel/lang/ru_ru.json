@@ -169,5 +169,14 @@
   "adaptionwheel.cmd.ungrant_absent": "%s не адаптировано у %s; снимать нечего.",
   "adaptionwheel.cmd.did_you_mean": "Возможно, имелось в виду: %s",
   "adaptionwheel.cmd.use_registry": "Команда /adaptionwheel registry покажет все адаптации.",
-  "adaptionwheel.cmd.looks_truncated": "'%s' похоже на концепт, обрезанный по двоеточию. Именованные концепты нужно брать в кавычки: /adaptionwheel grant \"%s\" <уровень>"
+  "adaptionwheel.cmd.looks_truncated": "'%s' похоже на концепт, обрезанный по двоеточию. Именованные концепты нужно брать в кавычки: /adaptionwheel grant \"%s\" <уровень>",
+  "adaptionwheel.tier.dormant": "Покой",
+  "adaptionwheel.tier.stirring": "Шёпот",
+  "adaptionwheel.tier.resonant": "Резонанс",
+  "adaptionwheel.tier.dominant": "Господство",
+  "adaptionwheel.tier.apex": "Предел",
+  "adaptionwheel.tier.infinite": "Бесконечность",
+  "adaptionwheel.msg.wheel_tier": "Колесо углубляется: %s",
+  "adaptionwheel.msg.wheel_tier_next": "Нужно ещё %s адаптаций, чтобы пробудить дальше",
+  "adaptionwheel.config.wheelTiers.enabled": "У колеса есть свои ступени. Каждая открывает ещё одно семейство адаптаций."
 }

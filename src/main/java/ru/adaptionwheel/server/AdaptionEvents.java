@@ -1136,6 +1136,8 @@ public class AdaptionEvents {
         }
         restorePendingRespawnHealth(player);
 
+        announceWheelTier(player, data);
+
         // ---- Sync every second (also persists tasks so a dropped wheel keeps running analyses) ----
         if (player.tickCount % 20 == 0) {
             saveToItem(player, data);
@@ -1613,6 +1615,15 @@ public class AdaptionEvents {
         // Adversity freezes the tasks that were already running. Do not let a
         // secondary trigger sneak a new task into the frozen set.
         if (data.adversityActive || data.isAdapted(concept) || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
+        // Wheel awakening: a family the wheel has not reached yet cannot be analysed at all.
+        // Placed here rather than at each of the dozen trigger sites because this is the one
+        // place every analysis in the mod goes through, so one check covers all of them — and a
+        // second site is a second chance to forget it.
+        if (AdaptionConfig.WHEEL_TIERS_ENABLED.get()
+                && !ru.adaptionwheel.category.WheelTier.familyUnlocked(
+                        concept, ru.adaptionwheel.category.WheelTier.forCount(data.getAdaptCount()))) {
+            return;
+        }
         if (data.tasks.size() >= AdaptionConfig.MAX_SIMULTANEOUS_ADAPTATIONS.get()) return;
         for (AdaptionTask task : data.tasks) {
             if (task.concept.equals(concept)) return;
@@ -2017,14 +2028,60 @@ public class AdaptionEvents {
 
     // ================= PASSIVE STATS =================
 
+    /**
+     * Announces a wheel awakening the moment it happens.
+     *
+     * <p>Reads the derived tier and compares it with the last announced one, so it fires on the
+     * tick the count crosses a threshold and never again until the next crossing. The threshold
+     * message names the family that just opened, because "you are now tier 3" tells the player
+     * nothing about what to go and do — "Contact defence is awake" does.</p>
+     */
+    private static void announceWheelTier(ServerPlayer player, PlayerAdaption data) {
+        if (!AdaptionConfig.WHEEL_TIERS_ENABLED.get() || !wearingWheel(player)) {
+            return;
+        }
+        int tier = ru.adaptionwheel.category.WheelTier.forCount(data.getAdaptCount());
+        if (tier == data.lastTierAnnounced) {
+            return;
+        }
+        // A wheel swap or a logout brings the marker back to -1 with the data intact, so the
+        // player is re-told their tier. That is wanted, not a repeat: they just put the wheel on.
+        data.lastTierAnnounced = tier;
+        if (tier <= 0) {
+            return;
+        }
+        int next = ru.adaptionwheel.category.WheelTier.nextThreshold(tier);
+        player.displayClientMessage(net.minecraft.network.chat.Component
+                .translatable("adaptionwheel.msg.wheel_tier",
+                        Component.translatable(ru.adaptionwheel.category.WheelTier.nameKey(tier)))
+                .withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD), false);
+        if (next > 0) {
+            player.displayClientMessage(net.minecraft.network.chat.Component
+                    .translatable("adaptionwheel.msg.wheel_tier_next", next)
+                    .withStyle(ChatFormatting.GRAY), false);
+        }
+        player.level().playSound(null, player.blockPosition(), ModSounds.REF.get(),
+                SoundSource.PLAYERS, 0.7f, 1.6f);
+        spawnWheelParticles(player, data);
+        sync(player, data, true);
+    }
+
     private static void applyStats(ServerPlayer player, PlayerAdaption data) {
         int count = data.getAdaptCount();
+        // Wheel awakening stacks on top of the per-adaptation bonus. Separate rather than folded
+        // into `count` so that a tier is a legible step up in its own right: reaching Resonant
+        // should feel like something, not like quietly owning six more adaptations.
+        int tier = AdaptionConfig.WHEEL_TIERS_ENABLED.get()
+                ? ru.adaptionwheel.category.WheelTier.forCount(count) : 0;
+        double tierBonus = ru.adaptionwheel.category.WheelTier.statBonus(tier);
         // Permanent (persisted) modifiers: transient ones vanish on logout, letting
         // the game clamp saved health down to the vanilla max before we re-apply.
         applyStat(player.getAttribute(Attributes.MAX_HEALTH), HP_MODIFIER,
-                count * AdaptionConfig.BONUS_HP_PCT.get() / 100.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+                (count * AdaptionConfig.BONUS_HP_PCT.get() / 100.0) + tierBonus,
+                AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
         applyStat(player.getAttribute(Attributes.ARMOR), ARMOR_MODIFIER,
-                count * AdaptionConfig.BONUS_ARMOR_FLAT.get(), AttributeModifier.Operation.ADD_VALUE);
+                count * AdaptionConfig.BONUS_ARMOR_FLAT.get() + (float) (tierBonus * 20.0),
+                AttributeModifier.Operation.ADD_VALUE);
         // Env_Liquid: comfortable swimming slightly BELOW land pace (tuned down per feedback;
         // Aquatic Mastery on top restores full dolphin-grade speed).
         boolean liquid = data.isAdapted(Concepts.ENV_LIQUID);

@@ -169,5 +169,14 @@
   "adaptionwheel.cmd.ungrant_absent": "%s is not adapted on %s; nothing to remove.",
   "adaptionwheel.cmd.did_you_mean": "Did you mean: %s",
   "adaptionwheel.cmd.use_registry": "Run /adaptionwheel registry to see every adaptation.",
-  "adaptionwheel.cmd.looks_truncated": "'%s' looks like a concept that was cut at a colon. Namespaced concepts must be quoted: /adaptionwheel grant \"%s\" <level>"
+  "adaptionwheel.cmd.looks_truncated": "'%s' looks like a concept that was cut at a colon. Namespaced concepts must be quoted: /adaptionwheel grant \"%s\" <level>",
+  "adaptionwheel.tier.dormant": "Dormant",
+  "adaptionwheel.tier.stirring": "Stirring",
+  "adaptionwheel.tier.resonant": "Resonant",
+  "adaptionwheel.tier.dominant": "Dominant",
+  "adaptionwheel.tier.apex": "Apex",
+  "adaptionwheel.tier.infinite": "Infinite",
+  "adaptionwheel.msg.wheel_tier": "The wheel deepens: %s",
+  "adaptionwheel.msg.wheel_tier_next": "Hold %s more adaptations to wake it further",
+  "adaptionwheel.config.wheelTiers.enabled": "The wheel has tiers of its own. Each reveals another family of adaptations."
 }

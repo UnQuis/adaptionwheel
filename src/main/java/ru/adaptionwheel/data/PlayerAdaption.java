@@ -65,6 +65,14 @@ public class PlayerAdaption {
     /** Tick accumulator for the Thermal Mastery heat-scaled regeneration. Not serialized. */
     public transient int thermalHealingTimer;
 
+    /**
+     * The last wheel tier this player was told about, so the awakening message fires once instead
+     * of every tick. Transient on purpose: the tier itself is derived from the adaptation count,
+     * so a fresh login must re-announce (that is correct -- you are being told what you woke up to),
+     * while a tick where nothing changed must not.
+     */
+    public transient int lastTierAnnounced = -1;
+
     /** Previous-tick fall distance for Impact Mastery stomp detection. Not serialized. */
     public transient float impactLastFallDistance;
     /** Whether the player was grounded last tick (Impact Mastery landing edge). Not serialized. */

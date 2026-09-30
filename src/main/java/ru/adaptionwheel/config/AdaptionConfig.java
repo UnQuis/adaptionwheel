@@ -55,6 +55,9 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_AQUATIC;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_IMPACT;
 
+    // ---- Wheel awakening (tiers) ----
+    public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_TIERS_ENABLED;
+
     // ---- Fist Mastery (adaptation to breaking) ----
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_ENABLED;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_HARVEST_WITHOUT_TOOL;
@@ -231,6 +234,15 @@ public final class AdaptionConfig {
         ENABLE_PERCEPTION = s.comment("Decode perception limitations: steady gaze removes the hurt-camera shake.")
                 .define("perception", true);
 
+        s.pop();
+
+        s.comment("--- Wheel Awakening ---").push("wheelTiers");
+        WHEEL_TIERS_ENABLED = s.comment("The wheel has tiers of its own, reached by holding more",
+                        "adaptations. Each tier REVEALS another family of adaptations -- Contact,",
+                        "Offense, Plunder, Existence -- so what the wheel can adapt to grows.",
+                        "A tier never takes anything away and never costs anything: the wheel is",
+                        "meant to be omnipotent, so a later tier is only ever a larger one.")
+                .define("enabled", true);
         s.pop();
 
         s.comment("--- Discomfort Scaling ---").push("discomfortScaling");
