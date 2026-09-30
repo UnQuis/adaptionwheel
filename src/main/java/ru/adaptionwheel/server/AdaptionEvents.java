@@ -225,6 +225,13 @@ public class AdaptionEvents {
      */
     @SubscribeEvent
     public static void onAttack(LivingIncomingDamageEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide
+                && SynergyEffects.tryAbsorbVoid(player, event.getSource())) {
+            // Unmaker: the void heals instead of hurting. Cancelled at the very top of hurt(),
+            // because anything cancelled later is undone by the reduction that follows it.
+            event.setCanceled(true);
+            return;
+        }
         if (event.getEntity().level().isClientSide) return;
         if (!(event.getEntity() instanceof ServerPlayer player) || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
@@ -391,6 +398,12 @@ public class AdaptionEvents {
             event.setNewDamage(newDamage * (1f - reduction));
             newDamage = event.getNewDamage();
         }
+
+        // Gravebloom: a quarter of what actually landed goes back into whatever did it. Placed
+        // after the reduction, so the returned share is of real damage rather than of the
+        // pre-mitigation number.
+        SynergyEffects.onHurtTaken(player, event.getSource().getEntity() instanceof LivingEntity attacker
+                ? attacker : null, newDamage);
 
         // ---- Healing on hit at level 5+ ----
         int bestLevel = 0;
@@ -666,6 +679,10 @@ public class AdaptionEvents {
             base *= (float) (1.0 + data.getAdaptCount() * AdaptionConfig.BONUS_DAMAGE_PCT.get() / 100.0);
             event.setNewDamage(base);
 
+            // Ashwalker / Glacierblood / Stormcall. After the offence maths has settled, so the
+            // bonuses ride the final damage instead of a pre-reduction estimate.
+            SynergyEffects.onHit(attacker, target, event.getSource());
+
             if (level >= 8 && attacker.getRandom().nextFloat() * 100f < AdaptionConfig.DIMENSION_SLASH_CHANCE.get()
                     && claimDimensionSlash(attacker)) {
                 float slashDamage = Math.max(1f, (float) (target.getMaxHealth()
@@ -859,6 +876,7 @@ public class AdaptionEvents {
         REFLECTING.clear();
         DIMENSION_SLASH_LAST.remove(id);
         FistMastery.forget(id);
+        SynergyEffects.forget(id);
     }
 
     @SubscribeEvent
@@ -1137,6 +1155,8 @@ public class AdaptionEvents {
         restorePendingRespawnHealth(player);
 
         announceWheelTier(player, data);
+        SynergyEffects.refresh(player, data);
+        SynergyEffects.tickPassive(player);
 
         // ---- Sync every second (also persists tasks so a dropped wheel keeps running analyses) ----
         if (player.tickCount % 20 == 0) {
@@ -1396,7 +1416,7 @@ public class AdaptionEvents {
     private static void tickImpactStomp(ServerPlayer player, PlayerAdaption data) {
         boolean grounded = player.onGround();
         float lastFall = data.impactLastFallDistance;
-        double minFall = AdaptionConfig.IMPACT_STOMP_MIN_FALL.get();
+        double minFall = SynergyEffects.impactMinFall(player, AdaptionConfig.IMPACT_STOMP_MIN_FALL.get());
         if (grounded && !data.impactWasOnGround && !player.isInWater() && !player.isInLava()
                 && lastFall >= minFall) {
             triggerImpactShockwave(player, lastFall);
@@ -1407,7 +1427,7 @@ public class AdaptionEvents {
 
     private static void triggerImpactShockwave(ServerPlayer player, float fallDistance) {
         ServerLevel level = (ServerLevel) player.level();
-        double radius = AdaptionConfig.IMPACT_STOMP_RADIUS.get();
+        double radius = SynergyEffects.impactRadius(player, AdaptionConfig.IMPACT_STOMP_RADIUS.get());
         float damage = Math.max(2f, (float) ((fallDistance - AdaptionConfig.IMPACT_STOMP_MIN_FALL.get() * 0.5)
                 * AdaptionConfig.IMPACT_STOMP_DAMAGE_PER_BLOCK.get()));
 
@@ -1656,7 +1676,12 @@ public class AdaptionEvents {
         }
         if (existing == null) {
             if (data.tasks.size() >= AdaptionConfig.MAX_SIMULTANEOUS_ADAPTATIONS.get()) return;
-            int timer = baseTicks + data.level(concept) * levelPenaltyTicks(concept);
+            // A shed concept re-analyses in a fraction of the time, because the wheel remembers
+            // what it already worked out. Applied here rather than at each trigger because this is
+            // the one place every analysis goes through.
+            int timer = (int) Math.max(1, Math.round(
+                    (baseTicks + data.level(concept) * levelPenaltyTicks(concept))
+                            * Shedding.reattachFactor(data, concept)));
             data.tasks.add(new AdaptionTask(concept, Math.max(1, timer), Math.max(1, timer)));
             player.sendSystemMessage(Component.translatable("adaptionwheel.msg.analyzing", Concepts.chatName(concept))
                     .withStyle(ChatFormatting.GOLD));

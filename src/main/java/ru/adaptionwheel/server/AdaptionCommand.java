@@ -188,6 +188,17 @@ public final class AdaptionCommand {
                                 .executes(ctx -> ungrant(ctx, EntityArgument.getPlayer(ctx, "target"),
                                         concept(ctx))))));
 
+        // Shedding is a player verb, not an operator tool: doing it to yourself needs no
+        // permission, and the named-target form below is what requires gamemaster level, so the
+        // two are gated separately rather than the whole node being off-limits.
+        root.then(net.minecraft.commands.Commands.literal("shed")
+                .then(conceptArg("concept")
+                        .executes(ctx -> shed(ctx, selfOrTarget(ctx, "target"), concept(ctx)))
+                        .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
+                                .requires(s -> s.hasPermission(2))
+                                .executes(ctx -> shed(ctx, EntityArgument.getPlayer(ctx, "target"),
+                                        concept(ctx))))));
+
         root.then(net.minecraft.commands.Commands.literal("analyze")
                 .requires(s -> s.hasPermission(2))
                 .then(conceptArg("concept")
@@ -396,6 +407,31 @@ public final class AdaptionCommand {
         ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.grant_all_done",
                 count, filterName, target.getName()), true);
         return count;
+    }
+
+    /**
+     * Gives one adaptation up for a Wild Release burst.
+     *
+     * <p>Reports the specific refusal rather than a generic failure, because the four ways this
+     * can be declined are four different things the player can do something about.</p>
+     */
+    private static int shed(CommandContext<CommandSourceStack> ctx, ServerPlayer target,
+                           String concept) {
+        Component truncated = truncationHint(concept);
+        if (truncated != null) {
+            ctx.getSource().sendFailure(truncated);
+            return 0;
+        }
+        Shedding.Refusal refusal = Shedding.shed(target, AdaptionEvents.dataOf(target), concept);
+        if (refusal != Shedding.Refusal.OK) {
+            ctx.getSource().sendFailure(Component.translatable(
+                    "adaptionwheel.cmd.shed_" + refusal.name().toLowerCase(java.util.Locale.ROOT),
+                    concept));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.shed_done",
+                concept, target.getName()), true);
+        return 1;
     }
 
     /** Removes a single adaptation, the counterpart to {@code grant}. */

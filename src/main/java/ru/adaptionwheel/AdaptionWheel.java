@@ -51,6 +51,7 @@ public class AdaptionWheel {
         ModDataComponents.COMPONENTS.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
         ModSounds.SOUNDS.register(modEventBus);
+        ru.adaptionwheel.effect.ModEffects.EFFECTS.register(modEventBus);
         ru.adaptionwheel.entity.ModEntities.ENTITIES.register(modEventBus);
         CREATIVE_TABS.register(modEventBus);
         modEventBus.addListener(this::commonSetup);

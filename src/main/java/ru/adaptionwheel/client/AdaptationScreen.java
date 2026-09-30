@@ -7,6 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import ru.adaptionwheel.adapt.AdaptationDomain;
 import ru.adaptionwheel.category.Concepts;
+import ru.adaptionwheel.category.Synergies;
 import ru.adaptionwheel.data.AdaptionTask;
 import ru.adaptionwheel.data.PlayerAdaption;
 
@@ -95,6 +96,18 @@ public class AdaptationScreen extends Screen {
     private int listH;
     private double scrollOffset;
 
+    /** Active synergy ids and the wrapped lines they render as, refreshed with the row list. */
+    private final List<String> activeSynergies = new ArrayList<>();
+    private final List<String> synergyLines = new ArrayList<>();
+
+    /**
+     * Vertical space the synergy strip occupies, 0 when none are active.
+     *
+     * <p>A field rather than a constant because it feeds {@link #layoutList()}: the list has to
+     * start below the strip, and the strip is a different height every time a synergy lights up.</p>
+     */
+    private int synergyStripH;
+
     public AdaptationScreen() {
         super(Component.translatable("adaptionwheel.gui.title"));
     }
@@ -116,7 +129,7 @@ public class AdaptationScreen extends Screen {
 
     private void layoutList() {
         listX = panelX + PAD;
-        listY = panelY + PAD + this.font.lineHeight + 2 + TAB_H + 4;
+        listY = panelY + PAD + this.font.lineHeight + 2 + synergyStripH + TAB_H + 4;
         listW = panelW - PAD * 2 - SCROLLER_W - 2;
         listH = panelY + panelH - FOOTER_H - PAD - listY;
     }
@@ -221,11 +234,18 @@ public class AdaptationScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         refreshIfStale();
+        layoutSynergies();
+        // Relaid out every frame rather than once in init(): a synergy can light up or go out
+        // while the screen is open, and a cached list rectangle would then either clip the last
+        // row or leave a gap. The scissor and the scroll bounds all read these fields, so one
+        // recompute keeps the whole frame consistent.
+        layoutList();
         // Same dim the vanilla options and container screens put over the world.
         g.fill(0, 0, this.width, this.height, 0xC0101010);
 
         panel(g, panelX, panelY, panelW, panelH);
         renderHeader(g);
+        renderSynergyStrip(g);
         renderTabs(g, mouseX, mouseY);
 
         g.enableScissor(listX, listY, listX + listW + SCROLLER_W, listY + listH);
@@ -248,6 +268,58 @@ public class AdaptationScreen extends Screen {
         String count = Component.translatable("adaptionwheel.gui.count", ClientAdaption.adaptedCount).getString();
         g.drawString(this.font, count,
                 panelX + panelW - PAD - this.font.width(count), panelY + PAD, TEXT_DIM, false);
+    }
+
+    /**
+     * Recomputes which synergies are active and wraps their names into lines.
+     *
+     * <p>Reads the same {@code Synergies.satisfied} the server uses, on the synced mirror, so the
+     * browser cannot show a synergy the server disagrees with. Called per frame because the input
+     * set can change at any time; the roster is ten entries, so the cost is not worth caching.</p>
+     */
+    private void layoutSynergies() {
+        activeSynergies.clear();
+        for (Synergies.Synergy synergy : Synergies.ALL) {
+            if (Synergies.satisfied(ClientAdaption.LEVELS, ClientAdaption.ADAPTED, synergy)) {
+                activeSynergies.add(synergy.id());
+            }
+        }
+        synergyLines.clear();
+        int avail = panelW - PAD * 2;
+        for (String id : activeSynergies) {
+            String name = Component.translatable("adaptionwheel.synergy." + id).getString();
+            if (synergyLines.isEmpty()) {
+                synergyLines.add(name);
+                continue;
+            }
+            int last = synergyLines.size() - 1;
+            String joined = synergyLines.get(last) + "  " + name;
+            if (this.font.width(joined) <= avail) {
+                synergyLines.set(last, joined);
+            } else {
+                synergyLines.add(name);
+            }
+        }
+        synergyStripH = synergyLines.isEmpty() ? 0 : synergyLines.size() * this.font.lineHeight;
+    }
+
+    /**
+     * The synergies the wearer currently holds, on one or two lines under the header.
+     *
+     * <p>A strip rather than a tab, because a synergy is not an adaptation: it has no level, is
+     * never adapted directly, and would look broken sitting in a list where everything else has
+     * one. Drawn in the same dim grey as the secondary text so it reads as annotation on the
+     * header rather than as a row of the list.</p>
+     */
+    private void renderSynergyStrip(GuiGraphics g) {
+        if (synergyLines.isEmpty()) {
+            return;
+        }
+        int y = panelY + PAD + this.font.lineHeight + 2;
+        for (String line : synergyLines) {
+            g.drawString(this.font, line, panelX + PAD, y, TEXT_DIM, false);
+            y += this.font.lineHeight;
+        }
     }
 
     private void renderTabs(GuiGraphics g, int mouseX, int mouseY) {

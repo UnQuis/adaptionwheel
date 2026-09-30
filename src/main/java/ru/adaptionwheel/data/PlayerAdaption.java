@@ -71,6 +71,16 @@ public class PlayerAdaption {
      * so a fresh login must re-announce (that is correct -- you are being told what you woke up to),
      * while a tick where nothing changed must not.
      */
+    /**
+     * Concepts whose adaptation was shed this session, and which therefore re-adapt faster.
+     *
+     * <p>Transient, and that is the design rather than an omission: shedding is meant to read as
+     * the wheel remembering what it already worked out, so the shortened re-analysis is a reward
+     * for having held the adaptation, not permanent state a player accumulates. Forgetting it on
+     * relog is also honest — the wheel forgets too.</p>
+     */
+    public transient final java.util.Set<String> recentlyShed = new java.util.HashSet<>();
+
     public transient int lastTierAnnounced = -1;
 
     /** Previous-tick fall distance for Impact Mastery stomp detection. Not serialized. */

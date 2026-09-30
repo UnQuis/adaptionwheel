@@ -58,6 +58,13 @@ public final class AdaptionConfig {
     // ---- Wheel awakening (tiers) ----
     public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_TIERS_ENABLED;
 
+    // ---- Shedding (voluntarily paying an adaptation away) ----
+    public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_BASE_TICKS;
+    public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_TICKS_PER_LEVEL;
+    public static final ModConfigSpec.ConfigValue<Double> SHEDDING_REATTACH_TIMER_FACTOR;
+    public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_PROTECT_TIER;
+
     // ---- Fist Mastery (adaptation to breaking) ----
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_ENABLED;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_HARVEST_WITHOUT_TOOL;
@@ -243,6 +250,30 @@ public final class AdaptionConfig {
                         "A tier never takes anything away and never costs anything: the wheel is",
                         "meant to be omnipotent, so a later tier is only ever a larger one.")
                 .define("enabled", true);
+        s.pop();
+
+        s.comment("--- Shedding ---").push("shedding");
+        SHEDDING_ENABLED = s.comment("A player may deliberately shed (give up) one of their adaptations",
+                        "for a Wild Release burst. Nothing is lost for good: the concept becomes",
+                        "re-analysable immediately, and at a fraction of the original time, because",
+                        "the wheel remembers what it already worked out. Shedding is a swap, not a price.",
+                        "Deliberately there is no downside anywhere in this feature: the point of the",
+                        "wheel is that it can do anything, so acting on it must never be a trap.")
+                .define("enabled", true);
+        SHEDDING_RELEASE_BASE_TICKS = s.comment("Wild Release duration at level 1, in ticks")
+                .defineInRange("releaseBaseTicks", 200, 20, 12000);
+        SHEDDING_RELEASE_TICKS_PER_LEVEL = s.comment("Extra Wild Release ticks per level of a shed",
+                        "leveled adaptation")
+                .defineInRange("releaseTicksPerLevel", 40, 0, 1200);
+        SHEDDING_REATTACH_TIMER_FACTOR = s.comment("How much of the original analysis time a re-shed",
+                        "concept costs the second time, as a fraction. 0.35 means it re-adapts in",
+                        "about a third of the time; 1.0 would make shedding pointless.")
+                .defineInRange("reattachTimerFactor", 0.35D, 0.05D, 1.0D);
+        SHEDDING_PROTECT_TIER = s.comment("Refuse a shed that would drop the player's wheel tier.",
+                        "Without this, shedding the last adaptation of a family re-locks that whole",
+                        "family -- taking something away, which this mod does not do. The refusal is",
+                        "reported as a message, not silently.")
+                .define("protectTier", true);
         s.pop();
 
         s.comment("--- Discomfort Scaling ---").push("discomfortScaling");
