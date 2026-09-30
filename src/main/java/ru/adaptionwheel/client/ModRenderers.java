@@ -16,6 +16,7 @@ public final class ModRenderers {
     @SubscribeEvent
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(ModEntities.CURSED_SLASH.get(), CursedSlashRenderer::new);
+        event.registerEntityRenderer(ModEntities.DISCIPLE.get(), DiscipleRenderer::new);
         event.registerEntityRenderer(ModEntities.SPATIAL_RIFT.get(), SpatialRiftRenderer::new);
     }
 }

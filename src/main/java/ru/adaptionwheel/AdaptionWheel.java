@@ -55,6 +55,7 @@ public class AdaptionWheel {
         ru.adaptionwheel.block.ModBlocks.BLOCKS.register(modEventBus);
         ru.adaptionwheel.block.ModBlocks.BLOCK_ITEMS.register(modEventBus);
         ru.adaptionwheel.entity.ModEntities.ENTITIES.register(modEventBus);
+        ru.adaptionwheel.entity.ModSpawnEggs.EGGS.register(modEventBus);
         CREATIVE_TABS.register(modEventBus);
         modEventBus.addListener(this::commonSetup);
     }
@@ -78,6 +79,7 @@ public class AdaptionWheel {
                 event.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
                 event.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());
                 event.accept(ru.adaptionwheel.block.ModBlocks.DOMAIN_STONE_ITEM.get());
+                event.accept(ru.adaptionwheel.entity.ModSpawnEggs.DISCIPLE_EGG.get());
             }
             if (event.getTabKey() == CreativeModeTabs.COMBAT) {
                 event.accept(ModItems.MAHORAGA_WHEEL_WOOD.get());

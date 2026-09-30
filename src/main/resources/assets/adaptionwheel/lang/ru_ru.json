@@ -235,5 +235,7 @@
   "adaptionwheel.config.ritual.totemAccelerationTicks": "Тиков за секунду за тотем.",
   "adaptionwheel.config.ritual.altarEnabled": "Алтарь Резонанса добавляет ступень рядом.",
   "adaptionwheel.config.ritual.domainStoneEnabled": "Камень Домена выдаёт адаптацию.",
-  "adaptionwheel.config.ritual.domainStoneCooldownSeconds": "Откатка на игрока, в секундах."
+  "adaptionwheel.config.ritual.domainStoneCooldownSeconds": "Откатка на игрока, в секундах.",
+  "entity.adaptionwheel.disciple": "Служитель Домена",
+  "item.adaptionwheel.disciple_spawn_egg": "Яйцо призыва Служителя Домена"
 }

@@ -235,5 +235,7 @@
   "adaptionwheel.config.ritual.totemAccelerationTicks": "Ticks removed per second, per totem.",
   "adaptionwheel.config.ritual.altarEnabled": "The Resonance Altar adds a rung nearby.",
   "adaptionwheel.config.ritual.domainStoneEnabled": "The Domain Stone hands out an adaptation.",
-  "adaptionwheel.config.ritual.domainStoneCooldownSeconds": "Per-player cooldown, in seconds."
+  "adaptionwheel.config.ritual.domainStoneCooldownSeconds": "Per-player cooldown, in seconds.",
+  "entity.adaptionwheel.disciple": "Disciple of the Domain",
+  "item.adaptionwheel.disciple_spawn_egg": "Disciple of the Domain Spawn Egg"
 }

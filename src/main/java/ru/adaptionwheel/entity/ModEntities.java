@@ -20,6 +20,18 @@ public class ModEntities {
                     .updateInterval(20)
                     .build("cursed_slash"));
 
+    /**
+     * The mod's only mob. Sized like a player so the humanoid model renders correctly, and
+     * deliberately a MONSTER category so it spawns in the dark like one and counts for a beacon.
+     */
+    public static final DeferredHolder<EntityType<?>, EntityType<DiscipleEntity>> DISCIPLE =
+            ENTITIES.register("disciple", () -> EntityType.Builder.<DiscipleEntity>of(
+                            DiscipleEntity::new, MobCategory.MONSTER)
+                    .sized(0.6f, 1.95f)
+                    .clientTrackingRange(8)
+                    .fireImmune()
+                    .build("disciple"));
+
     public static final DeferredHolder<EntityType<?>, EntityType<SpatialRiftProjectile>> SPATIAL_RIFT =
             ENTITIES.register("spatial_rift", () -> EntityType.Builder.<SpatialRiftProjectile>of(
                             SpatialRiftProjectile::new, MobCategory.MISC)
