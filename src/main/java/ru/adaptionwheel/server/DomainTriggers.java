@@ -55,6 +55,17 @@ public final class DomainTriggers {
             ru.adaptionwheel.server.FistMastery.onHandBreak(player, AdaptionEvents.dataOf(player),
                     event.getState());
         }
+
+        // Astral Mine: a broken block pays a little back, for any break -- not just the
+        // bare-handed ones the fist cares about, since a synergy is not a fist variant.
+        //
+        // Found by tools/branch_bodies.py, which is the third time that tool has earned its place:
+        // SynergyEffects and the whole synergy roster were on this branch, the browser showed
+        // Astral Mine as active, and the only thing missing was the one call that pays it out. A
+        // method-name diff and a call-site diff both called the file complete.
+        if (!player.isCreative() && !player.isSpectator()) {
+            ru.adaptionwheel.server.SynergyEffects.onBlockBroken(player, event.getState());
+        }
     }
 
     @SubscribeEvent
