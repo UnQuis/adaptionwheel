@@ -22,6 +22,19 @@ public class MahoragaWheelItem extends Item {
 
     public static final String WHEEL_SLOT = "wheel";
 
+    /**
+     * Whether this stack is one of the wheels, wooden or not.
+     *
+     * <p>Exists because two places now need the answer from an arbitrary stack rather than from
+     * the registry: adaptation transfer keys off what is in the hand, and asking by item identity
+     * would silently exclude the wooden wheel, which carries the same data component and is the
+     * very first thing a player makes.</p>
+     */
+    public static boolean isWheel(net.minecraft.world.item.ItemStack stack) {
+        return stack != null && (stack.is(ModItems.MAHORAGA_WHEEL.get())
+                || stack.is(ModItems.MAHORAGA_WHEEL_WOOD.get()));
+    }
+
     public MahoragaWheelItem(Properties properties) {
         super(properties);
     }

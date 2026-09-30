@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " S ",
+    "SGS",
+    " S "
+  ],
+  "key": {
+    "S": "minecraft:stick",
+    "G": "#minecraft:logs"
+  },
+  "result": {
+    "id": "adaptionwheel:wheel_totem",
+    "count": 1
+  }
+}

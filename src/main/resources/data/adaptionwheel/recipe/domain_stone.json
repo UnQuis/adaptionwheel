@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "ODO",
+    "OAO",
+    "ODO"
+  ],
+  "key": {
+    "O": "minecraft:obsidian",
+    "D": "minecraft:amethyst_shard",
+    "A": "minecraft:gold_block"
+  },
+  "result": {
+    "id": "adaptionwheel:domain_stone",
+    "count": 1
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " I ",
+    "IAI",
+    " I "
+  ],
+  "key": {
+    "I": "minecraft:gold_ingot",
+    "A": "minecraft:amethyst_block"
+  },
+  "result": {
+    "id": "adaptionwheel:resonance_altar",
+    "count": 1
+  }
+}

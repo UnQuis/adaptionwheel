@@ -5,6 +5,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -54,7 +55,15 @@ public class AdaptionWheel {
         ModDataComponents.COMPONENTS.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
         ModSounds.SOUNDS.register(modEventBus);
+        ru.adaptionwheel.effect.ModEffects.EFFECTS.register(modEventBus);
+        ru.adaptionwheel.block.ModBlocks.BLOCKS.register(modEventBus);
+        ru.adaptionwheel.block.ModBlocks.BLOCK_ITEMS.register(modEventBus);
+        // The entity register must come before the spawn-egg register: 26.3's SpawnEggItem reads
+        // the mob out of the ENTITY_DATA component written at supplier time, so reversing these
+        // two lines makes the boot fail on a missing entity type.
         ru.adaptionwheel.entity.ModEntities.ENTITIES.register(modEventBus);
+        ru.adaptionwheel.entity.ModSpawnEggs.EGGS.register(modEventBus);
+        ru.adaptionwheel.advancement.AdaptationTrigger.TRIGGERS.register(modEventBus);
         CREATIVE_TABS.register(modEventBus);
         modEventBus.addListener(this::commonSetup);
     }
@@ -71,6 +80,17 @@ public class AdaptionWheel {
 
         @SubscribeEvent
         public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {
+            if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
+                // The ritual set, in the order it becomes useful rather than alphabetically:
+                // light it, speed an analysis, raise the buff, then the one that gives.
+                event.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
+                event.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
+                event.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());
+                event.accept(ru.adaptionwheel.block.ModBlocks.DOMAIN_STONE_ITEM.get());
+            }
+            if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) {
+                event.accept(ru.adaptionwheel.entity.ModSpawnEggs.DISCIPLE_EGG.get());
+            }
             if (event.getTabKey() == COMBAT_TAB) {
                 event.accept(ModItems.MAHORAGA_WHEEL_WOOD.get());
                 event.accept(ModItems.MAHORAGA_WHEEL.get());

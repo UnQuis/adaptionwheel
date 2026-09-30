@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:end_crystal"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.transcendent.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.transcendent.desc"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "any": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Dimension_Destroy"
+      }
+    }
+  },
+  "parent": "adaptionwheel:hundred"
+}

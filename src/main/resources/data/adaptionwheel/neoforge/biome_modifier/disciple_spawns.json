@@ -1,0 +1,11 @@
+{
+  "type": "neoforge:add_spawns",
+  "biomes": "#adaptionwheel:dark",
+  "spawners": [
+    {
+      "type": "adaptionwheel:disciple",
+      "count": 1,
+      "weight": 8
+    }
+  ]
+}

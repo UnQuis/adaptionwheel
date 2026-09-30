@@ -220,6 +220,13 @@ public class AdaptionEvents {
      */
     @SubscribeEvent
     public static void onAttack(LivingIncomingDamageEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player
+                && SynergyEffects.tryAbsorbVoid(player, event.getSource())) {
+            // Unmaker: the void heals instead of hurting. Cancelled at the very top of hurt(),
+            // because anything cancelled later is undone by the reduction that follows it.
+            event.setCanceled(true);
+            return;
+        }
         if (event.getEntity().level().isClientSide()) return;
         if (!(event.getEntity() instanceof ServerPlayer player) || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
@@ -372,6 +379,12 @@ public class AdaptionEvents {
             event.setNewDamage(newDamage * (1f - reduction));
             newDamage = event.getNewDamage();
         }
+
+        // Gravebloom: a quarter of what actually landed goes back into whatever did it. Placed
+        // after the reduction, so the returned share is of real damage rather than of the
+        // pre-mitigation number.
+        SynergyEffects.onHurtTaken(player, event.getSource().getEntity() instanceof LivingEntity attacker
+                ? attacker : null, newDamage);
 
         // ---- Healing on hit at level 5+ ----
         int bestLevel = 0;
@@ -621,6 +634,11 @@ public class AdaptionEvents {
             base *= (float) (1.0 + data.getAdaptCount() * AdaptionConfig.BONUS_DAMAGE_PCT.get() / 100.0);
             event.setNewDamage(base);
 
+            // Ashwalker / Glacierblood / Stormcall. After the offence maths has settled, so the
+            // bonuses ride the final damage instead of a pre-reduction estimate.
+            SynergyEffects.onHit(attacker, target, event.getSource());
+
+
             // A Dimension Slash is itself a playerAttack, so it re-enters applyOffense and
             // re-rolls the same chance. It is deferred via server.execute, so a durable boss
             // could chain slashes without bound. One per second per attacker closes that off.
@@ -818,6 +836,12 @@ public class AdaptionEvents {
         WEARING_CACHE.remove(id);
         NEARBY_BOSS_CACHE.remove(id);
         LAST_VOICE_TICK.remove(id);
+        // Per-session caches owned by the new content. All three are static maps keyed by player
+        // and none of them is adaptation data, so none of it may outlive the session -- a leaked
+        // entry is a permanently buffed offline player or a stone that stays on cooldown.
+        SynergyEffects.forget(id);
+        ru.adaptionwheel.block.DomainStoneBlock.forget(id);
+        FistMastery.forget(id);
     }
 
     @SubscribeEvent
@@ -1082,8 +1106,26 @@ public class AdaptionEvents {
         }
         restorePendingRespawnHealth(player);
 
+        announceWheelTier(player, data);
+        SynergyEffects.refresh(player, data);
+        SynergyEffects.tickPassive(player);
+
         // ---- Sync every second (also persists tasks so a dropped wheel keeps running analyses) ----
         if (player.tickCount % 20 == 0) {
+            // One cube scan, three consumers. The ritual auras, the Resonance rung and the
+            // neighbouring-player count all want the same volume around this player, and
+            // scanning it once per second per wearer is cheap; scanning it three times is not.
+            RitualAuras.Auras auras = RitualAuras.scan(player);
+            if (auras.any()) {
+                RitualAuras.apply(player, data, auras);
+            }
+            Resonance.tick(player, auras);
+            // Advancement criteria, evaluated against the same state as everything else above.
+            // Polling rather than event-driven, so a login with a deep wheel, a shed, a transfer
+            // and a tier crossing all light up without four separate call sites.
+            ru.adaptionwheel.advancement.AdaptationTrigger.evaluate(player, data);
+            // saveToItem after the totem acceleration, so an accelerated timer is the one that
+            // gets persisted rather than being overwritten a tick later.
             saveToItem(player, data);
             sync(player, data, wearing);
         }
@@ -1334,7 +1376,7 @@ public class AdaptionEvents {
     private static void tickImpactStomp(ServerPlayer player, PlayerAdaption data) {
         boolean grounded = player.onGround();
         float lastFall = data.impactLastFallDistance;
-        double minFall = AdaptionConfig.IMPACT_STOMP_MIN_FALL.get();
+        double minFall = SynergyEffects.impactMinFall(player, AdaptionConfig.IMPACT_STOMP_MIN_FALL.get());
         if (grounded && !data.impactWasOnGround && !player.isInWater() && !player.isInLava()
                 && lastFall >= minFall) {
             triggerImpactShockwave(player, lastFall);
@@ -1345,7 +1387,7 @@ public class AdaptionEvents {
 
     private static void triggerImpactShockwave(ServerPlayer player, float fallDistance) {
         ServerLevel level = (ServerLevel) player.level();
-        double radius = AdaptionConfig.IMPACT_STOMP_RADIUS.get();
+        double radius = SynergyEffects.impactRadius(player, AdaptionConfig.IMPACT_STOMP_RADIUS.get());
         float damage = Math.max(2f, (float) ((fallDistance - AdaptionConfig.IMPACT_STOMP_MIN_FALL.get() * 0.5)
                 * AdaptionConfig.IMPACT_STOMP_DAMAGE_PER_BLOCK.get()));
 
@@ -1544,6 +1586,15 @@ public class AdaptionEvents {
         // Adversity freezes the tasks that were already running. Do not let a
         // secondary trigger sneak a new task into the frozen set.
         if (data.adversityActive || data.isAdapted(concept) || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
+        // Wheel awakening: a family the wheel has not reached yet cannot be analysed at all.
+        // Placed here rather than at each of the dozen trigger sites because this is the one
+        // place every analysis in the mod goes through, so one check covers all of them — and a
+        // second site is a second chance to forget it.
+        if (AdaptionConfig.WHEEL_TIERS_ENABLED.get()
+                && !ru.adaptionwheel.category.WheelTier.familyUnlocked(
+                        concept, ru.adaptionwheel.category.WheelTier.forCount(data.getAdaptCount()))) {
+            return;
+        }
         if (data.tasks.size() >= AdaptionConfig.MAX_SIMULTANEOUS_ADAPTATIONS.get()) return;
         for (AdaptionTask task : data.tasks) {
             if (task.concept.equals(concept)) return;
@@ -1576,7 +1627,12 @@ public class AdaptionEvents {
         }
         if (existing == null) {
             if (data.tasks.size() >= AdaptionConfig.MAX_SIMULTANEOUS_ADAPTATIONS.get()) return;
-            int timer = baseTicks + data.level(concept) * levelPenaltyTicks(concept);
+            // A shed concept re-analyses in a fraction of the time, because the wheel remembers
+            // what it already worked out. Applied here rather than at each trigger because this is
+            // the one place every analysis goes through.
+            int timer = (int) Math.max(1, Math.round(
+                    (baseTicks + data.level(concept) * levelPenaltyTicks(concept))
+                            * Shedding.reattachFactor(data, concept)));
             data.tasks.add(new AdaptionTask(concept, Math.max(1, timer), Math.max(1, timer)));
             player.sendSystemMessage(Component.translatable("adaptionwheel.msg.analyzing", Concepts.chatName(concept))
                     .withStyle(ChatFormatting.GOLD));
@@ -1944,8 +2000,52 @@ public class AdaptionEvents {
 
     // ================= PASSIVE STATS =================
 
+    /**
+     * Announces a wheel awakening the moment it happens.
+     *
+     * <p>Reads the derived tier and compares it with the last announced one, so it fires on the
+     * tick the count crosses a threshold and never again until the next crossing. The threshold
+     * message names the family that just opened, because "you are now tier 3" tells the player
+     * nothing about what to do — "Contact defence is awake" does.</p>
+     */
+    private static void announceWheelTier(ServerPlayer player, PlayerAdaption data) {
+        if (!AdaptionConfig.WHEEL_TIERS_ENABLED.get() || !ru.adaptionwheel.SurfaceAdaptations.wearingWheel(player)) {
+            return;
+        }
+        int tier = ru.adaptionwheel.category.WheelTier.forCount(data.getAdaptCount());
+        if (tier == data.lastTierAnnounced) {
+            return;
+        }
+        // A wheel swap or a logout brings the marker back to -1 with the data intact, so the
+        // player is re-told their tier. That is wanted, not a repeat: they just put the wheel on.
+        data.lastTierAnnounced = tier;
+        if (tier <= 0) {
+            return;
+        }
+        int next = ru.adaptionwheel.category.WheelTier.nextThreshold(tier);
+        player.sendSystemMessage(net.minecraft.network.chat.Component
+                .translatable("adaptionwheel.msg.wheel_tier",
+                        Component.translatable(ru.adaptionwheel.category.WheelTier.nameKey(tier)))
+                .withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD), false);
+        if (next > 0) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component
+                    .translatable("adaptionwheel.msg.wheel_tier_next", next)
+                    .withStyle(ChatFormatting.GRAY), false);
+        }
+        player.level().playSound(null, player.blockPosition(), ModSounds.REF.get(),
+                SoundSource.PLAYERS, 0.7f, 1.6f);
+        spawnWheelParticles(player, data);
+        sync(player, data, true);
+    }
+
     private static void applyStats(ServerPlayer player, PlayerAdaption data) {
         int count = data.getAdaptCount();
+        // Wheel awakening stacks on top of the per-adaptation bonus. Separate rather than folded
+        // into `count` so that a tier is a legible step up in its own right: reaching Resonant
+        // should feel like something, not like quietly owning six more adaptations.
+        int tier = AdaptionConfig.WHEEL_TIERS_ENABLED.get()
+                ? ru.adaptionwheel.category.WheelTier.forCount(count) : 0;
+        double tierBonus = ru.adaptionwheel.category.WheelTier.statBonus(tier);
         // Permanent (persisted) modifiers: transient ones vanish on logout, letting
         // the game clamp saved health down to the vanilla max before we re-apply.
         applyStat(player.getAttribute(Attributes.MAX_HEALTH), HP_MODIFIER,

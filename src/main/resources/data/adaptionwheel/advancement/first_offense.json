@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:iron_sword"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.first_offense.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.first_offense.desc"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "criteria": {
+    "any": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Offense_"
+      }
+    }
+  },
+  "parent": "adaptionwheel:tier_dominant"
+}

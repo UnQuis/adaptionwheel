@@ -1,0 +1,27 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:netherite_ingot"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.instrebreak.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.instrebreak.desc"
+    },
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "criteria": {
+    "any": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Fist_Netherite",
+        "min_level": 8
+      }
+    }
+  },
+  "parent": "adaptionwheel:fist_iron"
+}

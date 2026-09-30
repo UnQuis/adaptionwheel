@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:nether_star"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.tier.infinite.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.tier.infinite.desc"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "any": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "min_tier": 5
+      }
+    }
+  },
+  "parent": "adaptionwheel:tier_apex"
+}

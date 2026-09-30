@@ -1,0 +1,52 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:nether_star"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.mastery.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.mastery.desc"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "thermal": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Mutation_Thermal"
+      }
+    },
+    "aquatic": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Mutation_Aquatic"
+      }
+    },
+    "impact": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Mutation_Impact"
+      }
+    },
+    "fist": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Mutation_Fist"
+      }
+    }
+  },
+  "parent": "adaptionwheel:mutation_thermal",
+  "requirements": [
+    [
+      "thermal",
+      "aquatic",
+      "impact",
+      "fist"
+    ]
+  ]
+}

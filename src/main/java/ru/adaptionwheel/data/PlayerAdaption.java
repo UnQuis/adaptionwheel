@@ -37,7 +37,8 @@ public class PlayerAdaption {
             Codec.BOOL.fieldOf("adversityActive").forGetter(d -> d.adversityActive),
             Codec.FLOAT.fieldOf("targetRotation").forGetter(d -> d.targetRotation),
             Codec.FLOAT.fieldOf("wheelRotation").forGetter(d -> d.wheelRotation),
-            Codec.BOOL.optionalFieldOf("wasWearing", false).forGetter(d -> d.wasWearing)
+            Codec.BOOL.optionalFieldOf("wasWearing", false).forGetter(d -> d.wasWearing),
+            Codec.INT.optionalFieldOf("shedCount", 0).forGetter(d -> d.shedCount)
     ).apply(inst, PlayerAdaption::new));
 
     public static final Codec<PlayerAdaption> CODEC = MAP_CODEC.codec();
@@ -63,6 +64,33 @@ public class PlayerAdaption {
     public boolean wasWearing;
 
     /** The wheel stack that was equipped last tick — used to detect wheel swaps. Not serialized. */
+    /**
+     * The last wheel tier this player was told about, so the awakening message fires once instead
+     * of every tick. Transient on purpose: the tier itself is derived from the adaptation count,
+     * so a fresh login must re-announce (that is correct -- you are being told what you woke up
+     * to), while a tick where nothing changed must not.
+     */
+    public transient int lastTierAnnounced = -1;
+
+    /**
+     * Concepts whose adaptation was shed this session, and which therefore re-adapt faster.
+     *
+     * <p>Transient, and that is the design rather than an omission: shedding is meant to read as
+     * the wheel remembering what it already worked out, so the shortened re-analysis is a reward
+     * for having held the adaptation, not permanent state a player accumulates. Forgetting it on
+     * relog is also honest -- the wheel forgets too.</p>
+     */
+    public transient final java.util.Set<String> recentlyShed = new java.util.HashSet<>();
+
+    /**
+     * How many times this player has shed an adaptation, for their whole career.
+     *
+     * <p>Persisted on the player rather than the wheel, unlike everything else here: a shed is an
+     * act by a person, not a property of an object, and a wheel handed to a new owner should not
+     * arrive with the previous one's history already claimed.</p>
+     */
+    public int shedCount;
+
     public transient net.minecraft.world.item.ItemStack equippedStack;
     /** How many ticks in a row the equipped wheel differed from the remembered one. Not serialized. */
     public transient int wheelSwapMismatchTicks;
@@ -85,7 +113,8 @@ public class PlayerAdaption {
                           Map<String, Integer> existenceProgress,
                           int healingTimer, int adversityCooldownTimer,
                           int adversityTimer, boolean adversityActive, float targetRotation, float wheelRotation,
-                          boolean wasWearing) {
+                          boolean wasWearing, int shedCount) {
+        this.shedCount = shedCount;
         this.levels.putAll(levels);
         this.adapted.addAll(adapted);
         this.tasks.addAll(tasks);

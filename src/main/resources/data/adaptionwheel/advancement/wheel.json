@@ -1,0 +1,30 @@
+{
+  "display": {
+    "icon": {
+      "id": "adaptionwheel:mahoraga_wheel"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.wheel.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.wheel.desc"
+    },
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "criteria": {
+    "has": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "adaptionwheel:mahoraga_wheel"
+          }
+        ]
+      }
+    }
+  },
+  "parent": "adaptionwheel:root"
+}

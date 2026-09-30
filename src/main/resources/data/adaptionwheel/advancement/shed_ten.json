@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:beacon"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.shed_ten.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.shed_ten.desc"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "any": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "min_sheds": 10
+      }
+    }
+  },
+  "parent": "adaptionwheel:shed"
+}

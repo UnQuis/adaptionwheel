@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:heart_of_the_sea"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.mutation_aquatic.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.mutation_aquatic.desc"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "criteria": {
+    "any": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Mutation_Aquatic"
+      }
+    }
+  },
+  "parent": "adaptionwheel:tier_resonant"
+}

@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " A ",
+    "NGN",
+    " A "
+  ],
+  "key": {
+    "A": "minecraft:amethyst_shard",
+    "N": "minecraft:gold_nugget",
+    "G": "#minecraft:logs"
+  },
+  "result": {
+    "id": "adaptionwheel:adaptation_brazier",
+    "count": 1
+  }
+}

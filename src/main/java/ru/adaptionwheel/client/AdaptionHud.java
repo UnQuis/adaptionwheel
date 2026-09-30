@@ -58,7 +58,21 @@ public class AdaptionHud {
         graphics.pose().scale(scale, scale);
 
         // Header
-        graphics.text(font, Component.literal(">>> ADAPTATION_ANALYSIS"), 0, 0,
+        // Header. Carries the wheel tier, because the tier is the spine of the whole progression
+        // and there is no other place it appears outside the 3D model.
+        int wheelTier = ru.adaptionwheel.category.WheelTier.forCount(ClientAdaption.adaptedCount);
+        int nextTier = ru.adaptionwheel.category.WheelTier.nextThreshold(wheelTier);
+        String header = ">>> " + Component.translatable(
+                ru.adaptionwheel.category.WheelTier.nameKey(wheelTier)).getString()
+                .toUpperCase(java.util.Locale.ROOT) + "  " + wheelTier + "/"
+                + ru.adaptionwheel.category.WheelTier.maxTier();
+        if (nextTier > 0) {
+            header += "  (" + ClientAdaption.adaptedCount + "/" + nextTier + ")";
+        }
+        graphics.text(font, Component.literal(header), 0, 0,
+                withAlpha(ru.adaptionwheel.category.WheelTier.color(wheelTier),
+                        Math.min(100, opacity * 150 / 100)), true);
+        graphics.text(font, Component.literal("ADAPTATION_ANALYSIS"), 0, font.lineHeight,
                 withAlpha(HEADER_COLOR, Math.min(100, opacity * 150 / 100)), true);
 
         // Build row list: tasks + existence progress + adversity

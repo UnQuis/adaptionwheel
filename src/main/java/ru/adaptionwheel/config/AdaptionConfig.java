@@ -23,6 +23,33 @@ public final class AdaptionConfig {
     /** One cost multiplier per fist material; a wrong-length user list is repaired against this. */
     private static final double[] DEFAULT_FIST_TIER_COST = {1.0, 1.5, 2.5, 4.0, 5.0};
 
+    // ---- Wheel awakening ----
+    public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_TIERS_ENABLED;
+
+    // ---- Shedding (voluntarily paying an adaptation away) ----
+    public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_BASE_TICKS;
+    public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_TICKS_PER_LEVEL;
+    public static final ModConfigSpec.ConfigValue<Double> SHEDDING_REATTACH_TIMER_FACTOR;
+    public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_PROTECT_TIER;
+
+    // ---- Ritual blocks ----
+    public static final ModConfigSpec.ConfigValue<Boolean> BRAZIER_HEAL_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> BRAZIER_HEAL_PER_SECOND;
+    public static final ModConfigSpec.ConfigValue<Boolean> TOTEM_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Integer> TOTEM_ACCELERATION_TICKS;
+    public static final ModConfigSpec.ConfigValue<Boolean> ALTAR_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Boolean> DOMAIN_STONE_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Integer> DOMAIN_STONE_COOLDOWN_SECONDS;
+
+    // ---- Adaptation transfer ----
+    public static final ModConfigSpec.ConfigValue<Boolean> TRANSFER_ENABLED;
+
+    // ---- Resonance ----
+    public static final ModConfigSpec.ConfigValue<Boolean> RESONANCE_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> RESONANCE_BLOCKS;
+    public static final ModConfigSpec.ConfigValue<Boolean> RESONANCE_PARTICLES;
+
     public static final ModConfigSpec.ConfigValue<Integer> MAX_SIMULTANEOUS_ADAPTATIONS;
     public static final ModConfigSpec.ConfigValue<Integer> ADAPTATION_HEAL_AMOUNT;
     public static final ModConfigSpec.ConfigValue<Boolean> RESET_ADAPTATIONS_ON_DEATH;
@@ -232,6 +259,84 @@ public final class AdaptionConfig {
         ENABLE_PERCEPTION = s.comment("Decode perception limitations: steady gaze removes the hurt-camera shake.")
                 .define("perception", true);
 
+        s.pop();
+
+        s.comment("--- Wheel Awakening ---").push("wheelTiers");
+        WHEEL_TIERS_ENABLED = s.comment("The wheel has tiers of its own, reached by holding more",
+                        "adaptations. Each tier REVEALS another family of adaptations -- Contact,",
+                        "Offense, Plunder, Existence -- so what the wheel can adapt to grows.",
+                        "A tier never takes anything away and never costs anything: the wheel is",
+                        "meant to be omnipotent, so a later tier is only ever a larger one.")
+                .define("enabled", true);
+        s.pop();
+
+        s.comment("--- Shedding ---").push("shedding");
+        SHEDDING_ENABLED = s.comment("A player may deliberately shed (give up) one of their adaptations",
+                        "for a Wild Release burst. Nothing is lost for good: the concept becomes",
+                        "re-analysable immediately, and at a fraction of the original time, because",
+                        "the wheel remembers what it already worked out. Shedding is a swap, not a price.",
+                        "Deliberately there is no downside anywhere in this feature: the point of the",
+                        "wheel is that it can do anything, so acting on it must never be a trap.")
+                .define("enabled", true);
+        SHEDDING_RELEASE_BASE_TICKS = s.comment("Wild Release duration at level 1, in ticks")
+                .defineInRange("releaseBaseTicks", 200, 20, 12000);
+        SHEDDING_RELEASE_TICKS_PER_LEVEL = s.comment("Extra Wild Release ticks per level of a shed",
+                        "leveled adaptation")
+                .defineInRange("releaseTicksPerLevel", 40, 0, 1200);
+        SHEDDING_REATTACH_TIMER_FACTOR = s.comment("How much of the original analysis time a re-shed",
+                        "concept costs the second time, as a fraction. 0.35 means it re-adapts in",
+                        "about a third of the time; 1.0 would make shedding pointless.")
+                .defineInRange("reattachTimerFactor", 0.35D, 0.05D, 1.0D);
+        SHEDDING_PROTECT_TIER = s.comment("Refuse a shed that would drop the player's wheel tier.",
+                        "Without this, shedding the last adaptation of a family re-locks that whole",
+                        "family -- taking something away, which this mod does not do. The refusal is",
+                        "reported as a message, not silently.")
+                .define("protectTier", true);
+        s.pop();
+
+        s.comment("--- Ritual Blocks ---").push("ritual");
+        BRAZIER_HEAL_ENABLED = s.comment("The Adaptation Brazier heals a wheel-wearer standing",
+                        "within 5 blocks. A flat amount per second per brazier, so a field of them",
+                        "is worth more than one but never more than is missing.")
+                .define("brazierHealEnabled", true);
+        BRAZIER_HEAL_PER_SECOND = s.defineInRange("brazierHealPerSecond", 0.5D, 0.0D, 20.0D);
+        TOTEM_ENABLED = s.comment("The Wheel Totem advances the analyses already running for a",
+                        "wheel-wearer within 6 blocks. It grants nothing, so it is worth nothing to",
+                        "a player with nothing to analyse.")
+                .define("totemEnabled", true);
+        TOTEM_ACCELERATION_TICKS = s.defineInRange("totemAccelerationTicks", 20, 0, 400);
+        ALTAR_ENABLED = s.comment("The Resonance Altar adds one rung to a wheel-wearer's Resonance",
+                        "within 8 blocks. It raises the rung rather than widening the search, so",
+                        "stacking altars cannot stand in for other players.")
+                .define("altarEnabled", true);
+        DOMAIN_STONE_ENABLED = s.comment("The Domain Stone hands out an adaptation when",
+                        "right-clicked while wearing the wheel, preferring a family the wheel has",
+                        "not revealed yet. It is the only place in the mod where an adaptation is",
+                        "given rather than endured.")
+                .define("domainStoneEnabled", true);
+        DOMAIN_STONE_COOLDOWN_SECONDS = s.comment("Per-player cooldown. Pacing, not a price: the",
+                        "stone's pool excludes what you already hold, so it always has less to",
+                        "give the more you take from it.")
+                .defineInRange("domainStoneCooldownSeconds", 30, 1, 3600);
+        s.pop();
+
+        s.comment("--- Adaptation Transfer ---").push("transfer");
+        TRANSFER_ENABLED = s.comment("Right-clicking another player with the wheel in hand hands",
+                        "them your most developed adaptation that they do not have. Repeated",
+                        "clicks walk down your own list. Nothing is invented: what they gain is",
+                        "exactly what you gave up, at the same level.")
+                .define("enabled", true);
+        s.pop();
+
+        s.comment("--- Resonance ---").push("resonance");
+        RESONANCE_ENABLED = s.comment("Adapted players within range strengthen each other. The buff",
+                        "rung counts OTHER wheel-wearers nearby and saturates at its maximum, so a",
+                        "large group is not proportionally stronger than a small one.")
+                .define("enabled", true);
+        RESONANCE_BLOCKS = s.comment("Radius in blocks")
+                .defineInRange("blocks", 12.0D, 2.0D, 64.0D);
+        RESONANCE_PARTICLES = s.comment("Draw a small burst at a wearer's feet when their rung rises")
+                .define("particles", true);
         s.pop();
 
         s.comment("--- Discomfort Scaling ---").push("discomfortScaling");
