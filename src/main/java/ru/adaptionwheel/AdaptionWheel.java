@@ -2,6 +2,7 @@ package ru.adaptionwheel;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -41,6 +42,14 @@ public class AdaptionWheel {
                         output.accept(ModItems.MAHORAGA_WHEEL.get());
                         output.accept(ModItems.ALL_ADAPTION.get());
                         output.accept(ModItems.SWORD_OF_EXTERMINATION.get());
+                        // The ritual set and the mob, in the mod's own tab as well as the vanilla
+                        // ones. This lambda is the one place that is guaranteed to run, so it is
+                        // where content has to be listed for it to be findable at all.
+                        output.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
+                        output.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
+                        output.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());
+                        output.accept(ru.adaptionwheel.block.ModBlocks.DOMAIN_STONE_ITEM.get());
+                        output.accept(ru.adaptionwheel.entity.ModSpawnEggs.DISCIPLE_EGG.get());
                     })
                     .build());
 
@@ -71,9 +80,23 @@ public class AdaptionWheel {
     @EventBusSubscriber(modid = MODID)
     public static class ModBusEvents {
 
+        /**
+         * Whether an event is about the named vanilla tab.
+         *
+         * <p>Compared by location rather than by key object. {@code ResourceKey} overrides neither
+         * {@code equals} nor {@code hashCode} in 1.21.1 either, so {@code ==} is identity and a
+         * hand-built key is never the registry's object — which is why the 26.3 branch's Combat
+         * branch had been dead code from the day it was written. Matching on the location works no
+         * matter which object the event hands back, and is the only form of this check that is
+         * correct by construction rather than by which field happens to be public.</p>
+         */
+        private static boolean isTab(ResourceKey<CreativeModeTab> key, String id) {
+            return key != null && key.location().equals(ResourceLocation.withDefaultNamespace(id));
+        }
+
         @SubscribeEvent
         public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {
-            if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
+            if (isTab(event.getTabKey(), "functional_blocks")) {
                 // The ritual set, in the order it becomes useful rather than alphabetically:
                 // light it, speed an analysis, raise the buff, then the one that gives.
                 event.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
@@ -82,7 +105,7 @@ public class AdaptionWheel {
                 event.accept(ru.adaptionwheel.block.ModBlocks.DOMAIN_STONE_ITEM.get());
                 event.accept(ru.adaptionwheel.entity.ModSpawnEggs.DISCIPLE_EGG.get());
             }
-            if (event.getTabKey() == CreativeModeTabs.COMBAT) {
+            if (isTab(event.getTabKey(), "combat")) {
                 event.accept(ModItems.MAHORAGA_WHEEL_WOOD.get());
                 event.accept(ModItems.MAHORAGA_WHEEL.get());
                 event.accept(ModItems.ALL_ADAPTION.get());

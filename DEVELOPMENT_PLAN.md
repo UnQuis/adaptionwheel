@@ -559,7 +559,7 @@ convention, because it is the one rule a future change is most likely to break b
 
 | | |
 |---|---|
-| **Wheel awakening** | Six tiers derived from the adaptation count. Each *reveals* a family — Environment, Contact, Offense, Plunder, Existence — so the pool of what the wheel can adapt to grows instead of the pool of what it has survived. Derived, so no migration and a handed-over wheel arrives pre-awakened. |
+| **Wheel awakening** | Six tiers derived from the adaptation count. Each *reveals* a family — Contact, Offense, Plunder, Existence — so the pool of what the wheel can adapt to grows instead of the pool of what it has survived. Derived, so no migration and a handed-over wheel arrives pre-awakened. |
 | **Synergies** | Ten named combinations. Thirty independent adaptations are a list, not a build; these make the pool interact. Each is a behaviour, not another flat stat. |
 | **Shedding** | Give an adaptation up deliberately for a burst. The one thing that changes *what* you can adapt to. The concept re-analyses at a third of its timer, so it is a swap rather than a price. |
 | **Resonance** | Adapted players standing near each other strengthen each other, and an altar covers the player alone. |
