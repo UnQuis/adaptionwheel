@@ -532,3 +532,65 @@ all three obvious fixes are traps.
       `offenseHitAcceleration` was read by nobody; short config lists were silently ignored;
       `hpPerSecond` was applied every 3 s; `onExperienceDrop` lacked the boss guard its siblings have;
       Dimension Slash could chain without bound.
+
+## Phase 20 — Content: the mod stops being one-dimensional
+
+### The diagnosis that started it
+
+Audited against the code rather than from memory, and it is not a matter of taste:
+
+- **zero world content** — no blocks, no structures, no mobs, no dimension, no biomes
+- **zero goals** — no advancements, nothing that says what to do next
+- **no choice** — every adaptation accumulates and applies at once, no loadout, no opportunity cost
+- **no social layer** — nothing to do with another player
+- **purely reactive** — nothing a player does changes *what* they can adapt to, only how long they wait
+- **adversity is one single event**, and the wheel itself has no progression and no visual change
+
+Thirty concepts, one shape: *hit by this → the number goes up → one less thing can hurt you.*
+
+### The design constraint the poll set
+
+Asked what to build, and the answer on cost was decisive: **"Не нужно. Прикол именно во всесильности"**
+— no upkeep, no strain, no backlash, no currency. The point of the wheel is omnipotence, so every new
+system had to only ever give. That is now a pinned test (`laterTiersAreNeverWorse`) rather than a
+convention, because it is the one rule a future change is most likely to break by accident.
+
+### What went in
+
+| | |
+|---|---|
+| **Wheel awakening** | Six tiers derived from the adaptation count. Each *reveals* a family — Environment, Contact, Offense, Plunder, Existence — so the pool of what the wheel can adapt to grows instead of the pool of what it has survived. Derived, so no migration and a handed-over wheel arrives pre-awakened. |
+| **Synergies** | Ten named combinations. Thirty independent adaptations are a list, not a build; these make the pool interact. Each is a behaviour, not another flat stat. |
+| **Shedding** | Give an adaptation up deliberately for a burst. The one thing that changes *what* you can adapt to. The concept re-analyses at a third of its timer, so it is a swap rather than a price. |
+| **Resonance** | Adapted players standing near each other strengthen each other, and an altar covers the player alone. |
+| **Transfer** | Right-click a player to hand over your most developed adaptation they lack. |
+| **Ritual blocks** | Brazier, Totem, Altar, Domain Stone — all auras, all only give, none with a block entity. |
+| **Disciple of the Domain** | The first mob, and the answer to a wheel whose whole trajectory is upward in a world that is not. It scales to the nearest wearer, and it adapts too. |
+| **Advancement tree** | 34 advancements on one custom criterion with seven optional conditions. |
+
+### Things that turned out to be load-bearing
+
+- **A tier that *reveals* rather than *gates*.** The first instinct was to gate the deep families
+  behind tiers, which is a nerf to a player who already has them. Revealing keeps the promise:
+  nothing is ever taken away, and the wheel's growth is visible as a widening of what is possible.
+- **A missing parent drops an advancement's whole subtree.** 33 of 34 failed to insert because
+  `"parent": "root"` resolves to `minecraft:root`. One `ERROR` line, no per-file reason, and a
+  count that quietly read as "one loaded".
+- **Polling beats eventing for criteria.** Completion, a tier crossing, a shed, a transfer, logging
+  in already deep, and picking the wheel back up are six events. Firing at a moment means firing at
+  six moments and the seventh is the bug.
+- **Auras by scanning players, not ticking blocks.** A brazier in a storage chest should cost
+  nothing; a player standing in a fully furnished room should cost a few lookups.
+- **One copy of the synergy rules.** The client browser answers the same question from its mirror
+  through the same `satisfied`, because a second copy would simply mean the synergy never appears.
+
+### Test suite: 38 → 59
+
+`WheelTierTests` (6), `SynergyTests` (5), `SheddingTests` (6), `DiscipleTests` (4). Three failures
+found along the way were all mine: an unbounded `while` over the *cached* `getAdaptCount()` that
+froze the server thread with nothing in the log, six tests written without the trailing
+`helper.succeed()` (which the framework reports as a 100-tick timeout, not a failure), and one
+asserting on a fixture the setup had stopped creating.
+
+**A stale `runs/gameTestServer/config/adaptionwheel-*.toml` can loop the tracker forever** and hang
+a run with no exception. Delete the config file first whenever a run hangs for no visible reason.
