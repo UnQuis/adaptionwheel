@@ -69,6 +69,47 @@
 - Mixin quirks hit with the DE laser mixin: an `@Redirect` handler parameter must match the **exact** receiver type in the target bytecode (`Player`, not `LivingEntity` — supertypes are rejected at apply time with `InvalidInjectionException`); `@At(target = "setHealth(F)V")` without an owner matches any receiver, which keeps the injection resilient; optional mixins into another mod's classes must be gated through an `IMixinConfigPlugin` (`shouldApplyMixin` → `FMLLoader.getLoadingModList().getModFileById(...)`) or Mixin logs errors for the missing target class.
 - Draconic Evolution facts (from the jar at the repo root): the Chaos Guardian (`draconicevolution:draconic_guardian`) is NOT in any boss tag — recognition is hardcoded via string id; its parts are NeoForge `PartEntity`s, so generic part unwrapping covers them; ALL guardian damage types bypass armor/resistance/effects/shields/cooldowns and most are tagged `is_explosion`/`is_projectile` (so vanilla-tag categories already partially apply); the charged twin laser writes health directly (handled by mixin). DE needs CodeChickenLib + BrandonsCore at runtime for dev-server testing (fetchable from Modrinth).
 - Not a git repo; no commits or branches to manage here.
+- **Wheel awakening, synergies, shedding, resonance, transfer, ritual blocks, the Disciple and the
+  advancement tree are ported here** (Phase 20, commit `34f7d20`). Same design as `main`; see the
+  corresponding bullets in the package-layout section and `DEVELOPMENT_PLAN.md` Phase 20. Verified
+  by a clean dedicated-server boot: 0 errors, 1900 advancements loaded, and every new config
+  section present in the generated toml.
+- **Datapack formats are stricter here than on 1.21.1 and none of them compile-check.** Each of
+  these fails at world load with a message that names neither the field nor the mod:
+  - `BlockBehaviour.Properties` and `Item.Properties` need `setId(...)`; it is read from inside the
+    constructor (`effectiveDrops()` for a block, `effectiveDescriptionId()` for a `BlockItem` and a
+    `SpawnEggItem`), so a missing id is a bare `Block id not set` / `Item id not set` and the mod
+    does not load. A plain `new Item.Properties()` is still fine for an ordinary item.
+  - Only advancement **roots** may carry a `background`. `display.icon` is an item stack, so an
+    entity type is rejected as an unknown `minecraft:item` key.
+  - Entity predicates are wrapped: `{"type": "minecraft:entity_properties", "entity": "this",
+    "predicate": {"minecraft:entity_type": ...}}`. A bare id resolves in `minecraft:predicate`,
+    where an entity type does not live.
+  - Loot: `functions` → `modifier`, `item` → `name`, and each modifier is keyed by `type`.
+  - Recipes: ingredients are a bare id or tag string; `{"item": ...}` is rejected.
+  - `neoforge:add_spawns`: `spawners` must be an array, each entry's fields sit **inline** next to
+    `weight` (no `data` wrapper, because `Weighted.codec(MapCodec)` is a RecordCodecBuilder), and
+    the pack size is one `count` IntProvider. The javadoc above it still documents the 1.21.1 shape.
+- **26.3 renderers are render-state based.** `MobRenderer<T, S extends LivingEntityRenderState, M>`,
+  a `createRenderState()` to make the state, and `getTextureLocation(S)` — the renderer never sees
+  the entity. `LivingEntityRenderer` fills the humanoid fields itself in `extractRenderState`, so a
+  mob needs only its own state class (see `client/DiscipleRenderState.java`).
+- **`Entity.hurt` is `final` on 26.3.** The override point is
+  `LivingEntity.hurtServer(ServerLevel, DamageSource, float)`, and `isInvulnerableTo` takes the
+  level as its first argument. A `hurt` override compiles nowhere and a port that guesses will not
+  build, which is at least a loud failure.
+- **`DeferredSpawnEggItem` is gone.** `SpawnEggItem` resolves the mob from the `ENTITY_DATA`
+  component, written by `Item.Properties.spawnEgg(type)`, so the entity register must be attached
+  to the mod bus **before** the spawn-egg register.
+- **The criterion API lives in `net.minecraft.advancements.triggers`** (`CriterionTrigger`,
+  `CriteriaTriggers`, `SimpleCriterionTrigger`) and `SimpleInstance.player()` returns
+  `Optional<Holder<LootItemCondition>>` — the advancement predicates were folded into the
+  loot-condition system.
+- **`Commands.hasPermission(int)` is a `PermissionProviderCheck` factory, not a `Predicate`** — pass
+  it as a method reference. `src -> Commands.hasPermission(...)` compiles to the wrong type.
+- **`Level.isClientSide` is a private field with a public `isClientSide()` method** here, so a
+  1.21.1 `isClientSide` *field* read does not compile and the same expression with `()` does.
+
 ## 26.3-specific notes (added by the Phase 15 port)
 
 - **`ResourceLocation` is `net.minecraft.resources.Identifier` here.** Factory methods are unchanged.
