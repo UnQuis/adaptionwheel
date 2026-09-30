@@ -29,9 +29,20 @@ public class AdaptionWheel {
 
     public static final String MODID = "adaptionwheel";
 
-    /** Vanilla "Combat" tab key ({@code CreativeModeTabs.COMBAT} is private in 26.x). */
-    private static final ResourceKey<CreativeModeTab> COMBAT_TAB =
-            ResourceKey.create(Registries.CREATIVE_MODE_TAB, Identifier.withDefaultNamespace("combat"));
+    /**
+     * Whether an event is about the named vanilla tab.
+     *
+     * <p>Compared by <em>identifier</em> rather than by key object, and that is the whole point.
+     * {@code ResourceKey} overrides neither {@code equals} nor {@code hashCode}, so two keys for
+     * the same tab are different objects and {@code ==} is identity. A hand-built key is
+     * therefore never equal to the registry's, which is why the Combat branch below had been dead
+     * code for the entire life of the mod: it built its own key and compared it by reference.
+     * Matching on the identifier works regardless of which object the event hands back.</p>
+     */
+    private static boolean isTab(ResourceKey<CreativeModeTab> key, String id) {
+        return key != null
+                && key.identifier().equals(Identifier.withDefaultNamespace(id));
+    }
 
     private static final DeferredRegister<CreativeModeTab> CREATIVE_TABS =
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
@@ -45,6 +56,14 @@ public class AdaptionWheel {
                         output.accept(ModItems.MAHORAGA_WHEEL.get());
                         output.accept(ModItems.ALL_ADAPTION.get());
                         output.accept(ModItems.SWORD_OF_EXTERMINATION.get());
+                        // The ritual set, then the mob. In the mod's own tab rather than only in
+                        // the vanilla ones, because this lambda is the one place that is
+                        // guaranteed to run -- see isTab() for why the event handler is not.
+                        output.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
+                        output.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
+                        output.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());
+                        output.accept(ru.adaptionwheel.block.ModBlocks.DOMAIN_STONE_ITEM.get());
+                        output.accept(ru.adaptionwheel.entity.ModSpawnEggs.DISCIPLE_EGG.get());
                     })
                     .build());
 
@@ -80,18 +99,18 @@ public class AdaptionWheel {
 
         @SubscribeEvent
         public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {
-            if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
-                // The ritual set, in the order it becomes useful rather than alphabetically:
-                // light it, speed an analysis, raise the buff, then the one that gives.
+            // Also mirrored into the mod's own tab, which is the reliable one; these are so the
+            // content also sits where a player would look for it.
+            if (isTab(event.getTabKey(), "functional_blocks")) {
                 event.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
                 event.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
                 event.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());
                 event.accept(ru.adaptionwheel.block.ModBlocks.DOMAIN_STONE_ITEM.get());
             }
-            if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) {
+            if (isTab(event.getTabKey(), "spawn_eggs")) {
                 event.accept(ru.adaptionwheel.entity.ModSpawnEggs.DISCIPLE_EGG.get());
             }
-            if (event.getTabKey() == COMBAT_TAB) {
+            if (isTab(event.getTabKey(), "combat")) {
                 event.accept(ModItems.MAHORAGA_WHEEL_WOOD.get());
                 event.accept(ModItems.MAHORAGA_WHEEL.get());
                 event.accept(ModItems.ALL_ADAPTION.get());

@@ -121,8 +121,8 @@ public final class WheelTier {
             return null;
         }
         if (concept.startsWith(Concepts.EXISTENCE_PREFIX)) return "Existence";
-        if (concept.startsWith("Offense_NPC_")) return "Offense";
-        if (concept.startsWith("Drop_NPC_")) return "Plunder";
+        if (concept.startsWith(Concepts.OFFENSE_PREFIX)) return "Offense";
+        if (concept.startsWith(Concepts.DROP_PREFIX)) return "Plunder";
         if (concept.startsWith(Concepts.CONTACT_PREFIX)) return "Contact";
         if (concept.startsWith(Concepts.ENV_PREFIX)) return "Environment";
         return null;
@@ -131,16 +131,23 @@ public final class WheelTier {
     /**
      * Tier at which this family appears, or {@code -1} for the always-available core.
      *
-     * <p>Core is the whole damage-type ladder, debuffs, the movement/mining/combat/perception
-     * discomforts, the fist and the mutations — everything a player can reach without the wheel
-     * ever waking. Everything else is the wheel's own doing, and arrives with it.</p>
+     * <p>Core is the whole damage-type ladder, debuffs, <b>the environments</b>, the
+     * movement/mining/combat/perception discomforts, the fist and the mutations — everything a
+     * player can reach without the wheel ever waking.
+     *
+     * <p><b>{@code Env_} is core, and that is a correction.</b> It was originally gated behind the
+     * first tier, on the reasoning that it is one of the "deep" families. That reasoning was
+     * wrong. The gated families are the ones that scale with the world — one concept per mob and
+     * per boss, hundreds of them — while there are only thirteen environments and they are as
+     * basic as damage types. Gating them meant a player with fewer than a dozen adaptations could
+     * not begin adapting to water at all, which is not progression, it is a feature switched off.
+     * The gate now starts where the content actually deepens: with the per-mob families.</p>
      */
     private static int requiredTierFor(String concept) {
-        if (concept.startsWith(Concepts.EXISTENCE_PREFIX)) return 5;
-        if (concept.startsWith("Offense_NPC_")) return 3;
-        if (concept.startsWith("Drop_NPC_")) return 4;
-        if (concept.startsWith(Concepts.CONTACT_PREFIX)) return 2;
-        if (concept.startsWith(Concepts.ENV_PREFIX)) return 1;
+        if (concept.startsWith(Concepts.EXISTENCE_PREFIX)) return 4;
+        if (concept.startsWith(Concepts.OFFENSE_PREFIX)) return 2;
+        if (concept.startsWith(Concepts.DROP_PREFIX)) return 3;
+        if (concept.startsWith(Concepts.CONTACT_PREFIX)) return 1;
         return -1;
     }
 
