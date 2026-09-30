@@ -1170,6 +1170,10 @@ public class AdaptionEvents {
                 RitualAuras.apply(player, data, auras);
             }
             Resonance.tick(player, auras);
+            // Advancement criteria, evaluated against the same state as everything else above.
+            // Polling rather than event-driven, so a login with a deep wheel, a shed, a transfer
+            // and a tier crossing all light up without four separate call sites.
+            ru.adaptionwheel.advancement.AdaptationTrigger.evaluate(player, data);
             // saveToItem after the totem acceleration, so an accelerated timer is the one that
             // gets persisted rather than being overwritten a tick later by the pre-acceleration
             // value the item still holds.

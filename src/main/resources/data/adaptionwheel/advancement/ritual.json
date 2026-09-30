@@ -1,0 +1,48 @@
+{
+  "display": {
+    "icon": {
+      "id": "adaptionwheel:adaptation_brazier"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.ritual.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.ritual.desc"
+    },
+    "frame": "task",
+    "background": "adaptionwheel:textures/gui/advancements/background.png",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "criteria": {
+    "has": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "adaptionwheel:adaptation_brazier"
+          },
+          {
+            "items": "adaptionwheel:wheel_totem"
+          },
+          {
+            "items": "adaptionwheel:resonance_altar"
+          },
+          {
+            "items": "adaptionwheel:domain_stone"
+          }
+        ]
+      }
+    }
+  },
+  "parent": "adaptionwheel:first_environment",
+  "rewards": {
+    "recipes": [
+      "adaptionwheel:adaptation_brazier",
+      "adaptionwheel:wheel_totem",
+      "adaptionwheel:resonance_altar",
+      "adaptionwheel:domain_stone"
+    ]
+  }
+}

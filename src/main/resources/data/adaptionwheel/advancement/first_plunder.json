@@ -1,0 +1,27 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:chest"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.first_plunder.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.first_plunder.desc"
+    },
+    "frame": "task",
+    "background": "adaptionwheel:textures/gui/advancements/background.png",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "criteria": {
+    "any": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Drop_"
+      }
+    }
+  },
+  "parent": "adaptionwheel:tier_apex"
+}

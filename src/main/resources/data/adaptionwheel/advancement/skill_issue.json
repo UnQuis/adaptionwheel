@@ -1,0 +1,27 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:arrow"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.skill_issue.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.skill_issue.desc"
+    },
+    "frame": "goal",
+    "background": "adaptionwheel:textures/gui/advancements/background.png",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "criteria": {
+    "any": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Combat_SkillIssue"
+      }
+    }
+  },
+  "parent": "adaptionwheel:soe"
+}

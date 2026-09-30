@@ -1,0 +1,27 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:amethyst_shard"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.tier.resonant.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.tier.resonant.desc"
+    },
+    "frame": "task",
+    "background": "adaptionwheel:textures/gui/advancements/background.png",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "criteria": {
+    "any": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "min_tier": 2
+      }
+    }
+  },
+  "parent": "adaptionwheel:tier_stirring"
+}

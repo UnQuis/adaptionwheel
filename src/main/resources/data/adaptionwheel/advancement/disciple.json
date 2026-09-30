@@ -1,0 +1,27 @@
+{
+  "display": {
+    "icon": {
+      "id": "adaptionwheel:disciple"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.disciple.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.disciple.desc"
+    },
+    "frame": "goal",
+    "background": "adaptionwheel:textures/gui/advancements/background.png",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "criteria": {
+    "kill": {
+      "trigger": "minecraft:player_killed_entity",
+      "conditions": {
+        "entity": "adaptionwheel:disciple"
+      }
+    }
+  },
+  "parent": "adaptionwheel:ritual"
+}

@@ -116,6 +116,7 @@ public final class Shedding {
         // Only after the removal, because debugUngrant re-applies stats from the reduced count and
         // the tier message below has to be about the tier the player is now on.
         data.recentlyShed.add(concept);
+        data.shedCount++;
         if (level > 0) {
             // The concept drops to level 0 rather than being forgotten, so a partially-analysed
             // adaptation is not thrown away wholesale by a shed.

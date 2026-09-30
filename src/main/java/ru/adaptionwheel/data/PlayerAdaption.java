@@ -36,7 +36,8 @@ public class PlayerAdaption {
             Codec.BOOL.fieldOf("adversityActive").forGetter(d -> d.adversityActive),
             Codec.FLOAT.fieldOf("targetRotation").forGetter(d -> d.targetRotation),
             Codec.FLOAT.fieldOf("wheelRotation").forGetter(d -> d.wheelRotation),
-            Codec.BOOL.optionalFieldOf("wasWearing", false).forGetter(d -> d.wasWearing)
+            Codec.BOOL.optionalFieldOf("wasWearing", false).forGetter(d -> d.wasWearing),
+            Codec.INT.optionalFieldOf("shedCount", 0).forGetter(d -> d.shedCount)
     ).apply(inst, PlayerAdaption::new));
 
     public final Map<String, Integer> levels = new HashMap<>();
@@ -72,6 +73,15 @@ public class PlayerAdaption {
      * while a tick where nothing changed must not.
      */
     /**
+     * How many times this player has shed an adaptation, for their whole career.
+     *
+     * <p>Persisted on the player rather than the wheel, unlike everything else here: a shed is an
+     * act by a person, not a property of an object, and a wheel handed to a new owner should not
+     * arrive with the previous one's history already claimed.</p>
+     */
+    public int shedCount;
+
+    /**
      * Concepts whose adaptation was shed this session, and which therefore re-adapt faster.
      *
      * <p>Transient, and that is the design rather than an omission: shedding is meant to read as
@@ -98,7 +108,8 @@ public class PlayerAdaption {
                           Map<String, Integer> existenceProgress,
                           int healingTimer, int adversityCooldownTimer,
                           int adversityTimer, boolean adversityActive, float targetRotation, float wheelRotation,
-                          boolean wasWearing) {
+                          boolean wasWearing, int shedCount) {
+        this.shedCount = shedCount;
         this.levels.putAll(levels);
         this.adapted.addAll(adapted);
         this.tasks.addAll(tasks);

@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "id": "adaptionwheel:mahoraga_wheel_wood"
+    },
+    "title": {
+      "translate": "adv.adaptionwheel.root.title"
+    },
+    "description": {
+      "translate": "adv.adaptionwheel.root.desc"
+    },
+    "frame": "task",
+    "background": "adaptionwheel:textures/gui/advancements/background.png",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": true
+  },
+  "criteria": {
+    "wheel": {
+      "trigger": "adaptionwheel:adaptation",
+      "conditions": {
+        "concept": "Type_"
+      }
+    }
+  }
+}
