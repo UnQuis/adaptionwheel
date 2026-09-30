@@ -22,6 +22,10 @@ public final class ModEffects {
     public static final DeferredHolder<MobEffect, WildReleaseEffect> WILD_RELEASE =
             EFFECTS.register("wild_release", WildReleaseEffect::new);
 
+    /** Stacking buff for adapted players standing near each other. */
+    public static final DeferredHolder<MobEffect, ResonanceEffect> RESONANCE =
+            EFFECTS.register("resonance", ResonanceEffect::new);
+
     private ModEffects() {
     }
 }

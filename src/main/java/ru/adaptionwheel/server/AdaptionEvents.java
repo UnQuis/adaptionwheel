@@ -877,6 +877,7 @@ public class AdaptionEvents {
         DIMENSION_SLASH_LAST.remove(id);
         FistMastery.forget(id);
         SynergyEffects.forget(id);
+        ru.adaptionwheel.block.DomainStoneBlock.forget(id);
     }
 
     @SubscribeEvent
@@ -1158,8 +1159,20 @@ public class AdaptionEvents {
         SynergyEffects.refresh(player, data);
         SynergyEffects.tickPassive(player);
 
+
         // ---- Sync every second (also persists tasks so a dropped wheel keeps running analyses) ----
         if (player.tickCount % 20 == 0) {
+            // One cube scan, three consumers. The ritual auras, the Resonance rung and the
+            // neighbouring-player count all want the same volume around this player, and
+            // scanning it once per second per wearer is cheap; scanning it three times is not.
+            RitualAuras.Auras auras = RitualAuras.scan(player);
+            if (auras.any()) {
+                RitualAuras.apply(player, data, auras);
+            }
+            Resonance.tick(player, auras);
+            // saveToItem after the totem acceleration, so an accelerated timer is the one that
+            // gets persisted rather than being overwritten a tick later by the pre-acceleration
+            // value the item still holds.
             saveToItem(player, data);
             sync(player, data, wearing);
         }

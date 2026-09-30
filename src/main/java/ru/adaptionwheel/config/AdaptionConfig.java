@@ -58,6 +58,23 @@ public final class AdaptionConfig {
     // ---- Wheel awakening (tiers) ----
     public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_TIERS_ENABLED;
 
+    // ---- Ritual blocks ----
+    public static final ModConfigSpec.ConfigValue<Boolean> BRAZIER_HEAL_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> BRAZIER_HEAL_PER_SECOND;
+    public static final ModConfigSpec.ConfigValue<Boolean> TOTEM_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Integer> TOTEM_ACCELERATION_TICKS;
+    public static final ModConfigSpec.ConfigValue<Boolean> ALTAR_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Boolean> DOMAIN_STONE_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Integer> DOMAIN_STONE_COOLDOWN_SECONDS;
+
+    // ---- Adaptation transfer ----
+    public static final ModConfigSpec.ConfigValue<Boolean> TRANSFER_ENABLED;
+
+    // ---- Resonance ----
+    public static final ModConfigSpec.ConfigValue<Boolean> RESONANCE_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> RESONANCE_BLOCKS;
+    public static final ModConfigSpec.ConfigValue<Boolean> RESONANCE_PARTICLES;
+
     // ---- Shedding (voluntarily paying an adaptation away) ----
     public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_ENABLED;
     public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_BASE_TICKS;
@@ -250,6 +267,51 @@ public final class AdaptionConfig {
                         "A tier never takes anything away and never costs anything: the wheel is",
                         "meant to be omnipotent, so a later tier is only ever a larger one.")
                 .define("enabled", true);
+        s.pop();
+
+        s.comment("--- Ritual Blocks ---").push("ritual");
+        BRAZIER_HEAL_ENABLED = s.comment("The Adaptation Brazier heals a wheel-wearer standing",
+                        "within 5 blocks. A flat amount per second per brazier, so a field of them",
+                        "is worth more than one but never more than is missing.")
+                .define("brazierHealEnabled", true);
+        BRAZIER_HEAL_PER_SECOND = s.defineInRange("brazierHealPerSecond", 0.5D, 0.0D, 20.0D);
+        TOTEM_ENABLED = s.comment("The Wheel Totem advances the analyses already running for a",
+                        "wheel-wearer within 6 blocks. It grants nothing, so it is worth nothing to",
+                        "a player with nothing to analyse.")
+                .define("totemEnabled", true);
+        TOTEM_ACCELERATION_TICKS = s.defineInRange("totemAccelerationTicks", 20, 0, 400);
+        ALTAR_ENABLED = s.comment("The Resonance Altar adds one rung to a wheel-wearer's Resonance",
+                        "within 8 blocks. It raises the rung rather than widening the search, so",
+                        "stacking altars cannot stand in for other players.")
+                .define("altarEnabled", true);
+        DOMAIN_STONE_ENABLED = s.comment("The Domain Stone hands out an adaptation when",
+                        "right-clicked while wearing the wheel, preferring a family the wheel has",
+                        "not revealed yet. It is the only place in the mod where an adaptation is",
+                        "given rather than endured.")
+                .define("domainStoneEnabled", true);
+        DOMAIN_STONE_COOLDOWN_SECONDS = s.comment("Per-player cooldown. Pacing, not a price: the",
+                        "stone's pool excludes what you already hold, so it always has less to",
+                        "give the more you take from it.")
+                .defineInRange("domainStoneCooldownSeconds", 30, 1, 3600);
+        s.pop();
+
+        s.comment("--- Adaptation Transfer ---").push("transfer");
+        TRANSFER_ENABLED = s.comment("Right-clicking another player with the wheel in hand hands",
+                        "them your most developed adaptation that they do not have. Repeated",
+                        "clicks walk down your own list. Nothing is invented: what they gain is",
+                        "exactly what you gave up, at the same level.")
+                .define("enabled", true);
+        s.pop();
+
+        s.comment("--- Resonance ---").push("resonance");
+        RESONANCE_ENABLED = s.comment("Adapted players within range strengthen each other. The buff",
+                        "rung counts OTHER wheel-wearers nearby and saturates at its maximum, so a",
+                        "large group is not proportionally stronger than a small one.")
+                .define("enabled", true);
+        RESONANCE_BLOCKS = s.comment("Radius in blocks")
+                .defineInRange("blocks", 12.0D, 2.0D, 64.0D);
+        RESONANCE_PARTICLES = s.comment("Draw a small burst at a wearer's feet when their rung rises")
+                .define("particles", true);
         s.pop();
 
         s.comment("--- Shedding ---").push("shedding");

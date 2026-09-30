@@ -52,6 +52,8 @@ public class AdaptionWheel {
         ModItems.ITEMS.register(modEventBus);
         ModSounds.SOUNDS.register(modEventBus);
         ru.adaptionwheel.effect.ModEffects.EFFECTS.register(modEventBus);
+        ru.adaptionwheel.block.ModBlocks.BLOCKS.register(modEventBus);
+        ru.adaptionwheel.block.ModBlocks.BLOCK_ITEMS.register(modEventBus);
         ru.adaptionwheel.entity.ModEntities.ENTITIES.register(modEventBus);
         CREATIVE_TABS.register(modEventBus);
         modEventBus.addListener(this::commonSetup);
@@ -69,6 +71,14 @@ public class AdaptionWheel {
 
         @SubscribeEvent
         public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {
+            if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
+                // The ritual set, in the order it becomes useful rather than alphabetically:
+                // light it, speed an analysis, raise the buff, then the one that gives.
+                event.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
+                event.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
+                event.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());
+                event.accept(ru.adaptionwheel.block.ModBlocks.DOMAIN_STONE_ITEM.get());
+            }
             if (event.getTabKey() == CreativeModeTabs.COMBAT) {
                 event.accept(ModItems.MAHORAGA_WHEEL_WOOD.get());
                 event.accept(ModItems.MAHORAGA_WHEEL.get());
