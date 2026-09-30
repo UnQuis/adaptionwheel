@@ -68,12 +68,31 @@
 - NeoForge 21.1 API quirks hit during development: `LivingDamageEvent.Pre` (no `LivingIncomingDamageEvent`/`AttackEvent`); `DamageSource.type()` returns `DamageType` (use `typeHolder().getRegisteredName()` for the id); `AttributeModifier(ResourceLocation, double, Operation)` with `Operation.ADD_VALUE/ADD_MULTIPLIED_BASE`; `AttributeInstance.removeModifier(ResourceLocation)`; `MobEffectEvent.Applicable.Result.DO_NOT_APPLY`; `PlayerTickEvent` lives in `net.neoforged.neoforge.event.tick`; `StreamCodec.composite` supports at most 6 components (use `StreamCodec.of` for more); `Mob` has no `isBoss()` — boss detection lives in `BossHelper` (hardcoded Wither/EnderDragon/Warden + Chaos Guardian + boss tag); loot params in 1.21.1 use `ATTACKING_ENTITY`/`DIRECT_ATTACKING_ENTITY`/`LAST_DAMAGE_PLAYER` (renamed from `KILLER_ENTITY`/`DIRECT_KILLER_ENTITY`/`LOOTING_ENTITY`); `LootParams.Builder` takes a `ServerLevel`; `FoodData` has no `getMaxFoodLevel()` — max food is the constant 20.
 - Mixin quirks hit with the DE laser mixin: an `@Redirect` handler parameter must match the **exact** receiver type in the target bytecode (`Player`, not `LivingEntity` — supertypes are rejected at apply time with `InvalidInjectionException`); `@At(target = "setHealth(F)V")` without an owner matches any receiver, which keeps the injection resilient; optional mixins into another mod's classes must be gated through an `IMixinConfigPlugin` (`shouldApplyMixin` → `FMLLoader.getLoadingModList().getModFileById(...)`) or Mixin logs errors for the missing target class.
 - Draconic Evolution facts (from the jar at the repo root): the Chaos Guardian (`draconicevolution:draconic_guardian`) is NOT in any boss tag — recognition is hardcoded via string id; its parts are NeoForge `PartEntity`s, so generic part unwrapping covers them; ALL guardian damage types bypass armor/resistance/effects/shields/cooldowns and most are tagged `is_explosion`/`is_projectile` (so vanilla-tag categories already partially apply); the charged twin laser writes health directly (handled by mixin). DE needs CodeChickenLib + BrandonsCore at runtime for dev-server testing (fetchable from Modrinth).
-- Not a git repo; no commits or branches to manage here.
 - **Wheel awakening, synergies, shedding, resonance, transfer, ritual blocks, the Disciple and the
   advancement tree are ported here** (Phase 20, commit `34f7d20`). Same design as `main`; see the
-  corresponding bullets in the package-layout section and `DEVELOPMENT_PLAN.md` Phase 20. Verified
-  by a clean dedicated-server boot: 0 errors, 1900 advancements loaded, and every new config
-  section present in the generated toml.
+  corresponding bullets in the package-layout section and `DEVELOPMENT_PLAN.md` Phase 20 on `main`
+  (this branch has no Phase 20 section of its own). Verified by a clean dedicated-server boot:
+  0 errors, 1900 advancements loaded, and every new config section present in the generated toml.
+- **Wheel awakening reveals per-mob families only; `Env_` is core.** `category/WheelTier.java`:
+  six tiers (Dormant → Infinite) derived from `getAdaptCount()`, so there is no stored state and no
+  migration, and a wheel handed to another player arrives pre-awakened. The gate
+  (`requiredTierFor`) opens `Contact_` at 1, `Offense_` at 2, `Drop_NPC_` at 3, `Existence_` at 4,
+  and one `if` in `AdaptionEvents.startOrAccelerate` — the single choke point every analysis
+  funnels through. **`Env_` used to be gated behind tier 1 and that was wrong**, on both branches:
+  the gated families are the ones that scale with the world (one concept per mob and per boss,
+  hundreds of them) while there are thirteen environments and they are as basic as damage types, so
+  gating them meant a player could not begin adapting to water at all until they held twelve
+  adaptations. It reads as a feature being switched off, not as progression. The environments are
+  core here and stay core. Revealing and never restricting is the point: the wheel is omnipotent,
+  so a later tier is only ever a larger one.
+- **`ResourceKey` has identity equality on this branch — it overrides neither `equals` nor
+  `hashCode`,** and the only accessor is `identifier()` (1.21.1 spells it `location()`). So
+  `event.getTabKey() == SomeVanillaTab` works only because the registry hands back the very same
+  canonical object, and a **hand-built `ResourceKey.create(...)` is never equal to the registry's
+  key for the same tab** — which is why `AdaptionWheel`'s long-standing `COMBAT_TAB` branch had been
+  dead code from the day it was written, and why the new blocks and spawn egg were invisible in
+  every creative tab. Matching is now by identifier via `isTab(key, id)`, and the new content is
+  also listed in the mod's own tab's `displayItems`, which is the one place guaranteed to run.
 - **Datapack formats are stricter here than on 1.21.1 and none of them compile-check.** Each of
   these fails at world load with a message that names neither the field nor the mod:
   - `BlockBehaviour.Properties` and `Item.Properties` need `setId(...)`; it is read from inside the
