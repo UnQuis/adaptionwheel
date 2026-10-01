@@ -311,3 +311,87 @@ the method existed on both branches, the file was subscribed on both, and every 
 called the file equivalent — because the *body* was the version from before the fist was ported.
 That is not something a name diff, a call count or a build can see, and it is why a build plus a
 clean boot is not evidence on a branch with no test task.
+
+---
+
+## Phase 22 — The Resonance Altar takes a mob's own loot
+
+The mod was almost entirely defensive. Every one of its hundred-odd adaptations asks *what is being
+done to me*: fall damage, fire, drowning, a warden's sonic boom. `Contact_<mob>` is a reaction.
+Nothing in it paid for **offence**, and nothing in it could be spent on rather than suffered.
+
+So the altar was given a second face. Feed it a mob's own drop and it sells that mob's adaptations:
+the ability to hurt it, and the ability to take more from it. Its resonance aura is untouched —
+that aura is passive and about who is standing near you, while the trade is active and about what you
+are willing to spend, and keeping both is also why the altar was the right host: it is already the
+mod's "this is a rite, not a machine" block.
+
+One offering, **two choices per mob**. A bone drops from five kinds of skeleton, so it offers ten
+things: for each of those five, the adaptation to hurting it and the adaptation to its loot. Rows are
+mob-major so a mob's two sit together. The price is the item, consumed, **plus experience levels** —
+the same two prices the Domain Stone charges, via the same `DomainExchange.priceFor` ladder.
+
+### Why the mapping is shipped rather than scraped
+
+Which mobs drop what vanilla answers nowhere. It could be read out of the loot tables at runtime, and
+that was the obvious implementation. Rejected for three reasons: `LootPool`'s entry list is a
+`private final` field behind `LootPoolEntryContainer`, so reaching the items needs an unwrap that
+differs between branches; the loot table *shape* differs between versions, so the same walk would be
+two parsers; and a mob's loot is static data, so scraping it re-derives a constant fifty-eight times.
+
+So it is generated once from the vanilla data files and lives in
+`data/adaptionwheel/domain_altar/<mob_path>.json`, one per mob. `server/AltarOfferings` reads the
+directory on first use and builds the reverse index — item → mobs — in memory.
+
+**The twenty-six mobs that drop nothing are simply absent.** allay, bat, fox, ocelot, wolf, villager,
+the player. That is the correct answer rather than an empty entry: an empty entry would make the altar
+answer questions about a mob that cannot be paid for.
+
+**The Warden needed no special case.** `loot_tables/entities/warden.json` already lists the sculk
+catalyst, so the generation found it unaided.
+
+**Vanilla's 84 mob loot tables turned out to be byte-identical between 1.21.1 and 26.3** — `diff -rq`
+over both extractions found no difference. The `functions` → `modifier` / `item` → `name` rename in
+this file's Gotchas applies to tables *the mod authors*, not to vanilla's mob tables, which kept the
+fields the generator reads. So the data set is one set of files for both branches rather than two
+that can drift. Worth knowing rather than assuming.
+
+A mod that changes what its mobs drop ships its own file and is covered without a code change.
+
+### A drop-rate adaptation is paid in kills, not in levels
+
+`Drop_NPC_<mob>`'s level is **derived** from a kill count — everywhere else in the mod it is
+`dropLevelFromKills(kills)` and nothing else. An altar that assigned the level directly would leave
+that counter lying: a player holding an eighth level of loot-luck having killed one chicken.
+
+`AdaptionEvents.grantKillsToward` tops the kill count up to whatever the existing table says that
+level costs, then calls `completeTaskUpTo(player, data, concept, -1)` — which, for a `Drop` concept,
+means "recompute it from the kills". One rule, one table, one number, and no second way to reach the
+same value.
+
+### The stone and the altar share their mechanics
+
+`menu/TradeMenu` holds both slots, the pool, the ordering, the two prices, the legality re-check and
+the server-side authority; a subclass only says **what it sells**. `client/TradeScreen<T extends
+TradeMenu>` does the same for the drawing.
+
+Two copies of a trade rule is the trap this mod has walked into three times already: two copies of a
+rule, one of them fixed later, and nothing that notices.
+
+**`TradeScreen` is generic in its menu type, and that is forced rather than stylistic.**
+`AbstractContainerScreen` implements `MenuAccess<T>`, which declares `T getMenu()` and is *invariant*,
+so a screen shared by two menu types has to be `MenuAccess` in both of them or
+`RegisterMenuScreensEvent` rejects the registration with a type error.
+
+`TradeMenu`'s constructor takes the `MenuType` as a parameter rather than asking an abstract method
+for it: **an abstract method cannot be called from a super constructor**, and the alternative — a
+registration lookup by class name — is exactly the kind of reflection this mod has been bitten by.
+
+### What this branch cannot show
+
+This branch has **no test task**. The index is the part that fails *silently* — a data file naming a
+missing item, an unreadable file, or an item no file mentions all produce "the altar opens and shows
+nothing" with no error anywhere — and `main`'s five `AltarOfferingTests` are what cover it. The data
+files themselves are the same files on both branches.
+
+Neither screen has been seen running.
