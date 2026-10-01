@@ -1,0 +1,7 @@
+{
+ "mob": "minecraft:cow",
+ "items": [
+  "minecraft:beef",
+  "minecraft:leather"
+ ]
+}

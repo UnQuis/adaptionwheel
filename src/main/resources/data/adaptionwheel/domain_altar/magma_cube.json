@@ -1,0 +1,9 @@
+{
+ "mob": "minecraft:magma_cube",
+ "items": [
+  "minecraft:magma_cream",
+  "minecraft:ochre_froglight",
+  "minecraft:pearlescent_froglight",
+  "minecraft:verdant_froglight"
+ ]
+}

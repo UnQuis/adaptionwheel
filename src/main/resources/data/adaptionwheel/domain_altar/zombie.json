@@ -1,0 +1,9 @@
+{
+ "mob": "minecraft:zombie",
+ "items": [
+  "minecraft:carrot",
+  "minecraft:iron_ingot",
+  "minecraft:potato",
+  "minecraft:rotten_flesh"
+ ]
+}

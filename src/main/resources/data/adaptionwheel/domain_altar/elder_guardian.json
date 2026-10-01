@@ -1,0 +1,10 @@
+{
+ "mob": "minecraft:elder_guardian",
+ "items": [
+  "minecraft:cod",
+  "minecraft:prismarine_crystals",
+  "minecraft:prismarine_shard",
+  "minecraft:tide_armor_trim_smithing_template",
+  "minecraft:wet_sponge"
+ ]
+}

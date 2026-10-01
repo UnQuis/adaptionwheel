@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import ru.adaptionwheel.AdaptionWheel;
-import ru.adaptionwheel.menu.DomainStoneMenu;
+import ru.adaptionwheel.menu.TradeMenu;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,13 +27,13 @@ import java.util.List;
  * {@code DataSlot} is one int, the pool is a variable-length list of arbitrary concept keys, and the
  * sync would then be two unrelated mechanisms with two unrelated failure modes.</p>
  */
-public record DomainStoneSyncPayload(List<String> candidates, int selectedIndex)
+public record TradeSyncPayload(List<String> candidates, int selectedIndex)
         implements CustomPacketPayload {
 
-    public static final Type<DomainStoneSyncPayload> TYPE =
+    public static final Type<TradeSyncPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, "domain_stone_sync"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, DomainStoneSyncPayload> STREAM_CODEC =
+    public static final StreamCodec<RegistryFriendlyByteBuf, TradeSyncPayload> STREAM_CODEC =
             StreamCodec.of((buf, payload) -> {
                 buf.writeVarInt(payload.candidates.size());
                 for (String concept : payload.candidates) {
@@ -46,7 +46,7 @@ public record DomainStoneSyncPayload(List<String> candidates, int selectedIndex)
                 for (int i = 0; i < size; i++) {
                     candidates.add(buf.readUtf(256));
                 }
-                return new DomainStoneSyncPayload(candidates, buf.readVarInt());
+                return new TradeSyncPayload(candidates, buf.readVarInt());
             });
 
     @Override
@@ -54,15 +54,15 @@ public record DomainStoneSyncPayload(List<String> candidates, int selectedIndex)
         return TYPE;
     }
 
-    public static void send(ServerPlayer player, DomainStoneMenu menu) {
+    public static void send(ServerPlayer player, TradeMenu menu) {
         PacketDistributor.sendToPlayer(player,
-                new DomainStoneSyncPayload(menu.candidates(), menu.selectedIndex()));
+                new TradeSyncPayload(menu.candidates(), menu.selectedIndex()));
     }
 
     /** Applies a sync to the open menu, if it is still the stone's. */
-    public static void apply(DomainStoneSyncPayload payload) {
+    public static void apply(TradeSyncPayload payload) {
         if (net.minecraft.client.Minecraft.getInstance().player instanceof net.minecraft.client.player.LocalPlayer player
-                && player.containerMenu instanceof DomainStoneMenu menu) {
+                && player.containerMenu instanceof TradeMenu menu) {
             menu.acceptSync(payload.candidates(), payload.selectedIndex());
         }
     }

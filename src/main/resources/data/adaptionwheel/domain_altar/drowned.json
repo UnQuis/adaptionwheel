@@ -1,0 +1,7 @@
+{
+ "mob": "minecraft:drowned",
+ "items": [
+  "minecraft:copper_ingot",
+  "minecraft:rotten_flesh"
+ ]
+}

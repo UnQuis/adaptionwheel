@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import ru.adaptionwheel.AdaptionWheel;
-import ru.adaptionwheel.menu.DomainStoneMenu;
+import ru.adaptionwheel.menu.TradeMenu;
 
 /**
  * Client→server: what the player wants at the Domain Stone.
@@ -21,7 +21,7 @@ import ru.adaptionwheel.menu.DomainStoneMenu;
  * <p>Experience is not in here either: it is charged from the live player, not from anything a
  * client said.</p>
  */
-public record DomainStoneActionPayload(Action action, int value) implements CustomPacketPayload {
+public record TradeActionPayload(Action action, int value) implements CustomPacketPayload {
 
     public enum Action {
         /** Move the selection to a row. {@code value} is the index, or -1 to clear it. */
@@ -30,10 +30,10 @@ public record DomainStoneActionPayload(Action action, int value) implements Cust
         EXCHANGE
     }
 
-    public static final Type<DomainStoneActionPayload> TYPE =
+    public static final Type<TradeActionPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, "domain_stone_action"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, DomainStoneActionPayload> STREAM_CODEC =
+    public static final StreamCodec<RegistryFriendlyByteBuf, TradeActionPayload> STREAM_CODEC =
             StreamCodec.of((buf, payload) -> {
                         buf.writeByte(payload.action.ordinal());
                         buf.writeVarInt(payload.value);
@@ -45,7 +45,7 @@ public record DomainStoneActionPayload(Action action, int value) implements Cust
                         Action[] actions = Action.values();
                         int ordinal = buf.readByte() & 0xFF;
                         Action action = ordinal < actions.length ? actions[ordinal] : Action.EXCHANGE;
-                        return new DomainStoneActionPayload(action, buf.readVarInt());
+                        return new TradeActionPayload(action, buf.readVarInt());
                     });
 
     @Override
@@ -54,11 +54,11 @@ public record DomainStoneActionPayload(Action action, int value) implements Cust
     }
 
     public static void select(int index) {
-        PacketDistributor.sendToServer(new DomainStoneActionPayload(Action.SELECT, index));
+        PacketDistributor.sendToServer(new TradeActionPayload(Action.SELECT, index));
     }
 
     public static void exchange() {
-        PacketDistributor.sendToServer(new DomainStoneActionPayload(Action.EXCHANGE, 0));
+        PacketDistributor.sendToServer(new TradeActionPayload(Action.EXCHANGE, 0));
     }
 
     /**
@@ -69,8 +69,8 @@ public record DomainStoneActionPayload(Action action, int value) implements Cust
      * {@code instanceof} on a container menu is what stops a stray packet from reaching a menu that
      * has nothing to do with the stone.</p>
      */
-    public static void handle(DomainStoneActionPayload payload, ServerPlayer player) {
-        if (!(player.containerMenu instanceof DomainStoneMenu menu)) {
+    public static void handle(TradeActionPayload payload, ServerPlayer player) {
+        if (!(player.containerMenu instanceof TradeMenu menu)) {
             return;
         }
         switch (payload.action()) {

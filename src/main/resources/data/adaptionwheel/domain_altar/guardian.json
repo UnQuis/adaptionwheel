@@ -1,0 +1,8 @@
+{
+ "mob": "minecraft:guardian",
+ "items": [
+  "minecraft:cod",
+  "minecraft:prismarine_crystals",
+  "minecraft:prismarine_shard"
+ ]
+}

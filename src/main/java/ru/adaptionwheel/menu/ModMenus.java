@@ -33,6 +33,10 @@ public final class ModMenus {
             MENUS.register("domain_stone", () -> IMenuTypeExtension.create(
                     (windowId, inventory, extra) -> new DomainStoneMenu(windowId, inventory, extra)));
 
+    public static final DeferredHolder<MenuType<?>, MenuType<ResonanceAltarMenu>> RESONANCE_ALTAR_TRADE =
+            MENUS.register("resonance_altar_trade", () -> IMenuTypeExtension.create(
+                    (windowId, inventory, extra) -> new ResonanceAltarMenu(windowId, inventory, extra)));
+
     public static void register(IEventBus modEventBus) {
         MENUS.register(modEventBus);
     }

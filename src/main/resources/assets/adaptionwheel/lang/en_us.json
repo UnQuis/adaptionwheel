@@ -313,5 +313,7 @@
   "adaptionwheel.msg.stone_stale": "The stone has moved on. Look again.",
   "adaptionwheel.gui.your_level": "Your level %s",
   "adaptionwheel.gui.price": "Costs %s lv",
-  "adaptionwheel.msg.stone_no_experience": "The stone asks %s levels. You have %s."
+  "adaptionwheel.msg.stone_no_experience": "The stone asks %s levels. You have %s.",
+  "container.adaptionwheel.resonance_altar": "Resonance Altar",
+  "adaptionwheel.gui.all_learned": "You have learned all this mob teaches."
 }

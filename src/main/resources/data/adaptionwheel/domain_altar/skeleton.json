@@ -1,0 +1,7 @@
+{
+ "mob": "minecraft:skeleton",
+ "items": [
+  "minecraft:arrow",
+  "minecraft:bone"
+ ]
+}

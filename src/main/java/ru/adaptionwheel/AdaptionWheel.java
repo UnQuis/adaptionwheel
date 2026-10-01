@@ -102,6 +102,8 @@ public class AdaptionWheel {
                 net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
             event.register(ru.adaptionwheel.menu.ModMenus.DOMAIN_STONE.get(),
                     ru.adaptionwheel.client.DomainStoneScreen::new);
+            event.register(ru.adaptionwheel.menu.ModMenus.RESONANCE_ALTAR_TRADE.get(),
+                    ru.adaptionwheel.client.ResonanceAltarScreen::new);
         }
 
         @SubscribeEvent
