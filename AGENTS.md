@@ -85,6 +85,36 @@
   adaptations. It reads as a feature being switched off, not as progression. The environments are
   core here and stay core. Revealing and never restricting is the point: the wheel is omnipotent,
   so a later tier is only ever a larger one.
+- **The Domain Stone is the mod's first container GUI** — `server/DomainExchange.java` (price list),
+  `menu/DomainStoneMenu.java` + `menu/ModMenus.java`, `client/DomainStoneScreen.java`,
+  `network/DomainStoneSyncPayload.java` (server→client) and `DomainStoneActionPayload.java`
+  (client→server). It used to hand an adaptation over **free** on a cooldown; it now trades an item
+  for one. **An item narrows the pool rather than naming an adaptation**: a recipe is a list of
+  selectors, each an exact concept or a family ending in `*` (feather → `Debuff_levitation`, ender
+  eye → `Env_Void`, nether star → `Type_*`). Families rather than a fixed list so the pool is
+  *derived* and a recipe needs no edit when the registry grows — **and because `Debuff_*` and
+  `Drop_NPC_*` are not in `AdaptationRegistry` at all** (their keys are minted at runtime), so a
+  recipe naming either would offer nothing, silently. An **exact** selector is therefore resolved
+  directly rather than looked up. **The tier does not filter the pool**: the stone is a shortcut
+  towards what the wheel has not reached, and tiers reveal rather than restrict. `ADBERSITY` is
+  never sold — it is a challenge, and the price would be an item for a fight. One item per level,
+  so `completeTask` delegates to `completeTaskUpTo` and `Drop_NPC_` levels still come from kills.
+  **The server owns every number**: candidates, selected row and level count live on the menu, and
+  the client sends *intent* ("row 3", "five levels", "exchange") — a row is chosen by **index** and
+  the pool is rebuilt whenever anything in the menu changes, so a stale index must be a refusal
+  rather than a wrong grant. **No block entity**: the position travels as menu-open data, and that
+  extra data is **mandatory** — with none, the client factory gets an empty buffer and reading a
+  `BlockPos` off it throws when a player opens the block. **All layout constants live in
+  `DomainStoneMenu`, not the screen**, because a slot's position and the well drawn behind it are
+  two numbers that must agree. Screen style is vanilla's own parts: slot wells from
+  `generic_54.png`'s sampled pixels, and the cross on the empty wheel slot is
+  `container/beacon/cancel`. 26.3 deltas this cost, none of which the 1.21.1 version shares: the
+  whole drawing pipeline is `extract*(GuiGraphicsExtractor, ...)` with `g.text`/`g.centeredText`,
+  `blitSprite` takes the RenderPipeline first, input is event objects where **`mouseClicked`'s second
+  argument is "double click" and not a button index**, `imageWidth`/`imageHeight` are `final` and go
+  to `super`, `openMenu(provider, BlockPos)` is gone, `Player.getBlockReach()` is replaced by
+  `isWithinBlockInteractionRange(pos, 4.0)`, and `AbstractContainerMenu` grew
+  `addStandardInventorySlots` with the same layout the hand-rolled 1.21.1 helper produced.
 - **`ResourceKey` has identity equality on this branch — it overrides neither `equals` nor
   `hashCode`,** and the only accessor is `identifier()` (1.21.1 spells it `location()`). So
   `event.getTabKey() == SomeVanillaTab` works only because the registry hands back the very same
