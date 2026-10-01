@@ -88,31 +88,56 @@
 - **The Domain Stone is the mod's first container GUI** — `server/DomainExchange.java` (price list),
   `menu/DomainStoneMenu.java` + `menu/ModMenus.java`, `client/DomainStoneScreen.java`,
   `network/DomainStoneSyncPayload.java` (server→client) and `DomainStoneActionPayload.java`
-  (client→server). It used to hand an adaptation over **free** on a cooldown; it now trades an item
-  for one. **An item narrows the pool rather than naming an adaptation**: a recipe is a list of
-  selectors, each an exact concept or a family ending in `*` (feather → `Debuff_levitation`, ender
-  eye → `Env_Void`, nether star → `Type_*`). Families rather than a fixed list so the pool is
-  *derived* and a recipe needs no edit when the registry grows — **and because `Debuff_*` and
-  `Drop_NPC_*` are not in `AdaptationRegistry` at all** (their keys are minted at runtime), so a
-  recipe naming either would offer nothing, silently. An **exact** selector is therefore resolved
-  directly rather than looked up. **The tier does not filter the pool**: the stone is a shortcut
-  towards what the wheel has not reached, and tiers reveal rather than restrict. `ADBERSITY` is
-  never sold — it is a challenge, and the price would be an item for a fight. One item per level,
-  so `completeTask` delegates to `completeTaskUpTo` and `Drop_NPC_` levels still come from kills.
-  **The server owns every number**: candidates, selected row and level count live on the menu, and
-  the client sends *intent* ("row 3", "five levels", "exchange") — a row is chosen by **index** and
-  the pool is rebuilt whenever anything in the menu changes, so a stale index must be a refusal
-  rather than a wrong grant. **No block entity**: the position travels as menu-open data, and that
-  extra data is **mandatory** — with none, the client factory gets an empty buffer and reading a
-  `BlockPos` off it throws when a player opens the block. **All layout constants live in
-  `DomainStoneMenu`, not the screen**, because a slot's position and the well drawn behind it are
-  two numbers that must agree. Screen style is vanilla's own parts: slot wells from
-  `generic_54.png`'s sampled pixels, and the cross on the empty wheel slot is
-  `container/beacon/cancel`. 26.3 deltas this cost, none of which the 1.21.1 version shares: the
-  whole drawing pipeline is `extract*(GuiGraphicsExtractor, ...)` with `g.text`/`g.centeredText`,
-  `blitSprite` takes the RenderPipeline first, input is event objects where **`mouseClicked`'s second
-  argument is "double click" and not a button index**, `imageWidth`/`imageHeight` are `final` and go
-  to `super`, `openMenu(provider, BlockPos)` is gone, `Player.getBlockReach()` is replaced by
+  (client→server). It used to hand an adaptation over **free** on a cooldown; it now trades.
+  **An item narrows the pool rather than naming an adaptation**: a recipe is a list of selectors,
+  each an exact concept or a family ending in `*` (feather → `Debuff_levitation`, ender eye →
+  `Env_Void`, nether star → `Type_*`). Families rather than a fixed list so the pool is *derived*
+  and a recipe needs no edit when the registry grows — **and because `Debuff_*` and `Drop_NPC_*` are
+  not in `AdaptationRegistry` at all** (their keys are minted at runtime), so a recipe naming either
+  would offer nothing, silently. An **exact** selector is therefore resolved directly rather than
+  looked up. **The tier does not filter the pool**: the stone is a shortcut towards what the wheel
+  has not reached, and tiers reveal rather than restrict. `ADBERSITY` is never sold — it is a
+  challenge, and the price would be an item for a fight.
+- **The player pays twice: the item is consumed, and the stone charges their own experience
+  levels.** The ladder is `DomainExchange.priceFor` — **1** for a one-time adaptation, **2** for a
+  leveled one, **3** for `Drop_NPC_`, **4** for `Existence_`/`Mutation_`/`Dimension_Destroy`.
+  **The floor of one level is load-bearing**: a price that could reach zero would make the stone a
+  place to stand rather than a trade, which is what it stopped being. Whole levels, not fractions —
+  vanilla experience is an integer and part of a level has nowhere to live. Charging is
+  `giveExperienceLevels(-price)`, the same call vanilla uses for an enchanting table, so the client's
+  bar updates through the ordinary path. Experience is deliberately **not** synced: the client
+  already has it, and a second copy would be a second source of truth. `completeTaskUpTo` grants
+  `MAX_LEVEL` — an exchange sells the adaptation whole, and the ladder says how big a thing that is.
+  **The server owns every number**: candidates and the selected row live on the menu, and the client
+  sends *intent* ("row 3", "exchange") — a row is chosen by **index** and the pool is rebuilt
+  whenever anything in the menu changes, so a stale index must be a refusal rather than a wrong
+  grant. **No block entity**: the position travels as menu-open data, and that extra data is
+  **mandatory** — with none, the client factory gets an empty buffer and reading a `BlockPos` off it
+  throws when a player opens the block. **All layout constants live in `DomainStoneMenu`, not the
+  screen**, because a slot's position and the well drawn behind it are two numbers that must agree.
+- **Vanilla draws no slot wells.** `extractSlot` renders the contents only; the wells are baked into
+  a background texture, and 26.3 no longer blits one for a container screen. **A screen that draws
+  its own panel must therefore draw every well itself**, or its items sit on bare grey — which is how
+  the player inventory came out invisible: existing, clickable, and unseen. Loop `menu.slots`, not
+  just your own slots. On 26.3 that loop belongs in **`extractLabels`**, the only hook that runs
+  after the background and before the slots; it sits inside the `translate(leftPos, topPos)` block,
+  so coordinates there are relative and the mouse needs offsetting by hand, and
+  `super.extractLabels` is called **last** so the title lands on top of the panel rather than under
+  it. On 1.21.1 the equivalent hook is `renderBg`, called from `renderBackground`, in absolute
+  coordinates.
+- Screen style is vanilla's own parts: slot wells from `generic_54.png`'s sampled pixels, and the
+  wheel icon in the empty wheel slot is `textures/slot/empty_wheel_slot.png` — the same picture the
+  player already sees in their Curios wheel slot, so it says "the wheel goes here" in the one place
+  the mod has taught them to look. 26.3 reaches a 32×32 file in a 16×16 well through
+  `blit(Identifier, x0, y0, x1, y1, u0, u1, v0, v1)` with normalised UVs; 1.21.1 needs the
+  9-argument `blit` with the real texture size, because the 7-argument one hardcodes a 256×256 sheet.
+  The experience bar is a **readout, not an input**: the price is a property of the adaptation, not a
+  choice, so a draggable control over it would be a control that lies.
+- 26.3 deltas this cost, none of which the 1.21.1 version shares: the whole drawing pipeline is
+  `extract*(GuiGraphicsExtractor, ...)` with `g.text`/`g.centeredText`, `blitSprite` takes the
+  RenderPipeline first, input is event objects where **`mouseClicked`'s second argument is "double
+  click" and not a button index**, `imageWidth`/`imageHeight` are `final` and go to `super`,
+  `openMenu(provider, BlockPos)` is gone, `Player.getBlockReach()` is replaced by
   `isWithinBlockInteractionRange(pos, 4.0)`, and `AbstractContainerMenu` grew
   `addStandardInventorySlots` with the same layout the hand-rolled 1.21.1 helper produced.
 - **`ResourceKey` has identity equality on this branch — it overrides neither `equals` nor
