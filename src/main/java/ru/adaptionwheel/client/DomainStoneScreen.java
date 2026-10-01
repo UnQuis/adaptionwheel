@@ -1,12 +1,13 @@
 package ru.adaptionwheel.client;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.Slot;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.menu.DomainStoneMenu;
 import ru.adaptionwheel.network.DomainStoneActionPayload;
@@ -18,42 +19,44 @@ import java.util.List;
  * The Domain Stone's screen.
  *
  * <p>Laid out from the sketch: the offering item at the top left, the wheel below it in the slot
- * marked with a cross, a levels bar under that, and the adaptations on offer down the right.</p>
+ * marked with the wheel icon, a bar under that, and the adaptations on offer down the right.</p>
+ *
+ * <h2>Why everything is drawn in {@code extractLabels}</h2>
+ *
+ * <p>That hook runs after the background and <em>before</em> the slots, inside the
+ * {@code pushMatrix/translate(leftPos, topPos)} block. That is the only window in which a slot's
+ * background can be drawn under the item that goes in it:</p>
+ *
+ * <ul>
+ *   <li>vanilla does <b>not</b> draw slot wells. {@code extractSlot} draws the contents only — the
+ *       wells are baked into a background texture, and 26.3 no longer blits one for a container
+ *       screen. So a screen that draws its own panel must draw every well itself, or the items sit
+ *       on bare grey. That is exactly what the first version of this screen did not do, and the
+ *       player inventory came out invisible.</li>
+ *   <li>coordinates here are already relative to {@code leftPos}/{@code topPos}, so nothing adds
+ *       them.</li>
+ *   <li>{@code super.extractLabels} draws the title and "Inventory", so it is called <em>last</em>:
+ *       its text has to land on top of the panel, not under it.</li>
+ * </ul>
  *
  * <h2>Where the "Minecraft look" comes from</h2>
  *
- * <p>Not from a hand-drawn imitation. The panel and bars reuse {@link AdaptationScreen}'s primitives
- * and palette, whose values were read out of {@code textures/gui/container/generic_54.png}; the two
- * input slots are drawn with that texture's own slot-well pixels, sampled rather than guessed; and
- * the cross on the empty wheel slot is vanilla's own {@code container/beacon/cancel} sprite, the one
- * vanilla uses to say <em>this is missing</em>. So this screen and the adaptation browser obey the
- * same rules and read as one mod.</p>
+ * <p>Not a hand-drawn imitation. Slot wells are {@code generic_54.png}'s own pixels, sampled. The
+ * panel, bars and scroller reuse {@link AdaptationScreen}'s primitives and palette, so the two
+ * screens read as one mod. The wheel icon in the empty wheel slot is the Curio slot icon the mod
+ * already ships, {@code textures/slot/empty_wheel_slot.png} — the same picture a player sees in
+ * their Curios wheel slot, which is the point: it says "the wheel goes here" in the one place the
+ * mod has already taught them to look.</p>
  *
- * <p>Nothing is blitted except that one cross, and that is not squeamishness. {@code blitSprite}
- * blits a whole sprite with no way to take an 18×18 window out of a 108×19 strip, and the
- * seven-argument {@code blit} hardcodes a 256×256 sheet — so a sprite is reachable only at its own
- * size, which is exactly the cross and nothing else on this screen.</p>
+ * <h2>26.3 notes</h2>
  *
- * <h2>26.3 notes, because the drawing pipeline was rewritten here too</h2>
- *
- * <p>{@code render}/{@code renderBg}/{@code renderTooltip} are gone: everything is
- * {@code extract*(GuiGraphicsExtractor, ...)} now, and {@code AbstractContainerScreen} calls
- * {@code extractContents} then the carried item then {@code extractTooltip} itself, so overriding
- * {@code extractContents} and calling super gives the right ordering for free. Text is
- * {@code g.text} and {@code g.centeredText}, and {@code blitSprite} takes the pipeline first. Input
- * is event objects: {@code mouseClicked(MouseButtonEvent, boolean)}. And
- * {@code imageWidth}/{@code imageHeight} are final, so the size goes to {@code super} rather than
- * being assigned.</p>
- *
- * <p>Drawing happens in absolute screen coordinates, after {@code extractContents} has popped the
- * (leftPos, topPos) translation back off — so every call adds {@code leftPos}/{@code topPos} itself,
- * which is why they are passed in explicitly rather than relied on.</p>
- *
- * <h2>The screen sends intent, not state</h2>
- *
- * <p>Clicking a row, dragging the slider and pressing the button each send a payload and draw
- * nothing locally. Everything visible is whatever the server last said, which is why the row under
- * the cursor and the row the server would grant cannot disagree.</p>
+ * <p>There is no {@code render}/{@code renderBg}/{@code renderTooltip}: everything is
+ * {@code extract*(GuiGraphicsExtractor, ...)}. Text is {@code g.text} and {@code g.centeredText},
+ * and input is event objects — {@code mouseClicked(MouseButtonEvent, boolean)}, whose second argument
+ * is "double click" and not a button index. {@code imageWidth}/{@code imageHeight} are final and go
+ * to {@code super}. A scaled single-texture blit is
+ * {@code blit(Identifier, x0, y0, x1, y1, u0, u1, v0, v1)} with normalised UVs — which is how the
+ * 32×32 Curio icon reaches a 16×16 well.</p>
  */
 public class DomainStoneScreen extends AbstractContainerScreen<DomainStoneMenu> {
 
@@ -78,8 +81,9 @@ public class DomainStoneScreen extends AbstractContainerScreen<DomainStoneMenu> 
     private static final int TEXT_SHORT = 0xFFA02020;
     private static final int ROW_HOVER = 0x80FFFFFF;
 
-    private static final Identifier CANCEL_CROSS =
-            Identifier.withDefaultNamespace("container/beacon/cancel");
+    private static final Identifier WHEEL_SLOT_ICON =
+            Identifier.fromNamespaceAndPath(ru.adaptionwheel.AdaptionWheel.MODID,
+                    "textures/slot/empty_wheel_slot.png");
 
     private static final int BAR_H = 5;
     private static final int ROW_H = 12;
@@ -90,7 +94,6 @@ public class DomainStoneScreen extends AbstractContainerScreen<DomainStoneMenu> 
     /** Space a drawn scrollbar takes out of the row text. */
     private static final int SCROLLER_GAP = 9;
 
-    private boolean draggingSlider;
     private int scroll;
 
     public DomainStoneScreen(DomainStoneMenu menu, Inventory inventory, Component title) {
@@ -102,38 +105,28 @@ public class DomainStoneScreen extends AbstractContainerScreen<DomainStoneMenu> 
     // ------------------------------------------------------------------ drawing
 
     @Override
-    public void extractContents(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
-        super.extractContents(g, mouseX, mouseY, partial);
+    protected void extractLabels(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        // Coordinates are relative to (leftPos, topPos) from here on.
+        panel(g, 0, 0, this.imageWidth, this.imageHeight);
 
-        int x = this.leftPos;
-        int y = this.topPos;
-
-        // The window itself. Vanilla's own container background is 176x166 and this is 176x229, so
-        // it cannot be blitted over the top -- and a background the player inventory floats on is
-        // not a Minecraft-style screen, it is a grid hanging in the void.
-        panel(g, x, y, this.imageWidth, this.imageHeight);
-
-        g.text(this.font, this.title, x + PAD, y + PAD, TEXT_HEADER, false);
-
-        // Drawn at the slots' own coordinates, read rather than repeated -- see the note on the
-        // layout block in DomainStoneMenu.
-        slotWell(g, x + DomainStoneMenu.OFFER_X, y + DomainStoneMenu.OFFER_Y);
-        slotWell(g, x + DomainStoneMenu.WHEEL_X, y + DomainStoneMenu.WHEEL_Y);
+        // Every slot in the menu, not just the two of ours: vanilla draws none of them.
+        for (Slot slot : menu.slots) {
+            slotWell(g, slot.x, slot.y);
+        }
         if (!menu.hasWheel()) {
-            // Vanilla's cross for "this is missing", over the one slot that has to be filled.
-            g.blitSprite(RenderPipelines.GUI_TEXTURED, CANCEL_CROSS,
-                    x + DomainStoneMenu.WHEEL_X, y + DomainStoneMenu.WHEEL_Y, 18, 18);
+            // The Curio slot icon, 32x32 drawn into a 16x16 well. Same picture as the player's wheel
+            // slot, which is a better instruction than a cross was.
+            g.blit(WHEEL_SLOT_ICON, DomainStoneMenu.WHEEL_X + 1, DomainStoneMenu.WHEEL_Y + 1,
+                    DomainStoneMenu.WHEEL_X + 17, DomainStoneMenu.WHEEL_Y + 17, 0f, 1f, 0f, 1f);
         }
 
-        renderSlider(g, x + DomainStoneMenu.SLIDER_X, y + DomainStoneMenu.SLIDER_Y);
-        renderButton(g, x + DomainStoneMenu.BUTTON_X, y + DomainStoneMenu.BUTTON_Y, mouseX, mouseY);
-        renderList(g, x + DomainStoneMenu.LIST_X, y + DomainStoneMenu.LIST_Y,
+        renderExperience(g, DomainStoneMenu.SLIDER_X, DomainStoneMenu.SLIDER_Y);
+        renderButton(g, DomainStoneMenu.BUTTON_X, DomainStoneMenu.BUTTON_Y, mouseX, mouseY);
+        renderList(g, DomainStoneMenu.LIST_X, DomainStoneMenu.LIST_Y,
                 DomainStoneMenu.LIST_W, DomainStoneMenu.LIST_H, mouseX, mouseY);
-    }
 
-    @Override
-    protected void extractLabels(GuiGraphicsExtractor g, int mouseX, int mouseY) {
-        // Nothing: each slot is labelled by what it is, not by a caption over it.
+        // Title and "Inventory" land on top of the panel we just drew.
+        super.extractLabels(g, mouseX, mouseY);
     }
 
     /** The chest GUI's slot well, six fills, exact. */
@@ -146,32 +139,53 @@ public class DomainStoneScreen extends AbstractContainerScreen<DomainStoneMenu> 
         g.fill(x + 1, y + 1, x + 17, y + 17, SLOT_BODY);
     }
 
-    private void renderSlider(GuiGraphicsExtractor g, int x, int y) {
-        String concept = menu.selectedConcept();
-        int max = concept == null ? 1 : DomainExchange.maxLevelsFor(concept);
+    /**
+     * The player's own experience, against what the selected adaptation costs.
+     *
+     * <p>Not an input. The bar is a readout, because the price is a property of the adaptation —
+     * one level for something one-time, up to four for a boss or a mutation — and a draggable
+     * control over a number nobody may choose is a control that lies.</p>
+     *
+     * <p>It reads as "how much of your levels this eats": filled to {@code price / playerLevel}, so a
+     * cheap adaptation next to a rich player is a sliver, and anything unaffordable fills the bar and
+     * goes red.</p>
+     */
+    private void renderExperience(GuiGraphicsExtractor g, int x, int y) {
+        int playerLevel = playerLevel();
+        int price = menu.xpPrice();
         int w = DomainStoneMenu.SLIDER_W;
+        boolean affordable = menu.canAfford(playerLevel);
+
         g.fill(x, y, x + w, y + BAR_H, BAR_FRAME);
         g.fill(x + 1, y + 1, x + w - 1, y + BAR_H - 1, BAR_EMPTY);
-        int filled = Math.round((w - 2) * (Math.min(menu.levels(), max) / (float) max));
-        if (filled > 0) {
-            g.fill(x + 1, y + 1, x + 1 + filled, y + BAR_H - 1, BAR_FULL);
+        if (price > 0) {
+            int filled = Math.round((w - 2) * Math.min(1f, price / (float) Math.max(1, playerLevel)));
+            if (filled > 0) {
+                g.fill(x + 1, y + 1, x + 1 + filled, y + BAR_H - 1, affordable ? BAR_FULL : 0xFF9A4B4B);
+            }
         }
-        // Both captions are short on purpose. A 60-wide column cannot hold "Cost: 5 x Nether Star",
-        // and the item is already sitting in the slot directly above, so the only thing worth
-        // saying is how many are needed.
-        g.text(this.font, Component.translatable("adaptionwheel.gui.levels", menu.levels(), max),
+        g.text(this.font, Component.translatable("adaptionwheel.gui.your_level", playerLevel),
                 x, y + BAR_H + 4, TEXT_DIM, false);
-        if (concept != null) {
-            g.text(this.font, Component.translatable("adaptionwheel.gui.needs", menu.currentCost()),
-                    x, y + BAR_H + 15, menu.canAfford() ? TEXT : TEXT_SHORT, false);
+        if (menu.selectedConcept() != null) {
+            g.text(this.font, Component.translatable("adaptionwheel.gui.price", price),
+                    x, y + BAR_H + 15, affordable ? TEXT : TEXT_SHORT, false);
         }
+    }
+
+    /** The player's experience level, read from the client copy. */
+    private int playerLevel() {
+        if (Minecraft.getInstance().player == null) {
+            return 0;
+        }
+        return Minecraft.getInstance().player.experienceLevel;
     }
 
     private void renderButton(GuiGraphicsExtractor g, int x, int y, int mouseX, int mouseY) {
         int w = DomainStoneMenu.BUTTON_W;
         int h = DomainStoneMenu.BUTTON_H;
-        boolean hot = within(mouseX, mouseY, x, y, w, h);
-        boolean on = menu.canAfford();
+        // The mouse is still in screen coordinates here, so the hit area is offset by hand.
+        boolean hot = within(mouseX - this.leftPos, mouseY - this.topPos, x, y, w, h);
+        boolean on = menu.canAfford(playerLevel());
         panel(g, x, y, w, h);
         if (on) {
             g.fill(x + 2, y + 2, x + w - 2, y + h - 2, hot ? ROW_HOVER : 0x60FFFFFF);
@@ -212,12 +226,10 @@ public class DomainStoneScreen extends AbstractContainerScreen<DomainStoneMenu> 
             String concept = pool.get(index);
             int ry = top + row * ROW_H;
             boolean selected = index == menu.selectedIndex();
-            boolean hot = mouseX >= rowX && mouseX < rowX + textW
-                    && mouseY >= ry && mouseY < ry + ROW_H;
+            boolean hot = within(mouseX - this.leftPos, mouseY - this.topPos, rowX, ry, textW, ROW_H);
             if (selected) {
                 // The concept's own colour, so the per-concept grouping the HUD teaches still reads
-                // against a light background. AdaptationScreen scales these to 52% for the same
-                // reason; here it is stronger because a 12px row has less to carry it.
+                // against a light background.
                 g.fill(rowX, ry, rowX + textW, ry + ROW_H, tint(Concepts.color(concept), 0.69f));
             } else if (hot) {
                 g.fill(rowX, ry, rowX + textW, ry + ROW_H, ROW_HOVER);
@@ -269,8 +281,7 @@ public class DomainStoneScreen extends AbstractContainerScreen<DomainStoneMenu> 
      *
      * <p>Neither branch has a max-width overload on {@code text}/{@code drawString} — it was moved
      * onto the {@code Font}, which is why {@link AdaptationScreen} trims with
-     * {@code plainSubstrByWidth} rather than passing a limit. Names come out of the lang file, so a
-     * translation longer than the column is a real possibility rather than a theoretical one.</p>
+     * {@code plainSubstrByWidth} rather than passing a limit.</p>
      */
     private String clipped(Component text, int maxWidth) {
         String plain = text.getString();
@@ -294,13 +305,6 @@ public class DomainStoneScreen extends AbstractContainerScreen<DomainStoneMenu> 
         if (event.button() != 0) {
             return super.mouseClicked(event, doubleClick);
         }
-
-        if (within(mx, my, x + DomainStoneMenu.SLIDER_X, y + DomainStoneMenu.SLIDER_Y,
-                DomainStoneMenu.SLIDER_W, BAR_H + 2)) {
-            draggingSlider = true;
-            sliderTo(mx - x - DomainStoneMenu.SLIDER_X);
-            return true;
-        }
         if (within(mx, my, x + DomainStoneMenu.BUTTON_X, y + DomainStoneMenu.BUTTON_Y,
                 DomainStoneMenu.BUTTON_W, DomainStoneMenu.BUTTON_H)) {
             DomainStoneActionPayload.exchange();
@@ -318,43 +322,6 @@ public class DomainStoneScreen extends AbstractContainerScreen<DomainStoneMenu> 
             return true;
         }
         return super.mouseClicked(event, doubleClick);
-    }
-
-    @Override
-    public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
-        if (draggingSlider) {
-            sliderTo(event.x() - this.leftPos - DomainStoneMenu.SLIDER_X);
-            return true;
-        }
-        return super.mouseDragged(event, dx, dy);
-    }
-
-    @Override
-    public boolean mouseReleased(MouseButtonEvent event) {
-        draggingSlider = false;
-        return super.mouseReleased(event);
-    }
-
-    /**
-     * Turns a pixel offset into a level count and sends it.
-     *
-     * <p>Sent only when the integer changes. A drag crosses the same pixel column many times and
-     * there are eight levels, so this is eight packets for a whole sweep rather than one per mouse
-     * move. It is not clamped here either — the server decides what a level count may be, and
-     * clamping in two places is how the two drift apart.</p>
-     */
-    private void sliderTo(double offsetPx) {
-        String concept = menu.selectedConcept();
-        if (concept == null) {
-            return;
-        }
-        int max = DomainExchange.maxLevelsFor(concept);
-        int usable = DomainStoneMenu.SLIDER_W - 2;
-        double clamped = Math.max(0, Math.min(offsetPx, usable));
-        int wanted = 1 + (int) Math.round(clamped / usable * (max - 1));
-        if (wanted != menu.levels()) {
-            DomainStoneActionPayload.levels(wanted);
-        }
     }
 
     @Override

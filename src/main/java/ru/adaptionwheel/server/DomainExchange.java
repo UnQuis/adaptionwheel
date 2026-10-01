@@ -111,16 +111,18 @@ public final class DomainExchange {
     }
 
     /**
-     * What one item buys into, and how much of it one level costs.
+     * What one item buys into, and how many of it one trade costs.
      *
-     * @param perLevel how many of the item a single level costs. The rule is one per level; the
-     *                 field exists because a recipe selling something eight levels deep should be
-     *                 able to say so rather than quietly price itself at the cheapest rate.
+     * <p>The item is <b>consumed</b> by the trade, so this is a price rather than a key. It is a
+     * plain count rather than a per-level rate because there is no longer a level count to buy: an
+     * exchange grants the adaptation whole, and what varies is how much it costs.</p>
+     *
+     * @param itemsPerTrade how many of the item one exchange consumes
      */
-    public record Recipe(Item item, List<Selector> selectors, int perLevel) {
+    public record Recipe(Item item, List<Selector> selectors, int itemsPerTrade) {
 
-        public int costFor(int levels) {
-            return Math.max(0, levels) * Math.max(1, perLevel);
+        public Recipe {
+            itemsPerTrade = Math.max(1, itemsPerTrade);
         }
     }
 
@@ -167,11 +169,13 @@ public final class DomainExchange {
         // A second debuff, to show the escape hatch earns its keep.
         register(Items.GHAST_TEAR, 1, "Debuff_wither");
 
-        // Damage types are leveled to eight, so they cost more per level than a one-time does.
+        // Damage types are leveled to eight, so they are worth more of an item than a
+        // one-time is. The real price of a leveled one is experience; see priceFor.
         register(Items.NETHER_WART, 1, "Type_WITHER");
         register(Items.BLAZE_POWDER, 2, "Type_FIRE");
         register(Items.SNOW_BLOCK, 2, "Type_FREEZE");
-        // The catch-all. Everything, all sixteen, at four per level.
+        // The catch-all: every damage type there is, for four of the most valuable item in the
+        // game. Two experience levels on top of that, for the privilege of not being shot at.
         register(Items.NETHER_STAR, 4, "Type_*");
     }
 
@@ -179,12 +183,12 @@ public final class DomainExchange {
      * Registers one offering item. A later registration for the same item replaces an earlier one,
      * so a pack or another mod can retune a recipe without removing the built-in first.
      */
-    public static void register(Item item, int perLevel, String... selectors) {
+    public static void register(Item item, int itemsPerTrade, String... selectors) {
         List<Selector> parsed = new ArrayList<>(selectors.length);
         for (String text : selectors) {
             parsed.add(Selector.of(text));
         }
-        BY_ITEM.put(item, new Recipe(item, List.copyOf(parsed), Math.max(1, perLevel)));
+        BY_ITEM.put(item, new Recipe(item, List.copyOf(parsed), itemsPerTrade));
     }
 
     /**
@@ -270,18 +274,48 @@ public final class DomainExchange {
     }
 
     /**
-     * How many levels can be bought at once.
+     * What an adaptation costs in whole levels of the player's own experience.
      *
-     * <p>A one-time adaptation is worth exactly one, and asking for more must not quietly consume
-     * eight items for the same single grant — hence the collapse rather than a refusal.</p>
+     * <p>Four prices, and the shape of them is the whole design: the price tracks how much of the
+     * wheel's progression the thing is worth, so an adaptation the wheel would have spent minutes
+     * on costs more than one it grants outright.</p>
+     *
+     * <pre>
+     *   1  a one-time adaptation -- an environment, a movement discomfort, a debuff
+     *   2  a leveled adaptation  -- a damage type, a fist tier, Mine_Labor, Combat_Cooldown
+     *   3  Drop_NPC_&lt;mob&gt;       -- what a mob leaves behind, which is earned by killing it
+     *   4  Existence_ / Mutation_ / Dimension_Destroy -- a boss, or a milestone
+     * </pre>
+     *
+     * <p><b>Nothing is ever free.</b> The floor is one level, which is the rounded-up form of the
+     * half-level minimum: a price that could reach zero would make the stone a place to stand
+     * rather than a trade, which is the thing it stopped being.</p>
+     *
+     * <p>Whole levels rather than fractions because vanilla experience is an integer and spending
+     * part of a level means keeping fractional progress the game has nowhere to store.</p>
      */
-    public static int maxLevelsFor(String concept) {
-        return Concepts.isLevelBased(concept) ? PlayerAdaption.MAX_LEVEL : 1;
+    public static int priceFor(String concept) {
+        if (concept == null) {
+            return 0;
+        }
+        if (concept.startsWith(Concepts.EXISTENCE_PREFIX)
+                || concept.startsWith(Concepts.MUTATION_PREFIX)
+                || concept.equals(Concepts.DIMENSION_DESTROY)) {
+            return 4;
+        }
+        if (concept.startsWith(Concepts.DROP_PREFIX)) {
+            return 3;
+        }
+        return Concepts.isLevelBased(concept) ? 2 : 1;
     }
 
-    /** Clamps a requested level count into what the chosen concept can actually take. */
-    public static int clampLevels(String concept, int requested) {
-        return Math.max(1, Math.min(maxLevelsFor(concept), requested));
+    /** The most expensive thing on offer, so the screen can scale its readout against something. */
+    public static int dearestPrice(List<String> pool) {
+        int dearest = 0;
+        for (String concept : pool) {
+            dearest = Math.max(dearest, priceFor(concept));
+        }
+        return dearest;
     }
 
     /** The domain of an adaptation, or {@link AdaptationDomain#SPECIAL} for an unregistered one. */

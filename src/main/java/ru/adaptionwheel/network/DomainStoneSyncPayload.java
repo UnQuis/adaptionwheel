@@ -15,16 +15,19 @@ import java.util.List;
 /**
  * Server→client: the Domain Stone's whole screen state in one packet.
  *
- * <p>Three things have to cross: the candidate list, which row is selected and how many levels are
- * wanted. They travel together because they are one decision — a row index is meaningless without
- * the list it indexes, and a level count is meaningless without the row that caps it — and a client
- * that received them separately could draw a slider for a row it does not have.</p>
+ * <p>Two things cross: the candidate list and which row is selected. They travel together because
+ * they are one decision — a row index is meaningless without the list it indexes — and the screen
+ * draws a selection it cannot name otherwise.</p>
+ *
+ * <p>The player's experience is deliberately <em>not</em> here. It is a number the client already
+ * has and keeps up to date itself, and sending it would be a second source of truth for a value
+ * that changes on the client's own.</p>
  *
  * <p>This is deliberately <em>not</em> a {@link net.minecraft.world.inventory.DataSlot}. A
  * {@code DataSlot} is one int, the pool is a variable-length list of arbitrary concept keys, and the
- * sync would then be three unrelated mechanisms with three unrelated failure modes.</p>
+ * sync would then be two unrelated mechanisms with two unrelated failure modes.</p>
  */
-public record DomainStoneSyncPayload(List<String> candidates, int selectedIndex, int levels)
+public record DomainStoneSyncPayload(List<String> candidates, int selectedIndex)
         implements CustomPacketPayload {
 
     public static final Type<DomainStoneSyncPayload> TYPE =
@@ -37,14 +40,13 @@ public record DomainStoneSyncPayload(List<String> candidates, int selectedIndex,
                     buf.writeUtf(concept, 256);
                 }
                 buf.writeVarInt(payload.selectedIndex);
-                buf.writeVarInt(payload.levels);
             }, buf -> {
                 int size = buf.readVarInt();
                 List<String> candidates = new ArrayList<>(Math.max(0, Math.min(size, 256)));
                 for (int i = 0; i < size; i++) {
                     candidates.add(buf.readUtf(256));
                 }
-                return new DomainStoneSyncPayload(candidates, buf.readVarInt(), buf.readVarInt());
+                return new DomainStoneSyncPayload(candidates, buf.readVarInt());
             });
 
     @Override
@@ -54,14 +56,14 @@ public record DomainStoneSyncPayload(List<String> candidates, int selectedIndex,
 
     public static void send(ServerPlayer player, DomainStoneMenu menu) {
         PacketDistributor.sendToPlayer(player,
-                new DomainStoneSyncPayload(menu.candidates(), menu.selectedIndex(), menu.levels()));
+                new DomainStoneSyncPayload(menu.candidates(), menu.selectedIndex()));
     }
 
     /** Applies a sync to the open menu, if it is still the stone's. */
     public static void apply(DomainStoneSyncPayload payload) {
         if (net.minecraft.client.Minecraft.getInstance().player instanceof net.minecraft.client.player.LocalPlayer player
                 && player.containerMenu instanceof DomainStoneMenu menu) {
-            menu.acceptSync(payload.candidates(), payload.selectedIndex(), payload.levels());
+            menu.acceptSync(payload.candidates(), payload.selectedIndex());
         }
     }
 }

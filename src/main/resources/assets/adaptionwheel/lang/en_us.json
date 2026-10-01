@@ -308,10 +308,11 @@
   "container.adaptionwheel.domain_stone": "Domain Stone",
   "adaptionwheel.gui.exchange": "EXCHANGE",
   "adaptionwheel.gui.choose": "Adaptations",
-  "adaptionwheel.gui.levels": "Lv. %s / %s",
-  "adaptionwheel.gui.needs": "Needs %s",
   "adaptionwheel.gui.need_item": "Put an offering item in the upper slot.",
   "adaptionwheel.gui.nothing_left": "Nothing left to learn here.",
   "adaptionwheel.msg.stone_too_few": "Not enough. The stone wants more.",
-  "adaptionwheel.msg.stone_stale": "The stone has moved on. Look again."
+  "adaptionwheel.msg.stone_stale": "The stone has moved on. Look again.",
+  "adaptionwheel.gui.your_level": "Your level %s",
+  "adaptionwheel.gui.price": "Costs %s lv",
+  "adaptionwheel.msg.stone_no_experience": "The stone asks %s levels. You have %s."
 }
