@@ -1,0 +1,7 @@
+{
+ "mob": "minecraft:spider",
+ "items": [
+  "minecraft:spider_eye",
+  "minecraft:string"
+ ]
+}

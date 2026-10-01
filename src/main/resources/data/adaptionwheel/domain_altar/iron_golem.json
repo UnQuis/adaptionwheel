@@ -1,0 +1,7 @@
+{
+ "mob": "minecraft:iron_golem",
+ "items": [
+  "minecraft:iron_ingot",
+  "minecraft:poppy"
+ ]
+}

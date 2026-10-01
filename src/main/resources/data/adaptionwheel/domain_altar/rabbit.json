@@ -1,0 +1,8 @@
+{
+ "mob": "minecraft:rabbit",
+ "items": [
+  "minecraft:rabbit",
+  "minecraft:rabbit_foot",
+  "minecraft:rabbit_hide"
+ ]
+}

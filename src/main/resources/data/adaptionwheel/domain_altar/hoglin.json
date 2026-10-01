@@ -1,0 +1,7 @@
+{
+ "mob": "minecraft:hoglin",
+ "items": [
+  "minecraft:leather",
+  "minecraft:porkchop"
+ ]
+}

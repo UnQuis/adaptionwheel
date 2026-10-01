@@ -1,0 +1,7 @@
+{
+ "mob": "minecraft:evoker",
+ "items": [
+  "minecraft:emerald",
+  "minecraft:totem_of_undying"
+ ]
+}

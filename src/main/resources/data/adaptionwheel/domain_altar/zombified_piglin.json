@@ -1,0 +1,8 @@
+{
+ "mob": "minecraft:zombified_piglin",
+ "items": [
+  "minecraft:gold_ingot",
+  "minecraft:gold_nugget",
+  "minecraft:rotten_flesh"
+ ]
+}

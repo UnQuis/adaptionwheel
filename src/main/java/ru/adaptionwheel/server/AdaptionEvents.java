@@ -1701,6 +1701,28 @@ public class AdaptionEvents {
         sync(player, data, true);
     }
 
+    /**
+     * Buys a {@code Drop_NPC_} adaptation by paying in kills rather than setting its level.
+     *
+     * <p>A drop level is <em>derived</em> from a kill count — everywhere else in the mod it is
+     * {@code dropLevelFromKills(kills)} and nothing else — so a trade that assigned the level
+     * directly would leave that counter lying about why the player holds it: an eighth level of
+     * loot-luck having killed one chicken. Paying in kills keeps one rule, one table, and one
+     * number.</p>
+     */
+    public static void grantKillsToward(ServerPlayer player, PlayerAdaption data, String concept,
+                                        int targetLevel) {
+        int wanted = (int) Math.ceil(AdaptionConfig.lootKills(targetLevel));
+        int have = data.kills(concept);
+        if (wanted <= have) {
+            completeTaskUpTo(player, data, concept, -1);
+            return;
+        }
+        data.killCounts.merge(concept, wanted - have, Integer::sum);
+        data.addHistory(concept);
+        completeTaskUpTo(player, data, concept, -1);
+    }
+
     /** Instantly max all adaptations. Requires the Mahoraga Wheel (All Adaption item). */
     public static void grantAllAdaptations(Player player) {
         if (!(player instanceof ServerPlayer serverPlayer)) {

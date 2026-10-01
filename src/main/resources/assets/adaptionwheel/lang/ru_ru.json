@@ -314,5 +314,7 @@
   "adaptionwheel.msg.stone_stale": "Камень передумал. Посмотри заново.",
   "adaptionwheel.gui.your_level": "Ваш уровень %s",
   "adaptionwheel.gui.price": "Цена %s ур.",
-  "adaptionwheel.msg.stone_no_experience": "Камень просит %s уровней. У вас %s."
+  "adaptionwheel.msg.stone_no_experience": "Камень просит %s уровней. У вас %s.",
+  "container.adaptionwheel.resonance_altar": "Резонансный алтарь",
+  "adaptionwheel.gui.all_learned": "Ты уже выучил всё, чему учит этот моб."
 }

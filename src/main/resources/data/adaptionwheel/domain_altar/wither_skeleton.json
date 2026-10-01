@@ -1,0 +1,8 @@
+{
+ "mob": "minecraft:wither_skeleton",
+ "items": [
+  "minecraft:bone",
+  "minecraft:coal",
+  "minecraft:wither_skeleton_skull"
+ ]
+}
