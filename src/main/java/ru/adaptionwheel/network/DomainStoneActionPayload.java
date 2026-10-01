@@ -1,0 +1,89 @@
+package ru.adaptionwheel.network;
+
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.neoforge.network.PacketDistributor;
+import ru.adaptionwheel.AdaptionWheel;
+import ru.adaptionwheel.menu.DomainStoneMenu;
+
+/**
+ * Client→server: what the player wants at the Domain Stone.
+ *
+ * <p>Three intentions, not three fields of state. The client never says "the row is 2 and the
+ * levels are 5" as a claim about the world — it says "row 2" and "five levels" as things it did,
+ * and the server decides what they mean. Sending a whole state blob instead would mean the server
+ * would have to trust a client to describe the pool it already knows, and the whole reason the menu
+ * keeps its state server-side is that a row index goes stale the moment the pool changes.</p>
+ *
+ * <p>One packet carries all three rather than three carrying one each. At most one of these can be
+ * meaningful per mouse click, and splitting them would mean the exchange racing the selection that
+ * authorised it.</p>
+ */
+public record DomainStoneActionPayload(Action action, int value) implements CustomPacketPayload {
+
+    public enum Action {
+        /** Move the selection to a row. {@code value} is the index, or -1 to clear it. */
+        SELECT,
+        /** Set the level count. {@code value} is the requested level, clamped server-side. */
+        LEVELS,
+        /** Perform the exchange. {@code value} is unused. */
+        EXCHANGE
+    }
+
+    public static final Type<DomainStoneActionPayload> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, "domain_stone_action"));
+
+    public static final StreamCodec<RegistryFriendlyByteBuf, DomainStoneActionPayload> STREAM_CODEC =
+            StreamCodec.of((buf, payload) -> {
+                        buf.writeByte(payload.action.ordinal());
+                        buf.writeVarInt(payload.value);
+                    },
+                    buf -> {
+                        // Read through the array rather than values()[ordinal] on the client's
+                        // word: a mismatched build would otherwise throw ArrayIndexOutOfBounds on the
+                        // first click instead of failing to decode.
+                        Action[] actions = Action.values();
+                        int ordinal = buf.readByte() & 0xFF;
+                        Action action = ordinal < actions.length ? actions[ordinal] : Action.EXCHANGE;
+                        return new DomainStoneActionPayload(action, buf.readVarInt());
+                    });
+
+    @Override
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
+
+    public static void select(int index) {
+        PacketDistributor.sendToServer(new DomainStoneActionPayload(Action.SELECT, index));
+    }
+
+    public static void levels(int count) {
+        PacketDistributor.sendToServer(new DomainStoneActionPayload(Action.LEVELS, count));
+    }
+
+    public static void exchange() {
+        PacketDistributor.sendToServer(new DomainStoneActionPayload(Action.EXCHANGE, 0));
+    }
+
+    /**
+     * Runs the action against the open menu.
+     *
+     * <p>The type check is the whole of the validation that matters here: a player can send this
+     * packet at any time, including with a different screen open or none at all, and an
+     * {@code instanceof} on a container menu is what stops a stray packet from reaching a menu that
+     * has nothing to do with the stone.</p>
+     */
+    public static void handle(DomainStoneActionPayload payload, ServerPlayer player) {
+        if (!(player.containerMenu instanceof DomainStoneMenu menu)) {
+            return;
+        }
+        switch (payload.action()) {
+            case SELECT -> menu.select(payload.value());
+            case LEVELS -> menu.setLevels(payload.value());
+            case EXCHANGE -> menu.exchange();
+        }
+    }
+}

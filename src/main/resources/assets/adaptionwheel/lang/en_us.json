@@ -226,9 +226,7 @@
   "block.adaptionwheel.resonance_altar": "Resonance Altar",
   "block.adaptionwheel.domain_stone": "Domain Stone",
   "adaptionwheel.msg.stone_no_wheel": "The stone is inert. Wear the wheel.",
-  "adaptionwheel.msg.stone_waiting": "The stone is still thinking. %s s.",
   "adaptionwheel.msg.stone_nothing": "The wheel has nothing left to show you here.",
-  "adaptionwheel.msg.stone_given": "The stone answers: %s.",
   "adaptionwheel.config.ritual.brazierHealEnabled": "The Adaptation Brazier heals a wheel-wearer nearby.",
   "adaptionwheel.config.ritual.brazierHealPerSecond": "Healing per second, per brazier.",
   "adaptionwheel.config.ritual.totemEnabled": "The Wheel Totem advances running analyses nearby.",
@@ -303,7 +301,16 @@
   "adv.adaptionwheel.ritual.title": "Ritual",
   "adv.adaptionwheel.ritual.desc": "The wheel's craft. Four blocks that only ever give.",
   "adv.adaptionwheel.domain_stone.title": "The Domain Stone",
-  "adv.adaptionwheel.domain_stone.desc": "A stone that answers a question you have not asked yet.",
+  "adv.adaptionwheel.domain_stone.desc": "A stone that trades an item for an adaptation. The item is the price.",
   "adv.adaptionwheel.disciple.title": "Disciple Felled",
-  "adv.adaptionwheel.disciple.desc": "Something that measures you has fallen."
+  "adv.adaptionwheel.disciple.desc": "Something that measures you has fallen.",
+  "container.adaptionwheel.domain_stone": "Domain Stone",
+  "adaptionwheel.gui.exchange": "EXCHANGE",
+  "adaptionwheel.gui.choose": "Adaptations",
+  "adaptionwheel.gui.levels": "Lv. %s / %s",
+  "adaptionwheel.gui.need_item": "Put an offering item in the upper slot.",
+  "adaptionwheel.gui.nothing_left": "Nothing left to learn here.",
+  "adaptionwheel.msg.stone_too_few": "Not enough. The stone wants more.",
+  "adaptionwheel.msg.stone_stale": "The stone has moved on. Look again.",
+  "adaptionwheel.gui.needs": "Needs %s"
 }
