@@ -594,3 +594,116 @@ asserting on a fixture the setup had stopped creating.
 
 **A stale `runs/gameTestServer/config/adaptionwheel-*.toml` can loop the tracker forever** and hang
 a run with no exception. Delete the config file first whenever a run hangs for no visible reason.
+
+## Phase 21 — The Domain Stone trades
+
+The stone handed an adaptation over for free, on a 45-second cooldown, drawn at random from whatever
+the wheel had not finished. That made it the one place in the mod where progress cost nothing, and a
+place where progress costs nothing is a place where every other cost is optional: the other
+fifty-odd adaptations are each bought with suffering and time, and one counterweight that says
+"or just stand here" undercuts all of them.
+
+It is now an exchange. An item goes in, an adaptation comes out, and the item is the price.
+
+| decision | what was chosen | why |
+|---|---|---|
+| what the item does | narrows the pool | the block's whole point is that the item *is* the question; naming one adaptation would make it a menu of 16 buttons |
+| price | one item per level | makes the levels bar mean something instead of being a free multiplier |
+| cooldown | removed | the item is already the limiter; two limiters is one too many |
+| old behaviour | removed outright | a second, free path is how a price stops being a price |
+
+### What each item buys
+
+A recipe is a list of **selectors**, each either an exact concept or a family written with a
+trailing `*`:
+
+    FEATHER      -> Debuff_levitation      one adaptation, always
+    ENDER_EYE    -> Env_Void                idem
+    NETHER_STAR  -> Type_*                  sixteen damage types, pick one
+
+Families rather than a fixed enumeration, because the pool is then *derived* rather than declared: a
+recipe does not need editing when the registry grows, and a missing entry cannot silently make a
+recipe offer nothing.
+
+Which surfaces immediately, and is not obvious:
+
+- **`Debuff_*` and `Drop_NPC_*` are not in `AdaptationRegistry`.** Debuff keys are minted on the fly
+  from whichever effect a player happens to be under (`Concepts.debuff(effectPath)`), and the per-mob
+  families are minted per entity. The pool is walked out of `allDefinitions()`, so a recipe naming
+  either would offer nothing at all — silently, with no error and no log line. Hence an **exact
+  selector is resolved directly** rather than looked up. The cost is that such a concept sorts last
+  by domain name, because `AdaptationRegistry.get` returns null for it; that is a far cheaper bill
+  than a recipe that quietly trades nothing.
+- **No mutation, `Dimension_Destroy` or `Self_Damage` is sold.** Those are milestones with unlock
+  conditions of their own — a combo mutation exists *because* the wheel has learned both halves —
+  and selling one for an item would replace that condition with a shopping list.
+
+### Why the tier does not filter
+
+The original preferred a family the wheel had **not** revealed yet, and that is why the block
+existed: somewhere to go that was a step ahead rather than behind. It also keeps the subsystem honest
+with the rest of the mod. Wheel tiers *reveal*, they never restrict — the wheel is omnipotent, so a
+later tier is only ever a larger one — and a block that refused to sell a concept until the wheel
+could analyse it would impose the one rule the tier system does not have, and would make the price
+of the item irrelevant to what it buys.
+
+### The container
+
+The mod's first container GUI, and the first place `main` touches the container API at all.
+
+- **No block entity.** The stone stays a plain `Block` and the position travels as menu-open data
+  through `IMenuProviderExtension.writeClientSideData`. That extra data is **mandatory**: with none,
+  the server sends a plain open-screen packet, the client factory is handed an empty buffer, and
+  reading a `BlockPos` off it throws — at the moment a player opens the block, not at boot.
+- **Its own container, not the player's.** The two slots wrap a `SimpleContainer`. Player-inventory
+  indices are already spoken for by `addStandardInventorySlots` (hotbar over 0-8), and a second
+  `Slot` on the same index is how a menu renders one item twice and moves it twice.
+- **The server owns every number.** Candidates, selected row and level count live on the menu; the
+  client sends *intent* and draws whatever the server last said. This is not defensiveness for its
+  own sake — a row is chosen by **index**, and the pool is rebuilt whenever anything in the menu
+  changes, so an index is potentially stale the moment it is sent. Re-deciding legality at the moment
+  of the exchange is what makes a stale index a refusal rather than a wrong grant, and paying for an
+  adaptation already held is the worst available outcome because the item would be gone and nothing
+  would have changed.
+- **The pool order is total** — revealed first, then domain, then concept name. The first clause is
+  the original shortcut; the other two exist only because the client picks a row by index.
+- **`Adaptersity` is never sold.** It is a survival challenge, not an adaptation: the price would be
+  an item and what it buys would be a fight the player did not ask for.
+
+### The screen
+
+Minecraft-style from vanilla's own parts rather than an imitation:
+
+- slot wells are `generic_54.png`'s own pixels, **sampled** (`#373737` frame, `#8B8B8B` body, white
+  bottom-and-right inner shadow) — the same way `AdaptationScreen`'s panel palette was obtained;
+- the cross on the empty wheel slot is `container/beacon/cancel`, the sprite vanilla uses to say
+  *this is missing*;
+- panel, bars and scroller reuse `AdaptationScreen`'s primitives, so the two screens read as one mod;
+- **nothing else is blitted.** `blitSprite` blits a whole sprite with no way to take an 18×18 window
+  out of a 108×19 strip, and the 7-argument `blit` hardcodes a 256×256 sheet. A sprite is reachable
+  only at its own size, which is exactly the cross and nothing else here.
+
+### Three faults found by drawing it rather than reasoning about it
+
+None would have shown in a build, and the first two would have been obvious on screen:
+
+1. slots placed at x=26 while the screen drew their wells at x=8 — every item outside its square;
+2. shift-clicking a wheel into a full wheel slot indexed slots 38..46 in a 38-slot list;
+3. a 112-wide levels bar under a list panel starting at x=40, so the bar and both its captions were
+   drawn over.
+
+All three are layout arithmetic, so all three now live in `DomainStoneMenu` as the single
+declaration the screen reads, and `theMenuIsLaidOutWhereTheScreenExpects` pins them.
+
+### Verification
+
+Nine gametests, `DomainExchangeTests`. The one that matters most is **`everyRecipeSellsSomething`**:
+a selector naming nothing produces an empty list, which is completely silent — the screen opens, the
+item goes in, and the list is blank. That is precisely the "present, registered, and connected to
+nothing" shape this repo has been bitten by before, and nothing else would catch it.
+
+69 tests total, up from 60. Verified by compilation, a clean dedicated-server boot and the suite.
+**The screen itself has not been seen running** — a dedicated server has no GUI — so the layout was
+checked against a mock drawn from the same constants, which is how faults 1-3 above were found, and
+the screen is otherwise unplaytested. 26.3's nine tests are not ported, because that branch has no
+test framework at all.
