@@ -105,41 +105,80 @@ public class DomainExchangeTests {
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void oneItemPerLevel(GameTestHelper helper) {
-        DomainExchange.Recipe feather = DomainExchange.recipeFor(Items.FEATHER);
-        helper.assertTrue(feather.perLevel() == 1,
-                "the rule the player chose is one item per level, so a one-per-level recipe is 1");
-        helper.assertTrue(feather.costFor(1) == 1, "one level of a one-per-level recipe costs one");
-        helper.assertTrue(feather.costFor(8) == 8, "eight levels must cost eight");
-
-        DomainExchange.Recipe star = DomainExchange.recipeFor(Items.NETHER_STAR);
-        helper.assertTrue(star.perLevel() >= 4,
-                "the catch-all sells all sixteen damage types to eight levels; pricing it like a"
-                        + " one-time would make it strictly better than every other recipe");
-        helper.assertTrue(star.costFor(8) == 8 * star.perLevel(),
-                "cost must be levels times per-level, with no hidden term");
-
-        helper.assertTrue(feather.costFor(0) == 0, "zero levels must cost nothing, not something");
-        helper.assertTrue(feather.costFor(-3) == 0,
-                "a negative level count must not become a credit");
+    public static void nothingIsEverFree(GameTestHelper helper) {
+        // The floor is one level, and it is load-bearing: a price that could reach zero would make
+        // the stone a place to stand rather than a trade, which is the thing it stopped being. The
+        // cheapest thing in the mod -- an environment, a movement discomfort -- still costs a level.
+        String[] cheapestPossible = {
+                Concepts.ENV_LIQUID, Concepts.ENV_VOID, Concepts.MOVE_HONEY,
+                Concepts.DEBUFF_PREFIX + "levitation", Concepts.COMBAT_SHIELD_LOCK,
+                Concepts.PERCEP_STEADY_GAZE,
+        };
+        for (String concept : cheapestPossible) {
+            int price = DomainExchange.priceFor(concept);
+            helper.assertTrue(price >= 1,
+                    concept + " costs " + price + " -- an exchange must never be free");
+        }
+        // And the whole ladder, because "1 for easy, 4 for a boss" is the design and a rule that
+        // silently collapses to one price is not a ladder.
+        helper.assertTrue(DomainExchange.priceFor(Concepts.ENV_LIQUID) == 1,
+                "a one-time adaptation is the cheapest thing there is");
+        helper.assertTrue(DomainExchange.priceFor("Type_FIRE") == 2,
+                "a leveled adaptation costs more than a one-time");
+        helper.assertTrue(DomainExchange.priceFor("Drop_NPC_minecraft:zombie") == 3,
+                "what a mob drops is worth more than a damage type");
+        helper.assertTrue(DomainExchange.priceFor("Existence_minecraft:ender_dragon") == 4,
+                "a boss is the most expensive thing on offer");
+        helper.assertTrue(DomainExchange.priceFor("Mutation_Thermal") == 4,
+                "a milestone is priced with the bosses");
+        helper.assertTrue(DomainExchange.priceFor(null) == 0,
+                "no concept, no price -- and 0 must not leak into an exchange with nothing selected");
         helper.succeed();
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void aOneTimeAdaptationIsWorthOneLevel(GameTestHelper helper) {
-        helper.assertTrue(DomainExchange.maxLevelsFor(Concepts.ENV_VOID) == 1,
-                "an environment is learned or not learned, so the cap must be one");
-        helper.assertTrue(DomainExchange.maxLevelsFor("Type_FIRE") == PlayerAdaption.MAX_LEVEL,
-                "a damage type levels to the cap");
-        // The one that would cost items for nothing: eight levels requested of a one-time concept.
-        helper.assertTrue(DomainExchange.clampLevels(Concepts.ENV_VOID, 8) == 1,
-                "asking eight levels of a one-time adaptation must collapse to one rather than"
-                        + " quietly charge for eight");
-        helper.assertTrue(DomainExchange.clampLevels("Type_FIRE", 99) == PlayerAdaption.MAX_LEVEL,
-                "a level count above the cap must come down to the cap");
-        helper.assertTrue(DomainExchange.clampLevels("Type_FIRE", 0) == 1,
-                "zero levels must clamp up to one, never to zero, or the button would grant nothing"
-                        + " for a price");
+    public static void theItemIsAPriceAndNotJustAKey(GameTestHelper helper) {
+        // The item narrows the list AND is consumed, so it is a price rather than a key. A recipe
+        // that cost nothing would reintroduce the free handout the exchange was built to remove.
+        for (Item item : DomainExchange.offerings()) {
+            DomainExchange.Recipe recipe = DomainExchange.recipeFor(item);
+            helper.assertTrue(recipe.itemsPerTrade() >= 1,
+                    item + " costs nothing per trade; an exchange must always cost something");
+        }
+        // And the rates are ordered by how much the thing is worth: a feather for one level of
+        // adaptation is not the same as four nether stars for one.
+        helper.assertTrue(DomainExchange.recipeFor(Items.FEATHER).itemsPerTrade() == 1,
+                "the feather is the cheapest offering and must say so");
+        helper.assertTrue(DomainExchange.recipeFor(Items.NETHER_STAR).itemsPerTrade()
+                        > DomainExchange.recipeFor(Items.FEATHER).itemsPerTrade(),
+                "the catch-all, which offers all sixteen damage types, must cost more than a feather"
+                        + " that offers one");
+        // A recipe registered with a nonsensical rate is clamped rather than becoming free.
+        DomainExchange.register(Items.REDSTONE, 0, "Type_FIRE");
+        try {
+            helper.assertTrue(DomainExchange.recipeFor(Items.REDSTONE).itemsPerTrade() == 1,
+                    "a zero rate must clamp to one, not make the trade free");
+        } finally {
+            DomainExchange.unregister(Items.REDSTONE);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theDeapestPriceTracksThePool(GameTestHelper helper) {
+        // The screen scales its bar against this, so it has to be the maximum over what is actually
+        // on offer rather than a constant -- a pool of one-time adaptations must not be scaled as
+        // though a boss were in it.
+        List<String> cheap = DomainExchange.candidates(empty(), 0,
+                DomainExchange.recipeFor(Items.FEATHER));
+        helper.assertTrue(DomainExchange.dearestPrice(cheap) == 1,
+                "levitation is one level and must read as one");
+        List<String> broad = DomainExchange.candidates(empty(), 0,
+                DomainExchange.recipeFor(Items.NETHER_STAR));
+        helper.assertTrue(DomainExchange.dearestPrice(broad) == 2,
+                "damage types are two levels and must read as two");
+        helper.assertTrue(DomainExchange.dearestPrice(List.of()) == 0,
+                "an empty pool has nothing to scale against");
         helper.succeed();
     }
 

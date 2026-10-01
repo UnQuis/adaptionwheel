@@ -12,23 +12,20 @@ import ru.adaptionwheel.menu.DomainStoneMenu;
 /**
  * Client→server: what the player wants at the Domain Stone.
  *
- * <p>Three intentions, not three fields of state. The client never says "the row is 2 and the
- * levels are 5" as a claim about the world — it says "row 2" and "five levels" as things it did,
- * and the server decides what they mean. Sending a whole state blob instead would mean the server
- * would have to trust a client to describe the pool it already knows, and the whole reason the menu
- * keeps its state server-side is that a row index goes stale the moment the pool changes.</p>
+ * <p>Two intentions. The client never says "the row is 2 and I have 5 levels" as a claim about the
+ * world — it says "row 2" and "exchange" as things it did, and the server decides what they mean.
+ * Sending a state blob instead would mean trusting a client to describe the pool the server already
+ * knows, and the whole reason the menu keeps its state server-side is that a row index goes stale
+ * the moment the pool changes.</p>
  *
- * <p>One packet carries all three rather than three carrying one each. At most one of these can be
- * meaningful per mouse click, and splitting them would mean the exchange racing the selection that
- * authorised it.</p>
+ * <p>Experience is not in here either: it is charged from the live player, not from anything a
+ * client said.</p>
  */
 public record DomainStoneActionPayload(Action action, int value) implements CustomPacketPayload {
 
     public enum Action {
         /** Move the selection to a row. {@code value} is the index, or -1 to clear it. */
         SELECT,
-        /** Set the level count. {@code value} is the requested level, clamped server-side. */
-        LEVELS,
         /** Perform the exchange. {@code value} is unused. */
         EXCHANGE
     }
@@ -60,10 +57,6 @@ public record DomainStoneActionPayload(Action action, int value) implements Cust
         PacketDistributor.sendToServer(new DomainStoneActionPayload(Action.SELECT, index));
     }
 
-    public static void levels(int count) {
-        PacketDistributor.sendToServer(new DomainStoneActionPayload(Action.LEVELS, count));
-    }
-
     public static void exchange() {
         PacketDistributor.sendToServer(new DomainStoneActionPayload(Action.EXCHANGE, 0));
     }
@@ -82,7 +75,6 @@ public record DomainStoneActionPayload(Action action, int value) implements Cust
         }
         switch (payload.action()) {
             case SELECT -> menu.select(payload.value());
-            case LEVELS -> menu.setLevels(payload.value());
             case EXCHANGE -> menu.exchange();
         }
     }

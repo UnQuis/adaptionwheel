@@ -608,9 +608,30 @@ It is now an exchange. An item goes in, an adaptation comes out, and the item is
 | decision | what was chosen | why |
 |---|---|---|
 | what the item does | narrows the pool | the block's whole point is that the item *is* the question; naming one adaptation would make it a menu of 16 buttons |
-| price | one item per level | makes the levels bar mean something instead of being a free multiplier |
+| price | the item, consumed, **plus the player's own experience levels** | two prices rather than one, so a rich player with a feather still cannot buy a boss |
 | cooldown | removed | the item is already the limiter; two limiters is one too many |
 | old behaviour | removed outright | a second, free path is how a price stops being a price |
+
+### The price ladder
+
+`DomainExchange.priceFor` — **1** for a one-time adaptation, **2** for a leveled one, **3** for
+`Drop_NPC_`, **4** for `Existence_` / `Mutation_` / `Dimension_Destroy`. The shape is the design: the
+price tracks how much of the wheel's progression the thing is worth, so an adaptation the wheel would
+have spent minutes earning costs more than one it grants outright.
+
+**The floor of one level is load-bearing.** A price that could reach zero turns the stone into a place
+to stand rather than a trade, which is precisely what it stopped being. It is the rounded-up form of
+the half-level minimum that was asked for: vanilla experience is an integer and part of a level has
+nowhere to live, so the honest reading of "at least 0.5 levels" is "at least one, and make the
+ladder do the rest".
+
+Charging is `giveExperienceLevels(-price)`, the same call vanilla uses for an enchanting table, so the
+client's experience bar updates through the ordinary path and there is no second currency to sync.
+
+An exchange grants the adaptation **whole** — `grantConceptUpTo(player, data, concept, MAX_LEVEL)` —
+because what is being bought is an adaptation, not a step of one, and the ladder is what says how big
+a thing that is. The level count that the slider used to choose is gone entirely, along with its
+payload field and its action.
 
 ### What each item buys
 
@@ -690,10 +711,17 @@ None would have shown in a build, and the first two would have been obvious on s
 1. slots placed at x=26 while the screen drew their wells at x=8 — every item outside its square;
 2. shift-clicking a wheel into a full wheel slot indexed slots 38..46 in a 38-slot list;
 3. a 112-wide levels bar under a list panel starting at x=40, so the bar and both its captions were
-   drawn over.
+   drawn over;
+4. and, found only by a screenshot of the running screen — **the player inventory was invisible**.
+   Vanilla does not draw slot wells at all: `renderSlot` renders the contents only, and the wells are
+   baked into a background texture. This screen draws its own panel, so it has to draw every well
+   itself, and the first version drew two of them for its own slots. The inventory existed, was
+   clickable, and could not be seen.
 
-All three are layout arithmetic, so all three now live in `DomainStoneMenu` as the single
-declaration the screen reads, and `theMenuIsLaidOutWhereTheScreenExpects` pins them.
+All four are layout arithmetic, so all four now live in `DomainStoneMenu` as the single declaration
+the screen reads, and `theMenuIsLaidOutWhereTheScreenExpects` pins them. The fourth is the one worth
+remembering: **a container screen draws no slot backgrounds**, so a screen that draws its own panel
+must draw its own wells for every slot, including the thirty-six the player owns.
 
 ### Verification
 
@@ -702,7 +730,7 @@ a selector naming nothing produces an empty list, which is completely silent —
 item goes in, and the list is blank. That is precisely the "present, registered, and connected to
 nothing" shape this repo has been bitten by before, and nothing else would catch it.
 
-69 tests total, up from 60. Verified by compilation, a clean dedicated-server boot and the suite.
+70 tests total, up from 60. Verified by compilation, a clean dedicated-server boot and the suite.
 **The screen itself has not been seen running** — a dedicated server has no GUI — so the layout was
 checked against a mock drawn from the same constants, which is how faults 1-3 above were found, and
 the screen is otherwise unplaytested. 26.3's nine tests are not ported, because that branch has no

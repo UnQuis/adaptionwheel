@@ -9,10 +9,10 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.Vec3;
 import ru.adaptionwheel.block.ModBlocks;
 import ru.adaptionwheel.category.WheelTier;
 import ru.adaptionwheel.data.PlayerAdaption;
@@ -29,7 +29,7 @@ import java.util.List;
  *
  * <p><b>The server owns every number in here.</b> The candidate list, the selected row and the
  * requested level count all live on this object; the client holds a mirror and sends <em>intent</em>
- * — "row three", "three levels", "exchange" — never state. That is not defensiveness for its own
+ * — "row three", "exchange" — never state. That is not defensiveness for its own
  * sake: a row is chosen by index, and the pool is rebuilt whenever anything in the menu changes, so
  * an index is potentially stale the moment it is sent. Re-deciding legality at the moment of the
  * exchange is what makes a stale index a refusal rather than a wrong grant.</p>
@@ -106,7 +106,6 @@ public class DomainStoneMenu extends AbstractContainerMenu {
     private DomainExchange.Recipe recipe;
     private List<String> candidates = List.of();
     private int selectedIndex = -1;
-    private int levels = 1;
 
     public DomainStoneMenu(int windowId, Inventory playerInv, BlockPos pos) {
         super(ModMenus.DOMAIN_STONE.get(), windowId);
@@ -144,9 +143,10 @@ public class DomainStoneMenu extends AbstractContainerMenu {
     /**
      * The player's own 27 + 9, laid out from a top-left corner.
      *
-     * <p>Written out rather than delegated: there is no {@code addStandardInventorySlots} in 1.21.1
-     * vanilla — it is a NeoForge-era convenience that is not on {@code AbstractContainerMenu} —
-     * and the layout has to match this menu's own slots rather than a default anyway.</p>
+     * <p>Written out rather than delegated: 1.21.1 vanilla has no
+     * {@code addStandardInventorySlots} on {@code AbstractContainerMenu} -- 26.3 grew one with
+     * exactly this layout, which is why the constants above carry over unchanged between the
+     * branches.</p>
      */
     private void addPlayerInventory(Inventory inventory, int x, int y) {
         for (int row = 0; row < 3; row++) {
@@ -166,8 +166,9 @@ public class DomainStoneMenu extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
-        // 64.0 is the reach vanilla's own block menus use, measured from the entity rather than the
-        // eye because Player has no getBlockReach() in 1.21.1.
+        // 64.0 is the reach vanilla's own block menus use, measured from the entity rather than
+        // the eye because Player has no getBlockReach() in 1.21.1. 26.3 spells the same check
+        // isWithinBlockInteractionRange(pos, 4.0).
         return player.level().getBlockState(pos).is(ModBlocks.DOMAIN_STONE.get())
                 && player.distanceToSqr(Vec3.atCenterOf(pos)) <= 64.0;
     }
@@ -210,7 +211,7 @@ public class DomainStoneMenu extends AbstractContainerMenu {
     @Override
     public void removed(Player player) {
         super.removed(player);
-        if (serverSide && !player.level().isClientSide()) {
+        if (serverSide && !player.level().isClientSide) {
             // These two slots are not the player's inventory, so nothing else would ever give the
             // contents back and they would vanish into the menu.
             clearContainer(player, input);
@@ -240,7 +241,6 @@ public class DomainStoneMenu extends AbstractContainerMenu {
         if (selectedIndex < 0 && !candidates.isEmpty()) {
             selectedIndex = 0;
         }
-        levels = selectedConcept() == null ? 1 : DomainExchange.clampLevels(selectedConcept(), levels);
         sync(player);
     }
 
@@ -254,21 +254,6 @@ public class DomainStoneMenu extends AbstractContainerMenu {
             return;
         }
         selectedIndex = index;
-        levels = 1;
-        sync(player);
-    }
-
-    public void setLevels(int requested) {
-        ServerPlayer player = serverPlayer();
-        String concept = selectedConcept();
-        if (player == null || concept == null) {
-            return;
-        }
-        int clamped = DomainExchange.clampLevels(concept, requested);
-        if (clamped == levels) {
-            return;
-        }
-        levels = clamped;
         sync(player);
     }
 
@@ -306,15 +291,28 @@ public class DomainStoneMenu extends AbstractContainerMenu {
             return;
         }
         String concept = pool.get(selectedIndex);
-        int wanted = DomainExchange.clampLevels(concept, levels);
-        int cost = current.costFor(wanted);
-        if (input.getItem(OFFER_SLOT).getCount() < cost) {
+        int items = current.itemsPerTrade();
+        if (input.getItem(OFFER_SLOT).getCount() < items) {
             refuse(player, "adaptionwheel.msg.stone_too_few");
             return;
         }
+        // Experience is the real price; the item is on top of it. Checked before either is taken,
+        // so a refusal costs the player nothing.
+        int price = DomainExchange.priceFor(concept);
+        if (player.experienceLevel < price) {
+            player.sendSystemMessage(Component.translatable("adaptionwheel.msg.stone_no_experience",
+                    price, player.experienceLevel), false);
+            sync(player);
+            return;
+        }
 
-        input.getItem(OFFER_SLOT).shrink(cost);
-        AdaptionEvents.grantConceptUpTo(player, data, concept, wanted);
+        input.getItem(OFFER_SLOT).shrink(items);
+        // giveExperienceLevels takes a negative amount -- this is exactly how vanilla charges an
+        // enchanting table, so the client's experience bar updates through the normal path.
+        player.giveExperienceLevels(-price);
+        // Granted whole: the exchange sells the adaptation, not a step of it, and the price ladder
+        // is what says how big a thing that is.
+        AdaptionEvents.grantConceptUpTo(player, data, concept, PlayerAdaption.MAX_LEVEL);
         // The wheel is in this menu, not in a Curios slot, so the one-second item save is not
         // looking at it. Write it now so the stack the player is holding is the one just fed.
         AdaptionEvents.saveToStack(input.getItem(WHEEL_SLOT), data);
@@ -326,7 +324,6 @@ public class DomainStoneMenu extends AbstractContainerMenu {
         level.playSound(null, pos, ModSounds.ADAPT_VOICE.get(), SoundSource.BLOCKS, 0.5f, 0.6f);
 
         selectedIndex = -1;
-        levels = 1;
         recompute();
     }
 
@@ -340,10 +337,9 @@ public class DomainStoneMenu extends AbstractContainerMenu {
     }
 
     /** Applies a server sync on the client. */
-    public void acceptSync(List<String> pool, int selected, int wantedLevels) {
+    public void acceptSync(List<String> pool, int selected) {
         this.candidates = pool;
         this.selectedIndex = selected;
-        this.levels = wantedLevels;
     }
 
     // ------------------------------------------------------------------ read by both sides
@@ -354,10 +350,6 @@ public class DomainStoneMenu extends AbstractContainerMenu {
 
     public int selectedIndex() {
         return selectedIndex;
-    }
-
-    public int levels() {
-        return levels;
     }
 
     public DomainExchange.Recipe recipe() {
@@ -376,15 +368,21 @@ public class DomainStoneMenu extends AbstractContainerMenu {
         return isWheel(wheelStack());
     }
 
-    /** How many items the current choice costs, for the screen to print beside the slider. */
-    public int currentCost() {
+    /** How many items the current trade consumes. */
+    public int itemCost() {
         DomainExchange.Recipe current = recipe();
-        return current == null ? 0 : current.costFor(levels);
+        return current == null ? 0 : current.itemsPerTrade();
     }
 
-    /** Whether the current choice is affordable with what is actually in the slot. */
-    public boolean canAfford() {
+    /** What the current choice costs in whole levels of the player's own experience. */
+    public int xpPrice() {
+        return DomainExchange.priceFor(selectedConcept());
+    }
+
+    /** Whether both prices are covered: the items in the slot and the levels the player holds. */
+    public boolean canAfford(int playerLevel) {
         return recipe() != null && selectedConcept() != null
-                && offering().getCount() >= currentCost();
+                && offering().getCount() >= itemCost()
+                && playerLevel >= xpPrice();
     }
 }
