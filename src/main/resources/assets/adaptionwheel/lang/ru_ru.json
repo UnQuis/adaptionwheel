@@ -227,9 +227,7 @@
   "block.adaptionwheel.resonance_altar": "Алтарь Резонанса",
   "block.adaptionwheel.domain_stone": "Камень Домена",
   "adaptionwheel.msg.stone_no_wheel": "Камень мёртв. Надень колесо.",
-  "adaptionwheel.msg.stone_waiting": "Камень ещё думает. %s с.",
   "adaptionwheel.msg.stone_nothing": "Колесу больше нечего тебе показать.",
-  "adaptionwheel.msg.stone_given": "Камень отвечает: %s.",
   "adaptionwheel.config.ritual.brazierHealEnabled": "Жаровня Адаптации лечит рядом.",
   "adaptionwheel.config.ritual.brazierHealPerSecond": "Лечение в секунду за жаровню.",
   "adaptionwheel.config.ritual.totemEnabled": "Тотем Колеса ускоряет идущие анализы рядом.",
@@ -304,7 +302,16 @@
   "adv.adaptionwheel.ritual.title": "Ритуал",
   "adv.adaptionwheel.ritual.desc": "Ремесло колеса. Четыре блока, которые только дают.",
   "adv.adaptionwheel.domain_stone.title": "Камень Домена",
-  "adv.adaptionwheel.domain_stone.desc": "Камень, отвечающий на вопрос, который ты ещё не задал.",
+  "adv.adaptionwheel.domain_stone.desc": "Камень, меняющий предмет на адаптацию. Предмет — это цена.",
   "adv.adaptionwheel.disciple.title": "Служитель повержен",
-  "adv.adaptionwheel.disciple.desc": "То, что измеряло тебя, пало."
+  "adv.adaptionwheel.disciple.desc": "То, что измеряло тебя, пало.",
+  "container.adaptionwheel.domain_stone": "Домен-камень",
+  "adaptionwheel.gui.exchange": "ОБМЕН",
+  "adaptionwheel.gui.choose": "Адаптации",
+  "adaptionwheel.gui.levels": "Ур. %s / %s",
+  "adaptionwheel.gui.needs": "Нужно %s",
+  "adaptionwheel.gui.need_item": "Положи предмет-ключ в верхний слот.",
+  "adaptionwheel.gui.nothing_left": "Здесь больше нечего учить.",
+  "adaptionwheel.msg.stone_too_few": "Не хватает. Камню нужно больше.",
+  "adaptionwheel.msg.stone_stale": "Камень передумал. Посмотри заново."
 }

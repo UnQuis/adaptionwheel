@@ -40,7 +40,6 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> TOTEM_ACCELERATION_TICKS;
     public static final ModConfigSpec.ConfigValue<Boolean> ALTAR_ENABLED;
     public static final ModConfigSpec.ConfigValue<Boolean> DOMAIN_STONE_ENABLED;
-    public static final ModConfigSpec.ConfigValue<Integer> DOMAIN_STONE_COOLDOWN_SECONDS;
 
     // ---- Adaptation transfer ----
     public static final ModConfigSpec.ConfigValue<Boolean> TRANSFER_ENABLED;
@@ -309,15 +308,11 @@ public final class AdaptionConfig {
                         "within 8 blocks. It raises the rung rather than widening the search, so",
                         "stacking altars cannot stand in for other players.")
                 .define("altarEnabled", true);
-        DOMAIN_STONE_ENABLED = s.comment("The Domain Stone hands out an adaptation when",
-                        "right-clicked while wearing the wheel, preferring a family the wheel has",
-                        "not revealed yet. It is the only place in the mod where an adaptation is",
-                        "given rather than endured.")
+        DOMAIN_STONE_ENABLED = s.comment("The Domain Stone trades. Put an offering item in one",
+                        "slot and the wheel in the other, and it offers the adaptations that item",
+                        "opens up -- one item per level, and no cooldown, because the item is the",
+                        "price. The price list itself is ru.adaptionwheel.server.DomainExchange.")
                 .define("domainStoneEnabled", true);
-        DOMAIN_STONE_COOLDOWN_SECONDS = s.comment("Per-player cooldown. Pacing, not a price: the",
-                        "stone's pool excludes what you already hold, so it always has less to",
-                        "give the more you take from it.")
-                .defineInRange("domainStoneCooldownSeconds", 30, 1, 3600);
         s.pop();
 
         s.comment("--- Adaptation Transfer ---").push("transfer");

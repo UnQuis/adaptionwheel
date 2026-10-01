@@ -17,6 +17,11 @@ public class AdaptionNetworking {
                 (payload, context) -> context.enqueueWork(() -> ClientAdaption.onSync(payload)));
         registrar.playToClient(FistProgressPayload.TYPE, FistProgressPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> FistProgressPayload.apply(payload)));
+        registrar.playToClient(DomainStoneSyncPayload.TYPE, DomainStoneSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> DomainStoneSyncPayload.apply(payload)));
+        registrar.playToServer(DomainStoneActionPayload.TYPE, DomainStoneActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        DomainStoneActionPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
         registrar.playToServer(FistInstabreakPayload.TYPE, FistInstabreakPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         FistInstabreakPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));

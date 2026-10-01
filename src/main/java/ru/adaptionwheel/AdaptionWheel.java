@@ -74,6 +74,7 @@ public class AdaptionWheel {
         ModDataComponents.COMPONENTS.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
         ModSounds.SOUNDS.register(modEventBus);
+        ru.adaptionwheel.menu.ModMenus.register(modEventBus);
         ru.adaptionwheel.effect.ModEffects.EFFECTS.register(modEventBus);
         ru.adaptionwheel.block.ModBlocks.BLOCKS.register(modEventBus);
         ru.adaptionwheel.block.ModBlocks.BLOCK_ITEMS.register(modEventBus);
@@ -96,6 +97,13 @@ public class AdaptionWheel {
 
     @EventBusSubscriber(modid = MODID)
     public static class ModBusEvents {
+
+        @SubscribeEvent
+        public static void onRegisterScreens(
+                net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
+            event.register(ru.adaptionwheel.menu.ModMenus.DOMAIN_STONE.get(),
+                    ru.adaptionwheel.client.DomainStoneScreen::new);
+        }
 
         @SubscribeEvent
         public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {

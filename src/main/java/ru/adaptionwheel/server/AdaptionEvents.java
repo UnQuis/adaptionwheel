@@ -164,7 +164,16 @@ public class AdaptionEvents {
         getWheelStack(player).ifPresent(stack -> saveToStack(stack, data));
     }
 
-    private static void saveToStack(ItemStack stack, PlayerAdaption data) {
+    /**
+     * Writes the player's adaptations onto a wheel stack.
+     *
+     * <p>Public because the Domain Stone hands the wheel to the player through a menu slot rather
+     * than through the Curios slot, so at the moment of a purchase {@code getWheelStack} is
+     * answering about a different item than the one being fed. The attachment stays the source of
+     * truth — this only makes the stack the player is holding reflect it immediately instead of at
+     * the next one-second tick.</p>
+     */
+    public static void saveToStack(ItemStack stack, PlayerAdaption data) {
         stack.set(ModDataComponents.WHEEL_DATA.get(), WheelData.fromPlayer(data));
     }
 
@@ -840,7 +849,6 @@ public class AdaptionEvents {
         // and none of them is adaptation data, so none of it may outlive the session -- a leaked
         // entry is a permanently buffed offline player or a stone that stays on cooldown.
         SynergyEffects.forget(id);
-        ru.adaptionwheel.block.DomainStoneBlock.forget(id);
         FistMastery.forget(id);
     }
 
@@ -1644,6 +1652,19 @@ public class AdaptionEvents {
 
     /** Public for the same reason as {@link #sync}: the fist tiers grant levels through it. */
     public static void completeTask(ServerPlayer player, PlayerAdaption data, String concept) {
+        completeTaskUpTo(player, data, concept, -1);
+    }
+
+    /**
+     * The same ceremony, for a concept bought at a chosen level rather than advanced one step.
+     *
+     * @param targetLevel the level to reach, or {@code -1} to mean "one more than it is now" --
+     *                    which is what an analysis completing means. Ignored for a
+     *                    {@code Drop_NPC_} concept, whose level is derived from its kill count:
+     *                    buying one to eight would leave that counter as decoration.
+     */
+    public static void completeTaskUpTo(ServerPlayer player, PlayerAdaption data, String concept,
+                                        int targetLevel) {
         Style style = Style.EMPTY.withColor(TextColor.fromRgb(Concepts.color(concept)));
         boolean isLevelBased = Concepts.isLevelBased(concept);
         if (isLevelBased) {
@@ -1651,7 +1672,8 @@ public class AdaptionEvents {
             if (Concepts.isDrop(concept)) {
                 level = Math.min(AdaptionConfig.dropLevelFromKills(data.kills(concept)), PlayerAdaption.MAX_LEVEL);
             } else {
-                level = Math.min(data.level(concept) + 1, PlayerAdaption.MAX_LEVEL);
+                level = Math.min(targetLevel < 0 ? data.level(concept) + 1 : targetLevel,
+                        PlayerAdaption.MAX_LEVEL);
             }
             data.levels.put(concept, level);
             MutableComponent message = level >= PlayerAdaption.MAX_LEVEL
