@@ -2,111 +2,104 @@ package ru.adaptionwheel;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.client.AdaptationScreen;
 import ru.adaptionwheel.menu.TradeMenu;
 import ru.adaptionwheel.network.TradeActionPayload;
-import ru.adaptionwheel.server.DomainExchange;
 
 import java.util.List;
 
 /**
- * The trading screen, shared by the Domain Stone and the Resonance Altar.
+ * The Domain Stone's screen — polished pass.
  *
- * <p>Laid out from the sketch: the offering item at the top left, the wheel below it in the slot
- * marked with the wheel icon, a bar under that, and the adaptations on offer down the right.</p>
- *
- * <p>Shared by both blocks, for the same reason {@code TradeMenu} is: two copies of a drawing
- * routine is two copies of a bug. Subclasses supply the title and, optionally, the wording for an
- * empty list.</p>
- *
- * <p>Generic in the menu, and that is not decoration. {@code AbstractContainerScreen} implements
- * {@code MenuAccess<T>}, which declares {@code T getMenu()} and is <em>invariant</em>, so a screen
- * shared by two menu types has to be {@code MenuAccess} in both of them or
- * {@code RegisterMenuScreensEvent} refuses the registration with a type error. One type parameter
- * is what satisfies both.</p>
- *
- * <h2>Why everything is drawn in {@code extractLabels}</h2>
- *
- * <p>That hook runs after the background and <em>before</em> the slots, inside the
- * {@code pushMatrix/translate(leftPos, topPos)} block. That is the only window in which a slot's
- * background can be drawn under the item that goes in it:</p>
- *
+ * <p>What changed against the first version (layout constants still come from {@link TradeMenu},
+ * so no slot moves):</p>
  * <ul>
- *   <li>vanilla does <b>not</b> draw slot wells. {@code extractSlot} draws the contents only — the
- *       wells are baked into a background texture, and 26.3 no longer blits one for a container
- *       screen. So a screen that draws its own panel must draw every well itself, or the items sit
- *       on bare grey. That is exactly what the first version of this screen did not do, and the
- *       player inventory came out invisible.</li>
- *   <li>coordinates here are already relative to {@code leftPos}/{@code topPos}, so nothing adds
- *       them — and the mouse has to be offset by hand for hit testing.</li>
- *   <li>{@code super.extractLabels} draws the title and "Inventory", so it is called <em>last</em>:
- *       its text has to land on top of the panel, not under it.</li>
+ *   <li><b>The list is a sunken well.</b> Dark inset body, light-on-dark rows with a stripe in the
+ *       concept's own colour, zebra shading, a bright outline on the selected row. The colour
+ *       grouping now reads at a glance instead of only on selection.</li>
+ *   <li><b>A real vanilla-style button</b> with three states (disabled / idle / hovered), a bevel,
+ *       white hover outline, click sound and an explanatory tooltip when it is disabled.</li>
+ *   <li><b>Experience readout</b> with a lit fill, quarter ticks, a highlight row and an XP orb
+ *       next to the price.</li>
+ *   <li><b>The empty wheel slot breathes</b>: a soft golden pulse around the well tells the player
+ *       where the wheel goes before they have read anything.</li>
+ *   <li><b>A draggable scrollbar</b> with a bevelled knob, a result counter in the list header and
+ *       a wrapped, centred empty-state message.</li>
+ *   <li>Hit areas now match what is drawn, to the pixel (rows used to start 4px left of the
+ *       visible row).</li>
  * </ul>
  *
- * <h2>Where the "Minecraft look" comes from</h2>
+ * <p>New lang keys: {@code adaptionwheel.gui.select_first}, {@code adaptionwheel.gui.not_enough_levels}.</p>
  *
- * <p>Not a hand-drawn imitation. Slot wells are {@code generic_54.png}'s own pixels, sampled. The
- * panel, bars and scroller reuse {@link AdaptationScreen}'s primitives and palette, so the two
- * screens read as one mod. The wheel icon in the empty wheel slot is the Curio slot icon the mod
- * already ships, {@code textures/slot/empty_wheel_slot.png} — the same picture a player sees in
- * their Curios wheel slot, which is the point: it says "the wheel goes here" in the one place the
- * mod has already taught them to look.</p>
- *
- * <h2>26.3 notes</h2>
- *
- * <p>There is no {@code render}/{@code renderBg}/{@code renderTooltip}: everything is
- * {@code extract*(GuiGraphicsExtractor, ...)}. Text is {@code g.text} and {@code g.centeredText},
- * and input is event objects — {@code mouseClicked(MouseButtonEvent, boolean)}, whose second argument
- * is "double click" and not a button index. {@code imageWidth}/{@code imageHeight} are final and go
- * to {@code super}. A scaled single-texture blit is
- * {@code blit(Identifier, x0, y0, x1, y1, u0, u1, v0, v1)} with normalised UVs — which is how the
- * 32×32 Curio icon reaches a 16×16 well.</p>
+ * <p>Everything is still drawn in {@code renderBg}, with absolute coordinates, for the reasons
+ * documented on the original: that hook runs after the background and before the slots, the only
+ * window in which a slot well can be drawn under its item. See also {@link AdaptationScreen}.</p>
  */
 public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T> {
 
-    // ---- vanilla palette, as sampled out of textures/gui/container/generic_54.png
+    // ---- vanilla palette, sampled out of textures/gui/container/generic_54.png
     private static final int PANEL_EDGE = 0xFF000000;
     private static final int PANEL_HILIGHT = 0xFFFFFFFF;
     private static final int PANEL_BODY = 0xFFC6C6C6;
 
-    private static final int BAR_FRAME = 0xFF09100C;
-    private static final int BAR_EMPTY = 0xFF28332D;
-    private static final int BAR_FULL = 0xFF71A549;
-    private static final int BAR_SHORT = 0xFF9A4B4B;
-
-    // The chest GUI's own slot well, pixel for pixel: a #373737 frame, an #8B8B8B body, and a white
-    // bottom-and-right inner shadow.
     private static final int SLOT_FRAME = 0xFF373737;
     private static final int SLOT_BODY = 0xFF8B8B8B;
     private static final int SLOT_SHADOW = 0xFFFFFFFF;
+
+    // ---- experience bar
+    private static final int BAR_FRAME = 0xFF09100C;
+    private static final int BAR_EMPTY = 0xFF28332D;
+    private static final int BAR_FULL = 0xFF71A549;
+    private static final int BAR_FULL_HI = 0xFFB4F26B;
+    private static final int BAR_SHORT = 0xFF9A4B4B;
+    private static final int BAR_SHORT_HI = 0xFFD98080;
+
+    // ---- the list well
+    private static final int LIST_BG = 0xFF1E1E24;
+    private static final int ROW_ZEBRA = 0x0FFFFFFF;
+    private static final int ROW_HOVER = 0x26FFFFFF;
+    private static final int ROW_TEXT = 0xFFC8C8C8;
+    private static final int ROW_TEXT_SELECTED = 0xFFFFFFFF;
+
+    // ---- button
+    private static final int BTN_BODY = 0xFF707070;
+    private static final int BTN_BODY_HOT = 0xFF6F7FB8;
+    private static final int BTN_BODY_OFF = 0xFF4A4A4A;
+    private static final int BTN_LIGHT = 0xFFA8A8A8;
+    private static final int BTN_LIGHT_OFF = 0xFF5C5C5C;
+    private static final int BTN_DARK = 0xFF383838;
 
     private static final int TEXT = 0xFF404040;
     private static final int TEXT_DIM = 0xFF707070;
     private static final int TEXT_HEADER = 0xFF3F3F3F;
     private static final int TEXT_SHORT = 0xFFA02020;
-    private static final int ROW_HOVER = 0x80FFFFFF;
 
-    private static final Identifier WHEEL_SLOT_ICON =
-            Identifier.fromNamespaceAndPath(ru.adaptionwheel.AdaptionWheel.MODID,
-                    "textures/slot/empty_wheel_slot.png");
+    /** The mod's Curio wheel-slot icon, 32x32, drawn into a 16x16 well. */
+    private static final Identifier WHEEL_SLOT_ICON = Identifier.fromNamespaceAndPath(
+            ru.adaptionwheel.AdaptionWheel.MODID, "textures/slot/empty_wheel_slot.png");
 
     private static final int BAR_H = 5;
     private static final int ROW_H = 12;
     private static final int PAD = 7;
-    /** Rows visible in the list: the list's body height, in whole rows. */
-    private static final int LIST_ROWS = (TradeMenu.LIST_H - 16) / ROW_H;
+    /** Rows visible in the list. Sized so the sunken well always ends inside the panel's body. */
+    private static final int LIST_ROWS = (TradeMenu.LIST_H - 19) / ROW_H;
     private static final int LIST_BODY_Y = 15;
-    /** Space a drawn scrollbar takes out of the row text. */
-    private static final int SCROLLER_GAP = 9;
+    /** Space a drawn scrollbar takes out of the row width (5px track + 1px gap + 2px breathing). */
+    private static final int SCROLLER_GAP = 8;
+    private static final int SCROLLER_W = 5;
 
     private int scroll;
+    private boolean draggingScroller;
 
     public TradeScreen(T menu, Inventory inventory, Component title) {
         // Both sizes go to super: they are final here, so assigning them afterwards is not an option.
@@ -118,46 +111,60 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
 
     @Override
     protected void extractLabels(GuiGraphicsExtractor g, int mouseX, int mouseY) {
-        // Coordinates are relative to (leftPos, topPos) from here on.
-        panel(g, 0, 0, this.imageWidth, this.imageHeight);
+        int x = this.leftPos;
+        int y = this.topPos;
 
-        // Every slot in the menu, not just the two of ours: vanilla draws none of them.
+        panel(g, x, y, this.imageWidth, this.imageHeight);
+
         for (Slot slot : menu.slots) {
-            slotWell(g, slot.x, slot.y);
-        }
-        if (!menu.hasWheel()) {
-            // The Curio slot icon, 32x32 drawn into a 16x16 well.
-            g.blit(WHEEL_SLOT_ICON, TradeMenu.WHEEL_X + 1, TradeMenu.WHEEL_Y + 1,
-                    TradeMenu.WHEEL_X + 17, TradeMenu.WHEEL_Y + 17, 0f, 1f, 0f, 1f);
+            slotWell(g, x + slot.x, y + slot.y);
         }
 
-        renderExperience(g, TradeMenu.SLIDER_X, TradeMenu.SLIDER_Y);
-        renderButton(g, TradeMenu.BUTTON_X, TradeMenu.BUTTON_Y, mouseX, mouseY);
-        renderList(g, TradeMenu.LIST_X, TradeMenu.LIST_Y,
+        if (!menu.hasWheel()) {
+            wheelHint(g, x + TradeMenu.WHEEL_X, y + TradeMenu.WHEEL_Y);
+            // 26.3's blit takes corners plus normalised UVs; the 1.21.1 form this was written
+            // against took u/v, width and height in pixels. Same picture either way: the 32x32 icon
+            // into the 16x16 well.
+            g.blit(WHEEL_SLOT_ICON, x + TradeMenu.WHEEL_X + 1, y + TradeMenu.WHEEL_Y + 1,
+                    x + TradeMenu.WHEEL_X + 17, y + TradeMenu.WHEEL_Y + 17, 0f, 1f, 0f, 1f);
+        }
+
+        renderExperience(g, x + TradeMenu.SLIDER_X, y + TradeMenu.SLIDER_Y);
+        renderButton(g, x + TradeMenu.BUTTON_X, y + TradeMenu.BUTTON_Y, mouseX, mouseY);
+        renderList(g, x + TradeMenu.LIST_X, y + TradeMenu.LIST_Y,
                 TradeMenu.LIST_W, TradeMenu.LIST_H, mouseX, mouseY);
 
-        // Title and "Inventory" land on top of the panel we just drew.
-        super.extractLabels(g, mouseX, mouseY);
+        g.text(this.font, titleFor().getVisualOrderText(), x + PAD, y + PAD, TEXT_HEADER, false);
     }
 
-    /** The window's own name. Overridden by the altar, which is a different block. */
+    @Override
+    protected void extractTooltip(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        super.extractTooltip(g, mouseX, mouseY);
+        // vanilla has already queued the item tooltip; ours goes on top of everything else
+        if (within(mouseX, mouseY, this.leftPos + TradeMenu.BUTTON_X, this.topPos + TradeMenu.BUTTON_Y,
+                TradeMenu.BUTTON_W, TradeMenu.BUTTON_H) && !canExchange()) {
+            Component why = menu.selectedConcept() == null
+                    ? Component.translatable("adaptionwheel.gui.select_first")
+                    : Component.translatable("adaptionwheel.gui.not_enough_levels");
+            g.setTooltipForNextFrame(why, mouseX, mouseY);
+        }
+    }
+
     protected Component titleFor() {
         return Component.translatable(menu.titleKey());
     }
 
-    /**
-     * What the list says when it has nothing to show.
-     *
-     * <p>Two empty states that look identical and mean opposite things — nothing was offered, or
-     * everything that was offered has been learned — so the block answers for itself.</p>
-     */
     protected Component hintFor() {
         return menu.hasOffering()
                 ? Component.translatable("adaptionwheel.gui.nothing_left")
                 : Component.translatable("adaptionwheel.gui.need_item");
     }
 
-    /** The chest GUI's slot well, six fills, exact. */
+    private boolean canExchange() {
+        return menu.selectedConcept() != null && menu.canAfford(playerLevel());
+    }
+
+    /** The chest GUI's slot well, exact. */
     private void slotWell(GuiGraphicsExtractor g, int x, int y) {
         g.fill(x, y, x + 18, y + 18, SLOT_FRAME);
         g.fill(x + 1, y, x + 18, y + 1, SLOT_BODY);
@@ -167,13 +174,19 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
         g.fill(x + 1, y + 1, x + 17, y + 17, SLOT_BODY);
     }
 
-    /**
-     * The player's own experience, against what the selected adaptation costs.
-     *
-     * <p>Not an input. The bar is a readout, because the price is a property of the adaptation —
-     * one level for something one-time, up to four for a boss or a mutation — and a draggable
-     * control over a number nobody may choose is a control that lies.</p>
-     */
+    /** A slow golden pulse around the empty wheel slot: "put the wheel here". */
+    private void wheelHint(GuiGraphicsExtractor g, int x, int y) {
+        float pulse = 0.5F + 0.5F * (float) Math.sin(System.currentTimeMillis() / 380.0);
+        int alpha = 0x38 + (int) (0x68 * pulse);
+        int col = alpha << 24 | 0xFFD84A;
+        g.fill(x - 1, y - 1, x + 19, y, col);
+        g.fill(x - 1, y + 18, x + 19, y + 19, col);
+        g.fill(x - 1, y, x, y + 18, col);
+        g.fill(x + 18, y, x + 19, y + 18, col);
+    }
+
+    // ---- experience
+
     private void renderExperience(GuiGraphicsExtractor g, int x, int y) {
         int playerLevel = playerLevel();
         int price = menu.xpPrice();
@@ -186,90 +199,154 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
             int filled = Math.round((w - 2) * Math.min(1f, price / (float) Math.max(1, playerLevel)));
             if (filled > 0) {
                 g.fill(x + 1, y + 1, x + 1 + filled, y + BAR_H - 1, affordable ? BAR_FULL : BAR_SHORT);
+                g.fill(x + 1, y + 1, x + 1 + filled, y + 2, affordable ? BAR_FULL_HI : BAR_SHORT_HI);
             }
         }
-        g.text(this.font, Component.translatable("adaptionwheel.gui.your_level", playerLevel),
+        // quarter ticks
+        for (int i = 1; i < 4; i++) {
+            int tx = x + 1 + (w - 2) * i / 4;
+            g.fill(tx, y + 1, tx + 1, y + BAR_H - 1, 0x55000000);
+        }
+
+        g.text(this.font, Component.translatable("adaptionwheel.gui.your_level", playerLevel).getVisualOrderText(),
                 x, y + BAR_H + 4, TEXT_DIM, false);
         if (menu.selectedConcept() != null) {
-            g.text(this.font, Component.translatable("adaptionwheel.gui.price", price),
-                    x, y + BAR_H + 15, affordable ? TEXT : TEXT_SHORT, false);
+            int py = y + BAR_H + 15;
+            orb(g, x, py + 1, affordable);
+            g.text(this.font, Component.translatable("adaptionwheel.gui.price", price).getVisualOrderText(),
+                    x + 8, py, affordable ? TEXT : TEXT_SHORT, false);
         }
     }
 
-    /** The player's experience level, read from the client's own copy. */
+    /** A 5x5 experience orb, drawn from fills. */
+    private static void orb(GuiGraphicsExtractor g, int x, int y, boolean lit) {
+        int edge = lit ? 0xFF4FAE1E : 0xFF5A5A5A;
+        int core = lit ? 0xFFB6FF3C : 0xFF8A8A8A;
+        int spark = lit ? 0xFFF4FFB0 : 0xFFB8B8B8;
+        g.fill(x + 1, y, x + 4, y + 5, edge);
+        g.fill(x, y + 1, x + 5, y + 4, edge);
+        g.fill(x + 1, y + 1, x + 4, y + 4, core);
+        g.fill(x + 1, y + 1, x + 2, y + 2, spark);
+    }
+
     private int playerLevel() {
         return Minecraft.getInstance().player == null ? 0 : Minecraft.getInstance().player.experienceLevel;
     }
 
+    // ---- button
+
     private void renderButton(GuiGraphicsExtractor g, int x, int y, int mouseX, int mouseY) {
         int w = TradeMenu.BUTTON_W;
         int h = TradeMenu.BUTTON_H;
-        // The mouse is still in screen coordinates here, so the hit area is offset by hand.
-        boolean hot = within(mouseX - this.leftPos, mouseY - this.topPos, x, y, w, h);
-        boolean on = menu.canAfford(playerLevel());
-        panel(g, x, y, w, h);
+        boolean on = canExchange();
+        boolean hot = on && within(mouseX, mouseY, x, y, w, h);
+
+        g.fill(x, y, x + w, y + h, hot ? 0xFFFFFFFF : PANEL_EDGE);
+        int ix = x + 1, iy = y + 1, iw = w - 2, ih = h - 2;
+        g.fill(ix, iy, ix + iw, iy + ih, on ? (hot ? BTN_BODY_HOT : BTN_BODY) : BTN_BODY_OFF);
+        int light = on ? BTN_LIGHT : BTN_LIGHT_OFF;
+        g.fill(ix, iy, ix + iw, iy + 1, light);
+        g.fill(ix, iy, ix + 1, iy + ih, light);
+        g.fill(ix, iy + ih - 1, ix + iw, iy + ih, BTN_DARK);
+        g.fill(ix + iw - 1, iy, ix + iw, iy + ih, BTN_DARK);
+
+        Component label = Component.translatable("adaptionwheel.gui.exchange");
+        int ty = y + (h - 8) / 2;
         if (on) {
-            g.fill(x + 2, y + 2, x + w - 2, y + h - 2, hot ? ROW_HOVER : 0x60FFFFFF);
+            g.centeredText(this.font, label.getString(), x + w / 2, ty, hot ? 0xFFFFFFA0 : 0xFFFFFFFF);
+        } else {
+            g.text(this.font, label.getString(), x + (w - this.font.width(label)) / 2, ty, 0xFFA0A0A0, false);
         }
-        g.centeredText(this.font, Component.translatable("adaptionwheel.gui.exchange"),
-                x + w / 2, y + 5, on ? TEXT_HEADER : TEXT_DIM);
     }
+
+    // ---- list
 
     private void renderList(GuiGraphicsExtractor g, int x, int y, int w, int h, int mouseX, int mouseY) {
         panel(g, x, y, w, h);
         List<String> pool = menu.candidates();
         int top = y + LIST_BODY_Y;
-        int listH = h - LIST_BODY_Y - 1;
-        int rows = Math.max(1, LIST_ROWS);
-        int maxScroll = Math.max(0, pool.size() - rows);
+        int rowsH = LIST_ROWS * ROW_H;
+        int maxScroll = Math.max(0, pool.size() - LIST_ROWS);
         scroll = Math.max(0, Math.min(scroll, maxScroll));
 
-        // Rows live inside the bevel, so the hit area is inset to match: a row narrower than the
-        // one above it selects on a pixel the player cannot see. And when the scroller will be
-        // drawn, the text stops short of it rather than running underneath.
         int rowX = x + 4;
         int textW = w - 8 - (maxScroll > 0 ? SCROLLER_GAP : 0);
 
-        g.text(this.font, Component.translatable("adaptionwheel.gui.choose"),
-                rowX, y + 6, TEXT_HEADER, false);
+        // header + counter
+        g.text(this.font, Component.translatable("adaptionwheel.gui.choose").getVisualOrderText(),
+                rowX, y + 5, TEXT_HEADER, false);
+        if (!pool.isEmpty()) {
+            String count = String.valueOf(pool.size());
+            g.text(this.font, count, x + w - 5 - this.font.width(count), y + 5, TEXT_DIM, false);
+        }
+
+        // the sunken well
+        inset(g, x + 3, top - 1, w - 6, rowsH + 2, LIST_BG);
 
         if (pool.isEmpty()) {
-            g.text(this.font, clipped(hintFor(), w - 12), rowX, top + 2, TEXT_DIM, false);
+            List<FormattedCharSequence> lines = this.font.split(hintFor(), w - 20);
+            int ty = top + Math.max(2, (rowsH - lines.size() * 9) / 2);
+            for (FormattedCharSequence line : lines) {
+                g.text(this.font, line, x + (w - this.font.width(line)) / 2, ty, 0xFF9A9A9A, true);
+                ty += 9;
+            }
             return;
         }
 
-        g.enableScissor(x + 1, top, x + w - 1, y + h - 1);
-        for (int row = 0; row < rows && row + scroll < pool.size(); row++) {
+        g.enableScissor(rowX, top, rowX + textW, top + rowsH);
+        for (int row = 0; row < LIST_ROWS && row + scroll < pool.size(); row++) {
             int index = row + scroll;
             String concept = pool.get(index);
             int ry = top + row * ROW_H;
             boolean selected = index == menu.selectedIndex();
-            boolean hot = within(mouseX - this.leftPos, mouseY - this.topPos, rowX, ry, textW, ROW_H);
+            boolean hot = within(mouseX, mouseY, rowX, ry, textW, ROW_H);
+            int accent = Concepts.color(concept) & 0xFFFFFF;
+            int bright = lighten(accent, 0.35f);
+
+            if ((index & 1) == 1) {
+                g.fill(rowX, ry, rowX + textW, ry + ROW_H, ROW_ZEBRA);
+            }
             if (selected) {
-                // The concept's own colour, so the per-concept grouping the HUD teaches still reads
-                // against a light background.
-                g.fill(rowX, ry, rowX + textW, ry + ROW_H, tint(Concepts.color(concept), 0.69f));
+                g.fill(rowX, ry, rowX + textW, ry + ROW_H, 0x55000000 | accent);
+                int edge = 0xFF000000 | bright;
+                g.fill(rowX, ry, rowX + textW, ry + 1, edge);
+                g.fill(rowX, ry + ROW_H - 1, rowX + textW, ry + ROW_H, edge);
+                g.fill(rowX, ry, rowX + 1, ry + ROW_H, edge);
+                g.fill(rowX + textW - 1, ry, rowX + textW, ry + ROW_H, edge);
             } else if (hot) {
                 g.fill(rowX, ry, rowX + textW, ry + ROW_H, ROW_HOVER);
             }
-            g.text(this.font, clipped(Concepts.displayName(concept), textW - 3),
-                    rowX + 2, ry + 2, selected ? TEXT_HEADER : TEXT, false);
+            // the concept's own colour, always visible
+            g.fill(rowX + 2, ry + 2, rowX + 4, ry + ROW_H - 2, 0xFF000000 | bright);
+
+            g.text(this.font, clipped(Concepts.displayName(concept), textW - 9),
+                    rowX + 7, ry + 2, selected ? ROW_TEXT_SELECTED : ROW_TEXT, true);
         }
         g.disableScissor();
 
         if (maxScroll > 0) {
-            scroller(g, x + w - 7, top, 5, listH, maxScroll, rows);
+            scroller(g, trackX(), top, rowsH, maxScroll);
         }
     }
 
-    /** Scrollbar, drawn for the same reason the bars are: see {@link AdaptationScreen}. */
-    private void scroller(GuiGraphicsExtractor g, int x, int y, int w, int h, int maxScroll, int rows) {
-        g.fill(x, y, x + w, y + h, BAR_FRAME);
-        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, BAR_EMPTY);
-        int knobH = Math.max(8, h * rows / (rows + maxScroll));
+    private void scroller(GuiGraphicsExtractor g, int x, int y, int h, int maxScroll) {
+        g.fill(x, y, x + SCROLLER_W, y + h, 0xFF000000);
+        g.fill(x + 1, y + 1, x + SCROLLER_W - 1, y + h - 1, 0xFF3A3A42);
+        int knobH = knobHeight(h, maxScroll);
         int knobY = y + 1 + (h - 2 - knobH) * scroll / maxScroll;
-        g.fill(x + 1, knobY, x + w - 1, knobY + knobH, BAR_FULL);
+        int kx = x + 1, kw = SCROLLER_W - 2;
+        g.fill(kx, knobY, kx + kw, knobY + knobH, 0xFF8B8B8B);
+        g.fill(kx, knobY, kx + kw, knobY + 1, 0xFFE0E0E0);
+        g.fill(kx, knobY, kx + 1, knobY + knobH, 0xFFC6C6C6);
+        g.fill(kx + kw - 1, knobY, kx + kw, knobY + knobH, 0xFF555555);
+        g.fill(kx, knobY + knobH - 1, kx + kw, knobY + knobH, 0xFF555555);
     }
+
+    private int knobHeight(int trackH, int maxScroll) {
+        return Math.max(8, trackH * LIST_ROWS / (LIST_ROWS + maxScroll));
+    }
+
+    // ---- primitives
 
     private void panel(GuiGraphicsExtractor g, int x, int y, int w, int h) {
         if (w < 8 || h < 8) {
@@ -280,27 +357,32 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
         g.fill(x, y, x + 1, y + h, PANEL_EDGE);
         g.fill(x + w - 1, y, x + w, y + h, PANEL_EDGE);
         g.fill(x + 1, y + 1, x + w - 1, y + 3, PANEL_HILIGHT);
-        g.fill(x + 1, y + h - 3, x + w - 1, y + h - 1, PANEL_HILIGHT);
         g.fill(x + 1, y + 1, x + 3, y + h - 1, PANEL_HILIGHT);
-        g.fill(x + w - 3, y + 1, x + w - 1, y + h - 1, PANEL_HILIGHT);
+        // bottom-right shades, like the real container: a darker edge, not a second highlight
+        g.fill(x + 1, y + h - 3, x + w - 1, y + h - 1, 0xFF555555);
+        g.fill(x + w - 3, y + 1, x + w - 1, y + h - 1, 0xFF555555);
         g.fill(x + 3, y + 3, x + w - 3, y + h - 3, PANEL_BODY);
+        // soften the corners the way the vanilla texture does
+        g.fill(x + w - 3, y + 1, x + w - 1, y + 3, PANEL_BODY);
+        g.fill(x + 1, y + h - 3, x + 3, y + h - 1, PANEL_BODY);
     }
 
-    /** The panel body, moved {@code strength} of the way towards {@code rgb}. */
-    private static int tint(int rgb, float strength) {
-        int r = (int) (0xC6 + (0xFF - 0xC6) * strength * (rgb >> 16 & 0xFF) / 255f);
-        int gg = (int) (0xC6 + (0xFF - 0xC6) * strength * (rgb >> 8 & 0xFF) / 255f);
-        int b = (int) (0xC6 + (0xFF - 0xC6) * strength * (rgb & 0xFF) / 255f);
-        return 0xFF000000 | r << 16 | gg << 8 | b;
+    /** A sunken well: dark top-left, light bottom-right. */
+    private void inset(GuiGraphicsExtractor g, int x, int y, int w, int h, int body) {
+        g.fill(x, y, x + w, y + h, SLOT_FRAME);
+        g.fill(x + w - 1, y, x + w, y + h, SLOT_SHADOW);
+        g.fill(x, y + h - 1, x + w, y + h, SLOT_SHADOW);
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, body);
     }
 
-    /**
-     * A concept name trimmed to fit, with an ellipsis when it does not.
-     *
-     * <p>Neither branch has a max-width overload on {@code text}/{@code drawString} — it was moved
-     * onto the {@code Font}. Names come out of the lang file, so a translation longer than the column
-     * is a real possibility rather than a theoretical one.</p>
-     */
+    /** {@code rgb} moved {@code amount} of the way to white. */
+    private static int lighten(int rgb, float amount) {
+        int r = (int) ((rgb >> 16 & 0xFF) + (255 - (rgb >> 16 & 0xFF)) * amount);
+        int gg = (int) ((rgb >> 8 & 0xFF) + (255 - (rgb >> 8 & 0xFF)) * amount);
+        int b = (int) ((rgb & 0xFF) + (255 - (rgb & 0xFF)) * amount);
+        return r << 16 | gg << 8 | b;
+    }
+
     private String clipped(Component text, int maxWidth) {
         String plain = text.getString();
         if (this.font.width(plain) <= maxWidth) {
@@ -311,30 +393,58 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
 
     // ------------------------------------------------------------------ input
 
+    private int trackX() {
+        return this.leftPos + TradeMenu.LIST_X + TradeMenu.LIST_W - 10;
+    }
+
+    private int listTop() {
+        return this.topPos + TradeMenu.LIST_Y + LIST_BODY_Y;
+    }
+
+    private void click() {
+        Minecraft.getInstance().getSoundManager()
+                .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+    }
+
+    private void dragScrollerTo(double my) {
+        int maxScroll = maxScroll();
+        if (maxScroll <= 0) {
+            return;
+        }
+        int h = LIST_ROWS * ROW_H;
+        int knobH = knobHeight(h, maxScroll);
+        double ratio = (my - listTop() - knobH / 2.0) / Math.max(1, h - 2 - knobH);
+        scroll = (int) Math.round(Math.max(0, Math.min(1, ratio)) * maxScroll);
+    }
+
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        int x = this.leftPos;
-        int y = this.topPos;
         double mx = event.x();
         double my = event.y();
-        // mouseClicked's second argument is "double click", not a button index: the button lives on
-        // the event. Reading it off the event is the whole of the migration from the 1.21.1
-        // (double, double, int) signature.
+        int x = this.leftPos;
+        int y = this.topPos;
         if (event.button() != 0) {
             return super.mouseClicked(event, doubleClick);
         }
         if (within(mx, my, x + TradeMenu.BUTTON_X, y + TradeMenu.BUTTON_Y,
                 TradeMenu.BUTTON_W, TradeMenu.BUTTON_H)) {
-            TradeActionPayload.exchange();
+            if (canExchange()) {
+                click();
+                TradeActionPayload.exchange();
+            }
             return true;
         }
-        // The scroller's gutter is excluded: it is drawn over the row area but selects nothing, so
-        // clicking it must not quietly choose whatever row happens to be under the cursor.
-        int rowsW = TradeMenu.LIST_W - (maxScroll() > 0 ? SCROLLER_GAP : 0);
-        if (within(mx, my, x + TradeMenu.LIST_X, y + TradeMenu.LIST_Y + LIST_BODY_Y,
-                rowsW, LIST_ROWS * ROW_H)) {
-            int row = (int) ((my - y - TradeMenu.LIST_Y - LIST_BODY_Y) / ROW_H) + scroll;
+        int maxScroll = maxScroll();
+        if (maxScroll > 0 && within(mx, my, trackX(), listTop(), SCROLLER_W, LIST_ROWS * ROW_H)) {
+            draggingScroller = true;
+            dragScrollerTo(my);
+            return true;
+        }
+        int rowsW = TradeMenu.LIST_W - 8 - (maxScroll > 0 ? SCROLLER_GAP : 0);
+        if (within(mx, my, x + TradeMenu.LIST_X + 4, listTop(), rowsW, LIST_ROWS * ROW_H)) {
+            int row = (int) ((my - listTop()) / ROW_H) + scroll;
             if (row < menu.candidates().size()) {
+                click();
                 TradeActionPayload.select(row);
             }
             return true;
@@ -343,19 +453,32 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
     }
 
     @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+        if (draggingScroller) {
+            dragScrollerTo(event.y());
+            return true;
+        }
+        return super.mouseDragged(event, dx, dy);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        draggingScroller = false;
+        return super.mouseReleased(event);
+    }
+
+    @Override
     public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
         if (mx >= this.leftPos + TradeMenu.LIST_X
                 && mx < this.leftPos + TradeMenu.LIST_X + TradeMenu.LIST_W) {
-            int maxScroll = maxScroll();
-            scroll = Math.max(0, Math.min(maxScroll, scroll - (int) Math.signum(scrollY)));
+            scroll = Math.max(0, Math.min(maxScroll(), scroll - (int) Math.signum(scrollY)));
             return true;
         }
         return super.mouseScrolled(mx, my, scrollX, scrollY);
     }
 
-    /** Rows past the visible page, i.e. whether a scrollbar is drawn at all. */
     private int maxScroll() {
-        return Math.max(0, menu.candidates().size() - Math.max(1, LIST_ROWS));
+        return Math.max(0, menu.candidates().size() - LIST_ROWS);
     }
 
     private static boolean within(double mx, double my, int x, int y, int w, int h) {
