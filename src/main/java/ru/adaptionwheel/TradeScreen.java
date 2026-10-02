@@ -119,17 +119,21 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
         // which arrives in screen coordinates, is offset by hand where it is hit-tested.
         panel(g, 0, 0, this.imageWidth, this.imageHeight);
 
+        // A slot's x/y is where the 16x16 ITEM goes. The well around it is 18x18 and hangs one
+        // pixel further out on each side -- vanilla's own slot sprite does the same -- so the well
+        // is drawn at -1. Drawn at slot.x instead, every item sat one pixel up and left of the
+        // square that was meant to hold it.
         for (Slot slot : menu.slots) {
-            slotWell(g, slot.x, slot.y);
+            slotWell(g, slot.x - 1, slot.y - 1);
         }
 
         if (!menu.hasWheel()) {
-            wheelHint(g, TradeMenu.WHEEL_X, TradeMenu.WHEEL_Y);
+            wheelHint(g, TradeMenu.WHEEL_X - 1, TradeMenu.WHEEL_Y - 1);
             // 26.3's blit takes corners plus normalised UVs; the 1.21.1 form this was written
             // against took u/v, width and height in pixels. Same picture either way: the 32x32 icon
             // into the 16x16 well.
-            g.blit(WHEEL_SLOT_ICON, TradeMenu.WHEEL_X + 1, TradeMenu.WHEEL_Y + 1,
-                    TradeMenu.WHEEL_X + 17, TradeMenu.WHEEL_Y + 17, 0f, 1f, 0f, 1f);
+            g.blit(WHEEL_SLOT_ICON, TradeMenu.WHEEL_X, TradeMenu.WHEEL_Y,
+                    TradeMenu.WHEEL_X + 16, TradeMenu.WHEEL_Y + 16, 0f, 1f, 0f, 1f);
         }
 
         renderExperience(g, TradeMenu.SLIDER_X, TradeMenu.SLIDER_Y);
@@ -186,6 +190,7 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
         g.fill(x - 1, y + 18, x + 19, y + 19, col);
         g.fill(x - 1, y, x, y + 18, col);
         g.fill(x + 18, y, x + 19, y + 18, col);
+        // wheelHint is now handed the well's top-left, so the ring is one pixel further out.
     }
 
     // ---- experience
