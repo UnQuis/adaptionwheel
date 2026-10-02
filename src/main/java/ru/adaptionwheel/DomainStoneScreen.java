@@ -1,4 +1,4 @@
-package ru.adaptionwheel.client;
+package ru.adaptionwheel;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;

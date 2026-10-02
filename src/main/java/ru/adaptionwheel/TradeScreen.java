@@ -1,4 +1,4 @@
-package ru.adaptionwheel.client;
+package ru.adaptionwheel;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -52,7 +52,7 @@ import java.util.List;
  * <h2>Where the "Minecraft look" comes from</h2>
  *
  * <p>Not a hand-drawn imitation. Slot wells are {@code generic_54.png}'s own pixels, sampled. The
- * panel, bars and scroller reuse {@link AdaptationScreen}'s primitives and palette, so the two
+ * panel, bars and scroller reuse {@link ru.adaptionwheel.client.AdaptationScreen}'s primitives and palette, so the two
  * screens read as one mod. The wheel icon in the empty wheel slot is the Curio slot icon the mod
  * already ships, {@code textures/slot/empty_wheel_slot.png} — the same picture a player sees in
  * their Curios wheel slot, which is the point: it says "the wheel goes here" in the one place the
@@ -261,7 +261,7 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
         }
     }
 
-    /** Scrollbar, drawn for the same reason the bars are: see {@link AdaptationScreen}. */
+    /** Scrollbar, drawn for the same reason the bars are: see {@link ru.adaptionwheel.client.AdaptationScreen}. */
     private void scroller(GuiGraphicsExtractor g, int x, int y, int w, int h, int maxScroll, int rows) {
         g.fill(x, y, x + w, y + h, BAR_FRAME);
         g.fill(x + 1, y + 1, x + w - 1, y + h - 1, BAR_EMPTY);
