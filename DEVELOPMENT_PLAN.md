@@ -817,3 +817,43 @@ opens and shows nothing" with no error anywhere. 26.3 has no test task, so the i
 there; the data files are the same files.
 
 Neither screen has been seen running.
+
+### The bug this phase shipped with, and what it teaches
+
+Buying an adaptation at either block wiped everything else off the fed wheel.
+
+A trade's subject is the stack in the menu's wheel slot. The grant went into the player's
+attachment — which belongs to the wheel the player took **off** to put that one in, and which
+unequipping empties (`data.reset()` on the wear→unwear edge). So the sequence was: empty
+attachment, `+1` adaptation, written onto the fed stack. Fifty adaptations replaced by one, with the
+item and the levels already spent.
+
+It was reported as "when I apply adaptations at the blocks, every adaptation that was on the wheel
+resets", and it had been there since the Domain Stone's first version — the stone had simply never
+been fed a wheel with anything on it.
+
+**The fix is structural rather than a patched call.** The fed wheel has its own detached
+`PlayerAdaption`: `AdaptionEvents.readFrom(stack)` reads it off the stack's own `wheel_data`, and
+`TradeMenu` holds it as `fed`/`fedStack`, re-reading whenever the slot holds a different stack
+instance. `recompute()` and `exchange()` both go through `fedData()`, so the menu **cannot reach the
+player's attachment at all** — there is no second path to reintroduce the bug through. A patch would
+have left the trap armed.
+
+Three things had to move for that to be possible:
+
+- **`grantConceptUpTo` was split.** Its tail was three player-facing side effects — `applyEnvEffects`,
+  `saveToItem`, `sync` — and all three are wrong for a wheel nobody is wearing: the effects belong
+  to an unequipped wheel, `saveToItem` would overwrite the **worn** wheel with the fed one's, and the
+  sync would push the fed wheel onto the HUD. `applyGrant` is the pure part; the wrapper keeps the
+  tail with a comment saying why it cannot move.
+- **"Already learned this" now means what the fed wheel has**, not what the player has. It is the
+  wheel the purchase writes to, and each wheel is its own record throughout this mod.
+  `DomainExchange.candidates` already filtered on the state it was given, so the stone was fixed by
+  passing the right one.
+- **`grantKillsToward` is gone.** The kills-versus-levels difference is a rule about the *concept*,
+  not about the altar, so it moved into `grantToWheel` next to the grant it changes and both blocks
+  buy through one call.
+
+`TradeWheelDataTests` pins the loss as a round trip and pins that the state comes off the stack.
+It cannot reach `TradeMenu.exchange()` — that needs a `ServerPlayer`, and a mock login is broken
+while Curios is installed — which is the whole reason the fix was made by construction.
