@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import ru.adaptionwheel.category.Concepts;
+import ru.adaptionwheel.client.AdaptationScreen;
 import ru.adaptionwheel.menu.TradeMenu;
 import ru.adaptionwheel.network.TradeActionPayload;
 import ru.adaptionwheel.server.DomainExchange;
@@ -46,7 +47,7 @@ import java.util.List;
  * <h2>Where the "Minecraft look" comes from</h2>
  *
  * <p>Not a hand-drawn imitation. Slot wells are {@code generic_54.png}'s own pixels, sampled. The
- * panel, bars and scroller reuse {@link ru.adaptionwheel.client.AdaptationScreen}'s primitives and palette, so the two
+ * panel, bars and scroller reuse {@link AdaptationScreen}'s primitives and palette, so the two
  * screens read as one mod. The wheel icon in the empty wheel slot is the Curio slot icon the mod
  * already ships, {@code textures/slot/empty_wheel_slot.png} — the same picture a player sees in
  * their Curios wheel slot, which is the point: it says "the wheel goes here" in the one place the
@@ -54,7 +55,7 @@ import java.util.List;
  *
  * <p>The icon is blitted through {@code blit(rl, x, y, u, v, w, h)}, which hardcodes a 256×256
  * sheet and so cannot reach a 32×32 file at its own size — the 9-argument overload taking the real
- * texture dimensions is what scales it into a 16×16 well. See {@link ru.adaptionwheel.client.AdaptationScreen} for the
+ * texture dimensions is what scales it into a 16×16 well. See {@link AdaptationScreen} for the
  * other half of that story: {@code blitSprite}'s overloads are not reliably readable from a
  * decompile, which is why nothing else here is blitted at all.</p>
  */
@@ -273,7 +274,7 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
         }
     }
 
-    /** Scrollbar, drawn for the same reason the bars are: see {@link ru.adaptionwheel.client.AdaptationScreen}. */
+    /** Scrollbar, drawn for the same reason the bars are: see {@link AdaptationScreen}. */
     private void scroller(GuiGraphics g, int x, int y, int w, int h, int maxScroll, int rows) {
         g.fill(x, y, x + w, y + h, BAR_FRAME);
         g.fill(x + 1, y + 1, x + w - 1, y + h - 1, BAR_EMPTY);
@@ -309,7 +310,7 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
      * A concept name trimmed to fit, with an ellipsis when it does not.
      *
      * <p>1.21.1's {@code drawString} has no max-width overload at all — it was moved onto the
-     * {@code Font}, which is why {@link ru.adaptionwheel.client.AdaptationScreen} trims with {@code plainSubstrByWidth}
+     * {@code Font}, which is why {@link AdaptationScreen} trims with {@code plainSubstrByWidth}
      * rather than passing a limit. Names come out of the lang file, so a translation longer than the
      * column is a real possibility rather than a theoretical one.</p>
      */
