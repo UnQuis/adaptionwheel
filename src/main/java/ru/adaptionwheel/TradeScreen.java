@@ -111,30 +111,33 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
 
     @Override
     protected void extractLabels(GuiGraphicsExtractor g, int mouseX, int mouseY) {
-        int x = this.leftPos;
-        int y = this.topPos;
-
-        panel(g, x, y, this.imageWidth, this.imageHeight);
+        // Coordinates here are already relative to (leftPos, topPos): extractContents pushes
+        // translate(leftPos, topPos) before calling this, and extractSlots runs inside the same
+        // push. Adding leftPos again drew the whole panel at double the offset -- shoved into the
+        // bottom-right corner and running off the screen, with the slot wells twice as far apart
+        // as the items vanilla draws in them. So drawing is relative throughout, and the mouse,
+        // which arrives in screen coordinates, is offset by hand where it is hit-tested.
+        panel(g, 0, 0, this.imageWidth, this.imageHeight);
 
         for (Slot slot : menu.slots) {
-            slotWell(g, x + slot.x, y + slot.y);
+            slotWell(g, slot.x, slot.y);
         }
 
         if (!menu.hasWheel()) {
-            wheelHint(g, x + TradeMenu.WHEEL_X, y + TradeMenu.WHEEL_Y);
+            wheelHint(g, TradeMenu.WHEEL_X, TradeMenu.WHEEL_Y);
             // 26.3's blit takes corners plus normalised UVs; the 1.21.1 form this was written
             // against took u/v, width and height in pixels. Same picture either way: the 32x32 icon
             // into the 16x16 well.
-            g.blit(WHEEL_SLOT_ICON, x + TradeMenu.WHEEL_X + 1, y + TradeMenu.WHEEL_Y + 1,
-                    x + TradeMenu.WHEEL_X + 17, y + TradeMenu.WHEEL_Y + 17, 0f, 1f, 0f, 1f);
+            g.blit(WHEEL_SLOT_ICON, TradeMenu.WHEEL_X + 1, TradeMenu.WHEEL_Y + 1,
+                    TradeMenu.WHEEL_X + 17, TradeMenu.WHEEL_Y + 17, 0f, 1f, 0f, 1f);
         }
 
-        renderExperience(g, x + TradeMenu.SLIDER_X, y + TradeMenu.SLIDER_Y);
-        renderButton(g, x + TradeMenu.BUTTON_X, y + TradeMenu.BUTTON_Y, mouseX, mouseY);
-        renderList(g, x + TradeMenu.LIST_X, y + TradeMenu.LIST_Y,
+        renderExperience(g, TradeMenu.SLIDER_X, TradeMenu.SLIDER_Y);
+        renderButton(g, TradeMenu.BUTTON_X, TradeMenu.BUTTON_Y, mouseX, mouseY);
+        renderList(g, TradeMenu.LIST_X, TradeMenu.LIST_Y,
                 TradeMenu.LIST_W, TradeMenu.LIST_H, mouseX, mouseY);
 
-        g.text(this.font, titleFor().getVisualOrderText(), x + PAD, y + PAD, TEXT_HEADER, false);
+        g.text(this.font, titleFor().getVisualOrderText(), PAD, PAD, TEXT_HEADER, false);
     }
 
     @Override
@@ -239,7 +242,7 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
         int w = TradeMenu.BUTTON_W;
         int h = TradeMenu.BUTTON_H;
         boolean on = canExchange();
-        boolean hot = on && within(mouseX, mouseY, x, y, w, h);
+        boolean hot = on && within(mouseX - this.leftPos, mouseY - this.topPos, x, y, w, h);
 
         g.fill(x, y, x + w, y + h, hot ? 0xFFFFFFFF : PANEL_EDGE);
         int ix = x + 1, iy = y + 1, iw = w - 2, ih = h - 2;
@@ -299,7 +302,7 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
             String concept = pool.get(index);
             int ry = top + row * ROW_H;
             boolean selected = index == menu.selectedIndex();
-            boolean hot = within(mouseX, mouseY, rowX, ry, textW, ROW_H);
+            boolean hot = within(mouseX - this.leftPos, mouseY - this.topPos, rowX, ry, textW, ROW_H);
             int accent = Concepts.color(concept) & 0xFFFFFF;
             int bright = lighten(accent, 0.35f);
 
@@ -393,12 +396,14 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
 
     // ------------------------------------------------------------------ input
 
+    /** Relative to (leftPos, topPos), like everything drawn in {@link #extractLabels}. */
     private int trackX() {
-        return this.leftPos + TradeMenu.LIST_X + TradeMenu.LIST_W - 10;
+        return TradeMenu.LIST_X + TradeMenu.LIST_W - 10;
     }
 
+    /** Relative to (leftPos, topPos), like everything drawn in {@link #extractLabels}. */
     private int listTop() {
-        return this.topPos + TradeMenu.LIST_Y + LIST_BODY_Y;
+        return TradeMenu.LIST_Y + LIST_BODY_Y;
     }
 
     private void click() {
@@ -406,23 +411,24 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
                 .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
     }
 
-    private void dragScrollerTo(double my) {
+    private void dragScrollerTo(double screenY) {
         int maxScroll = maxScroll();
         if (maxScroll <= 0) {
             return;
         }
         int h = LIST_ROWS * ROW_H;
         int knobH = knobHeight(h, maxScroll);
+        double my = screenY - this.topPos;
         double ratio = (my - listTop() - knobH / 2.0) / Math.max(1, h - 2 - knobH);
         scroll = (int) Math.round(Math.max(0, Math.min(1, ratio)) * maxScroll);
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        double mx = event.x();
-        double my = event.y();
-        int x = this.leftPos;
-        int y = this.topPos;
+        double mx = event.x() - this.leftPos;
+        double my = event.y() - this.topPos;
+        int x = 0;
+        int y = 0;
         if (event.button() != 0) {
             return super.mouseClicked(event, doubleClick);
         }

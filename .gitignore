@@ -30,3 +30,5 @@ ldlib2/
 # OS noise
 .DS_Store
 Thumbs.db
+# loose reference copy of the adaptation browser, not part of the build
+/AdaptationScreen.java
