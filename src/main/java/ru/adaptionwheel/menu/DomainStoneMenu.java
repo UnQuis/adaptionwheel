@@ -35,13 +35,15 @@ public class DomainStoneMenu extends TradeMenu {
     }
 
     @Override
-    protected List<String> candidatesFor(ServerPlayer player, PlayerAdaption data, ItemStack offering) {
+    protected List<String> candidatesFor(ServerPlayer player, PlayerAdaption fed, ItemStack offering) {
         DomainExchange.Recipe recipe = DomainExchange.recipeFor(offering);
         if (recipe == null) {
             return List.of();
         }
-        return DomainExchange.candidates(data,
-                ru.adaptionwheel.category.WheelTier.forCount(data.getAdaptCount()), recipe);
+        // `fed`, not the player's attachment: what counts as already-learned has to be what the
+        // wheel being fed already has, because that is the wheel this purchase writes to.
+        return DomainExchange.candidates(fed,
+                ru.adaptionwheel.category.WheelTier.forCount(fed.getAdaptCount()), recipe);
     }
 
     @Override
@@ -51,9 +53,9 @@ public class DomainStoneMenu extends TradeMenu {
     }
 
     @Override
-    protected void grant(ServerPlayer player, PlayerAdaption data, String concept) {
+    protected void grant(ServerPlayer player, PlayerAdaption fed, ItemStack wheel, String concept) {
         // Granted whole: the exchange sells the adaptation, not a step of it, and the price ladder
         // is what says how big a thing that is.
-        AdaptionEvents.completeTaskUpTo(player, data, concept, PlayerAdaption.MAX_LEVEL);
+        AdaptionEvents.grantToWheel(player, fed, wheel, concept, PlayerAdaption.MAX_LEVEL);
     }
 }
