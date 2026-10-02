@@ -88,6 +88,17 @@ public abstract class TradeMenu extends AbstractContainerMenu {
     private List<String> candidates = List.of();
     private int selectedIndex = -1;
 
+    // The wheel being fed, and the stack its state was read from.
+    //
+    // This is the field the whole bug lived in. A trade's subject is the stack in the wheel slot,
+    // but the player's attachment belongs to the wheel they took OFF to put it there — and
+    // unequipping empties that attachment. Granting into the attachment and writing it onto the fed
+    // stack therefore replaced every adaptation on the wheel with just the one bought, which is
+    // what was reported. So the fed wheel gets its own detached state, read off its own
+    // wheel_data, and nothing here touches the player's attachment.
+    private PlayerAdaption fed;
+    private ItemStack fedStack;
+
     /** The two slots are the menu's own, never the player's — see the class comment. */
     private final SimpleContainer input = new SimpleContainer(INPUT_SIZE) {
         @Override
@@ -153,13 +164,19 @@ public abstract class TradeMenu extends AbstractContainerMenu {
     protected abstract int itemPrice(ServerPlayer player, ItemStack offering);
 
     /**
-     * Grants the chosen adaptation, in whatever way that concept is meant to be earned.
+     * Grants the chosen adaptation into the wheel being fed, and writes it onto that wheel.
      *
      * <p>Separate from the trade because the two concepts are not the same kind of thing: a
-     * {@code Drop_NPC_} level is *derived* from a kill count, so an altar that set the level
-     * directly would leave that counter lying about why the player has it.</p>
+     * {@code Drop_NPC_} level is <em>derived</em> from a kill count, so buying it has to pay in
+     * kills rather than assign the level. That difference lives in one place —
+     * {@code AdaptionEvents.grantToWheel} — rather than in each block, so both buy the same
+     * thing.</p>
+     *
+     * @param fed   the fed wheel's own state, from {@link #fedData()}; never the player's attachment
+     * @param wheel the stack to write back onto
      */
-    protected abstract void grant(ServerPlayer player, PlayerAdaption data, String concept);
+    protected abstract void grant(ServerPlayer player, PlayerAdaption fed, ItemStack wheel,
+                                  String concept);
 
     public String titleKey() {
         return "container.adaptionwheel.domain_stone";
@@ -256,14 +273,34 @@ public abstract class TradeMenu extends AbstractContainerMenu {
         return serverSide && playerInventory.player instanceof ServerPlayer server ? server : null;
     }
 
+    /**
+     * The wheel in the wheel slot's own adaptations, detached from the player.
+     *
+     * <p>Reread whenever the slot holds a different stack — which is the moment the player swaps in
+     * another wheel, or takes the one they were holding out. Identity comparison rather than a
+     * count comparison, because {@code saveToStack} mutates the same stack instance and a fresh
+     * instance is exactly what "a different wheel" means.</p>
+     *
+     * <p>Never null, and an empty slot gives an empty state rather than nothing: the list still has
+     * to show what the offering opens, and it is the exchange that refuses when no wheel is
+     * present, not the list.</p>
+     */
+    private PlayerAdaption fedData() {
+        ItemStack stack = input.getItem(WHEEL_SLOT);
+        if (fed == null || fedStack != stack) {
+            fed = AdaptionEvents.readFrom(stack);
+            fedStack = stack;
+        }
+        return fed;
+    }
+
     /** Rebuilds the pool from the slot contents and pushes it to the client. */
     public void recompute() {
         ServerPlayer player = serverPlayer();
         if (player == null) {
             return;
         }
-        PlayerAdaption data = AdaptionEvents.dataOf(player);
-        candidates = candidatesFor(player, data, input.getItem(OFFER_SLOT));
+        candidates = candidatesFor(player, fedData(), input.getItem(OFFER_SLOT));
         if (selectedIndex >= candidates.size()) {
             // The pool shrank under the selection. Clear it rather than clamping, because a clamped
             // index would silently point at a neighbouring adaptation nobody asked for.
@@ -305,14 +342,15 @@ public abstract class TradeMenu extends AbstractContainerMenu {
         if (player == null) {
             return;
         }
-        PlayerAdaption data = AdaptionEvents.dataOf(player);
         ItemStack offering = input.getItem(OFFER_SLOT);
-        List<String> pool = candidatesFor(player, data, offering);
+        ItemStack wheel = input.getItem(WHEEL_SLOT);
+        PlayerAdaption fed = fedData();
+        List<String> pool = candidatesFor(player, fed, offering);
         if (pool.isEmpty()) {
             refuse(player, "adaptionwheel.msg.stone_nothing");
             return;
         }
-        if (!isWheel(input.getItem(WHEEL_SLOT))) {
+        if (!isWheel(wheel)) {
             refuse(player, "adaptionwheel.msg.stone_no_wheel");
             return;
         }
@@ -340,10 +378,13 @@ public abstract class TradeMenu extends AbstractContainerMenu {
         // giveExperienceLevels takes a negative amount -- this is exactly how vanilla charges an
         // enchanting table, so the client's experience bar updates through the normal path.
         player.giveExperienceLevels(-price);
-        grant(player, data, concept);
-        // The wheel is in this menu, not in a Curios slot, so the one-second item save is not
-        // looking at it. Write it now so the stack the player is holding is the one just fed.
-        AdaptionEvents.saveToStack(input.getItem(WHEEL_SLOT), data);
+        // Grants into the fed wheel and writes it straight back onto that stack: the wheel is in
+        // this menu, not in a Curios slot, so nothing else would save it, and the player's own
+        // attachment is the wrong store because it belongs to the wheel they took off.
+        grant(player, fed, wheel, concept);
+        // fedData() re-read on a different stack, so drop the memoised one: the stack it was read
+        // from is the same instance, which would otherwise make it look unchanged when it is not.
+        fedStack = null;
 
         Level level = player.level();
         level.playSound(null, pos, ru.adaptionwheel.sound.ModSounds.REF.get(),

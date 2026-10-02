@@ -52,7 +52,7 @@ public class ResonanceAltarMenu extends TradeMenu {
     }
 
     @Override
-    protected List<String> candidatesFor(ServerPlayer player, PlayerAdaption data, ItemStack offering) {
+    protected List<String> candidatesFor(ServerPlayer player, PlayerAdaption fed, ItemStack offering) {
         ServerPlayer server = player;
         List<String> mobs = AltarOfferings.mobsFor(offering, server.getServer());
         if (mobs.isEmpty()) {
@@ -60,14 +60,16 @@ public class ResonanceAltarMenu extends TradeMenu {
         }
         List<String> pool = new ArrayList<>(mobs.size() * 2);
         for (String mob : mobs) {
-            addIfUnfinished(pool, data, Concepts.offense(mob));
-            addIfUnfinished(pool, data, Concepts.drop(mob));
+            addIfUnfinished(pool, fed, Concepts.offense(mob));
+            addIfUnfinished(pool, fed, Concepts.drop(mob));
         }
         return List.copyOf(pool);
     }
 
-    private static void addIfUnfinished(List<String> pool, PlayerAdaption data, String concept) {
-        if (!data.isAdapted(concept) && data.level(concept) <= 0) {
+    private static void addIfUnfinished(List<String> pool, PlayerAdaption fed, String concept) {
+        // `fed` is the wheel being fed, so "already have it" has to mean what THAT wheel has --
+        // the player's own attachment belongs to the wheel they took off to put this one in.
+        if (!fed.isAdapted(concept) && fed.level(concept) <= 0) {
             pool.add(concept);
         }
     }
@@ -78,22 +80,15 @@ public class ResonanceAltarMenu extends TradeMenu {
     }
 
     /**
-     * Grants the chosen adaptation, and the two kinds are not the same thing.
+     * Grants into the wheel being fed and writes it straight back onto that stack.
      *
-     * <p>An offense is bought at level, like anything else. A <b>drop-rate adaptation is not</b>:
-     * its level is derived from how many of that mob the player has killed, everywhere else in the
-     * mod. Setting the level here would leave that counter lying — a player would hold an eighth
-     * level of loot-luck having killed one chicken. So the altar pays in <em>kills</em> instead, and
-     * the existing rule turns those into the level. Same table, same outcome, no second way to
-     * reach the same number.</p>
+     * <p>Both kinds go through one call because the difference between them — a drop-rate
+     * adaptation is paid in kills, an offense at level — is a rule about the <em>concept</em>, and
+     * it lives next to the grant it changes rather than in each block that sells one.</p>
      */
     @Override
-    protected void grant(ServerPlayer player, PlayerAdaption data, String concept) {
-        if (Concepts.isDrop(concept)) {
-            AdaptionEvents.grantKillsToward(player, data, concept, PlayerAdaption.MAX_LEVEL);
-            return;
-        }
-        AdaptionEvents.grantConceptUpTo(player, data, concept, PlayerAdaption.MAX_LEVEL);
+    protected void grant(ServerPlayer player, PlayerAdaption fed, ItemStack wheel, String concept) {
+        AdaptionEvents.grantToWheel(player, fed, wheel, concept, PlayerAdaption.MAX_LEVEL);
     }
 
     /**

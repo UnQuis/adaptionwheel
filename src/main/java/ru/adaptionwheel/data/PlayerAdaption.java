@@ -100,7 +100,16 @@ public class PlayerAdaption {
 
     private int cachedAdaptCount = -1;
 
-    PlayerAdaption() {
+    /**
+     * An empty state, detached from any player.
+     *
+     * <p>Public because the trading menus need one: a wheel being <em>fed</em> to an altar is not
+     * the wheel a player is wearing, so its adaptations cannot live in the player's attachment —
+     * that store belongs to the worn wheel and is emptied the moment it comes off. A standalone
+     * instance, filled from the fed stack's own {@code wheel_data}, is what a purchase writes to;
+     * see {@code AdaptionEvents.readFrom}.</p>
+     */
+    public PlayerAdaption() {
     }
 
     public PlayerAdaption(Map<String, Integer> levels, List<String> adapted, List<AdaptionTask> tasks,

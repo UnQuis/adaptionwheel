@@ -1745,6 +1745,80 @@ public class AdaptionEvents {
      */
     public static void grantConceptUpTo(ServerPlayer player, PlayerAdaption data, String concept,
                                         int targetLevel) {
+        applyGrant(player, data, concept, targetLevel);
+        // The tail below only makes sense when `data` IS the player's own state, i.e. the wheel is
+        // being worn. A trade mutates a detached state instead and must not do any of this: the
+        // effects belong to a wheel nobody is wearing, saveToItem would overwrite the worn wheel
+        // with the fed one's, and syncing would push the fed wheel onto the HUD.
+        //
+        // An adaptation that grants a passive effect must grant it NOW, not whenever the next
+        // refresh window happens to fall. Night vision landing up to two seconds late is the
+        // difference between adapting to the dark and standing in a cave wondering why nothing
+        // happened.
+        applyEnvEffects(player, data);
+        saveToItem(player, data);
+        sync(player, data, true);
+    }
+
+    /**
+     * Buys an adaptation into a wheel that is being <em>fed</em> rather than worn.
+     *
+     * <p>The mirror image of {@link #grantConceptUpTo}, and it exists because the two answer
+     * different questions. A trade's subject is the stack sitting in the menu's wheel slot, while
+     * the player's attachment belongs to the wheel they took <em>off</em> to put it there — and
+     * unequipping empties that attachment. Granting into the attachment and writing it onto the fed
+     * stack therefore replaces fifty adaptations with the one just bought, which is exactly what it
+     * used to do.</p>
+     *
+     * <p>So the fed wheel gets its own detached state, this writes to that, and nothing here reads
+     * or writes the player's attachment.</p>
+     *
+     * <p>A <b>drop-rate adaptation is paid in kills</b>, not assigned a level. Its level is derived
+     * from a kill count everywhere else in the mod, so setting it directly would leave that counter
+     * lying — a player holding eighth-level loot-luck having killed one chicken. The count is topped
+     * up to whatever the existing table says that level costs, and the existing rule in
+     * {@code applyGrant} turns that into the level. One rule, one table, one number.</p>
+     */
+    public static void grantToWheel(ServerPlayer player, PlayerAdaption fed, ItemStack wheel,
+                                    String concept, int targetLevel) {
+        if (Concepts.isDrop(concept)) {
+            int wanted = (int) Math.ceil(AdaptionConfig.lootKills(targetLevel));
+            int have = fed.kills(concept);
+            if (wanted > have) {
+                fed.killCounts.merge(concept, wanted - have, Integer::sum);
+            }
+        }
+        applyGrant(player, fed, concept, targetLevel);
+        saveToStack(wheel, fed);
+    }
+
+    /**
+     * The detached adaptation state of a wheel stack.
+     *
+     * <p>The counterpart of {@link #saveToStack}, and the mirror of {@link #loadFromItem}: that one
+     * reads the wheel a player is <em>wearing</em> into their attachment, which is the wrong wheel
+     * at a trading screen.</p>
+     */
+    public static PlayerAdaption readFrom(ItemStack stack) {
+        PlayerAdaption data = new PlayerAdaption();
+        if (stack != null && !stack.isEmpty()) {
+            WheelData wheelData = stack.get(ModDataComponents.WHEEL_DATA);
+            if (wheelData != null) {
+                wheelData.loadInto(data);
+            }
+        }
+        return data;
+    }
+
+    /**
+     * Mutates {@code data} and announces the result. Touches nothing else on the player.
+     *
+     * <p>Safe for a detached state, which is the whole point of splitting it out: every
+     * player-facing side effect of a grant lives in the two callers above, so a trade can grant
+     * without claiming that the player is wearing the wheel it just wrote to.</p>
+     */
+    private static void applyGrant(ServerPlayer player, PlayerAdaption data, String concept,
+                                   int targetLevel) {
         Style style = Style.EMPTY.withColor(TextColor.fromRgb(Concepts.color(concept)));
         boolean isLevelBased = Concepts.isLevelBased(concept);
         if (isLevelBased) {
@@ -1777,41 +1851,6 @@ public class AdaptionEvents {
         }
         ru.adaptionwheel.api.events.AdaptationCompleteEvent.post(player, concept,
                 isLevelBased ? data.level(concept) : -1);
-        // An adaptation that grants a passive effect must grant it NOW, not whenever the next
-        // refresh window happens to fall. Night vision landing up to two seconds late is the
-        // difference between adapting to the dark and standing in a cave wondering why nothing
-        // happened.
-        applyEnvEffects(player, data);
-        saveToItem(player, data);
-        sync(player, data, true);
-    }
-
-    /**
-     * Buys a {@code Drop_NPC_} adaptation by paying in kills rather than setting its level.
-     *
-     * <p>A drop level is <em>derived</em> from a kill count — everywhere else in the mod it is
-     * {@code dropLevelFromKills(kills)} and nothing else — so a trade that assigned the level
-     * directly would leave that counter lying about why the player holds it: an eighth level of
-     * loot-luck having killed one chicken. Paying in kills keeps one rule, one table, and one
-     * number.</p>
-     *
-     * @param targetLevel the level to reach; the kill count is topped up to whatever the table says
-     *                    that level costs
-     */
-    public static void grantKillsToward(ServerPlayer player, PlayerAdaption data, String concept,
-                                        int targetLevel) {
-        int wanted = (int) Math.ceil(AdaptionConfig.lootKills(targetLevel));
-        int have = data.kills(concept);
-        if (wanted <= have) {
-            // Already earned by that route; still run the ceremony so it announces itself rather
-            // than silently doing nothing.
-            grantConceptUpTo(player, data, concept, -1);
-            return;
-        }
-        data.killCounts.merge(concept, wanted - have, Integer::sum);
-        data.addHistory(concept);
-        // -1 asks for "one more than now", which for a Drop concept means "recompute from kills".
-        grantConceptUpTo(player, data, concept, -1);
     }
 
     /** Instantly max all adaptations. Requires the Mahoraga Wheel (All Adaption item). */
