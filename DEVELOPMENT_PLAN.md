@@ -378,6 +378,28 @@ TradeMenu>` does the same for the drawing.
 Two copies of a trade rule is the trap this mod has walked into three times already: two copies of a
 rule, one of them fixed later, and nothing that notices.
 
+### Later: they are one block
+
+The sharing above was a compromise, and the compromise was the problem. Two blocks with identical
+mechanics is two blocks to place, two recipes, two advancements, two menu types and two screen
+classes for one set of rules, and the *only* real difference was where each looked for what an
+offering item opens. So the Domain Stone is gone: `resonance_altar` keeps the resonance aura and
+takes the trade, and right-clicking it asks **both** questions of the same item — the price list in
+`DomainExchange` and the mob-drop index in `AltarOfferings` — and shows the union. A bone is on the
+price list *and* drops from five skeletons, so a bone now buys eleven rows instead of ten.
+
+One menu (`ResonanceAltarMenu`), one menu type, one screen, and `TradeScreen` is no longer generic:
+with a single menu there is no type argument to supply, so the subclass that existed only to provide
+one is deleted rather than kept as ceremony. The arithmetic is unchanged and still lives in
+`TradeMenu`.
+
+The list is also unchanged in the way that matters, and it is worth writing down because it was
+nearly changed in the other direction: **the list is the item's offerings minus what the wheel in
+the slot has already finished** — bought here or adapted to by suffering, both of which live in the
+fed stack's `wheel_data`. That is why the wheel slot is not optional, and why `exchange()` resolves
+the clicked row by *name* against a freshly built pool: the list shrinks as the player buys, so an
+index that was valid a moment ago names a different row by the time the packet lands.
+
 **`TradeScreen` is generic in its menu type, and that is forced rather than stylistic.**
 `AbstractContainerScreen` implements `MenuAccess<T>`, which declares `T getMenu()` and is *invariant*,
 so a screen shared by two menu types has to be `MenuAccess` in both of them or

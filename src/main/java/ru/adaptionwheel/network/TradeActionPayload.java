@@ -31,7 +31,7 @@ public record TradeActionPayload(Action action, int value) implements CustomPack
     }
 
     public static final Type<TradeActionPayload> TYPE =
-            new Type<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "domain_stone_action"));
+            new Type<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "trade_action"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, TradeActionPayload> STREAM_CODEC =
             StreamCodec.of((buf, payload) -> {

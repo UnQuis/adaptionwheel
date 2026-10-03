@@ -14,16 +14,22 @@ import net.minecraft.world.inventory.Slot;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.client.AdaptationScreen;
 import ru.adaptionwheel.client.MouseButtons;
+import ru.adaptionwheel.menu.ResonanceAltarMenu;
 import ru.adaptionwheel.menu.TradeMenu;
 import ru.adaptionwheel.network.TradeActionPayload;
 
 import java.util.List;
 
 /**
- * The Domain Stone's screen — polished pass.
+ * The Resonance Altar's screen, and the mod's only container screen.
  *
- * <p>What changed against the first version (layout constants still come from {@link TradeMenu},
- * so no slot moves):</p>
+ * <p>It was generic over the menu, because the Domain Stone and the Resonance Altar each had one and
+ * both needed the same screen. There is one menu now, so there is nothing to be generic over: the
+ * class names {@link ResonanceAltarMenu} outright, and the per-block subclass that existed only to
+ * supply a type argument is gone. Layout constants still come from {@link TradeMenu}, so a slot and
+ * the well drawn behind it cannot drift apart.</p>
+ *
+ * <p>What the polish pass changed against the first version:</p>
  * <ul>
  *   <li><b>The list is a sunken well.</b> Dark inset body, light-on-dark rows with a stripe in the
  *       concept's own colour, zebra shading, a bright outline on the selected row. The colour
@@ -42,11 +48,15 @@ import java.util.List;
  *
  * <p>New lang keys: {@code adaptionwheel.gui.select_first}, {@code adaptionwheel.gui.not_enough_levels}.</p>
  *
- * <p>Everything is still drawn in {@code renderBg}, with absolute coordinates, for the reasons
- * documented on the original: that hook runs after the background and before the slots, the only
- * window in which a slot well can be drawn under its item. See also {@link AdaptationScreen}.</p>
+ * <p><b>Everything is drawn in {@code extractLabels}, in coordinates relative to
+ * {@code (leftPos, topPos)}.</b> On 26.3 that hook runs inside the translate vanilla pushes before
+ * the slots, so it is the one window in which a slot well can be drawn under its own item — and
+ * adding {@code leftPos} again puts the whole panel at double the offset, shoved into the
+ * bottom-right corner with the wells twice as far from the items as the items are from each other.
+ * The mouse arrives in screen coordinates and is offset by hand where it is hit-tested. See also
+ * {@link AdaptationScreen}.</p>
  */
-public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T> {
+public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
 
     // ---- vanilla palette, sampled out of textures/gui/container/generic_54.png
     private static final int PANEL_EDGE = 0xFF000000;
@@ -102,7 +112,7 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
     private int scroll;
     private boolean draggingScroller;
 
-    public TradeScreen(T menu, Inventory inventory, Component title) {
+    public TradeScreen(ResonanceAltarMenu menu, Inventory inventory, Component title) {
         // Both sizes go to super: they are final here, so assigning them afterwards is not an option.
         super(menu, inventory, title, TradeMenu.IMAGE_WIDTH, TradeMenu.IMAGE_HEIGHT);
         this.inventoryLabelY = TradeMenu.INVENTORY_LABEL_Y;
@@ -162,14 +172,20 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
         return Component.translatable(menu.titleKey());
     }
 
+    /**
+     * What the empty list says, which is one of three different situations.
+     *
+     * <p>They are ordered by what the player has to do about them: no wheel means the list cannot
+     * exist at all, no offering means nothing has been asked, and an empty list with both slots full
+     * means the wheel has already learned everything this item opens — which is a <em>result</em>, not
+     * a thing to fix, and says so in those words rather than asking for another item.</p>
+     */
     protected Component hintFor() {
-        // No wheel first, because without one the list is empty whatever else is true, and that is
-        // the one thing the player has to fix before anything else on this screen can happen.
         if (!menu.hasWheel()) {
             return Component.translatable("adaptionwheel.gui.need_wheel");
         }
         return menu.hasOffering()
-                ? Component.translatable("adaptionwheel.gui.nothing_left")
+                ? Component.translatable("adaptionwheel.gui.all_learned")
                 : Component.translatable("adaptionwheel.gui.need_item");
     }
 

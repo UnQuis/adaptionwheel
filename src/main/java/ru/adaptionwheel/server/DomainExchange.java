@@ -8,6 +8,7 @@ import ru.adaptionwheel.adapt.AdaptationDomain;
 import ru.adaptionwheel.adapt.AdaptationRegistry;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.WheelTier;
+import ru.adaptionwheel.data.PlayerAdaption;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -16,9 +17,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * What the Domain Stone will trade for, and what it will not.
+ * The Resonance Altar's price list: what an offering item buys, and what it will not buy.
  *
- * <p>The stone used to hand an adaptation over for free, on a cooldown, drawn at random from
+ * <p>This used to be the Domain Stone's, back when the stone and the altar were two blocks with the
+ * same two slots and the same arithmetic. They are one block now — see
+ * {@link ru.adaptionwheel.menu.ResonanceAltarMenu}, which asks this list <em>and</em> the mob-drop
+ * index for the same item — so the name is the one thing here that outlived its block.</p>
+ *
+ * <p>The stone originally handed an adaptation over for free, on a cooldown, drawn at random from
  * whatever the wheel had not finished. That made it the one place in the mod where progress cost
  * nothing, which quietly made the other fifty-odd adaptations — each bought with suffering and
  * time — optional. It is now an <em>exchange</em>: an item goes in, adaptations come out, and the
@@ -55,30 +61,36 @@ import java.util.Map;
  * {@link AdaptationRegistry#get} returns {@code null} for it. That is only a cosmetic ordering
  * effect, and paying it is much cheaper than a recipe that quietly trades nothing.</p>
  *
- * <h2>The wheel does not filter, and neither does the tier</h2>
+ * <h2>The pool is what the item opens MINUS what this wheel has finished</h2>
  *
- * <p>The pool is what the offering item opens, in full, every time. It does not shrink because the
- * wheel being fed has already finished something — that was the original behaviour ("everything the
- * wheel has <em>not</em> already finished"), and it made the block's answer a function of two slots
- * at once: put an item in and see four adaptations, then put the wheel in beside it and see two,
- * with no way back to the four. A shop that empties itself as you shop at it is not a shortcut
- * towards anything.</p>
+ * <p>Both halves are load-bearing and they are not the same rule.</p>
  *
- * <p>An adaptation the wheel already holds is refused by the exchange, with a message, instead of by
- * removing its row — so the player finds out by clicking, not by noticing an absence.</p>
+ * <p>The <b>subtraction</b> is the point of the block: an adaptation the wheel being fed has already
+ * finished — bought here, or adapted to by standing in the thing until it stopped mattering — is not
+ * on offer. Paying experience levels for something the wheel already has is the worst outcome
+ * available, because the item would be gone and nothing would have changed, so the row is removed
+ * before it can be clicked rather than refused after. This also means <b>which wheel</b> is in the
+ * slot decides the list, and that is deliberate: the list is a shopping list for that wheel, not a
+ * catalogue of the item.</p>
  *
- * <p>The tier does not filter either, and that is also the original behaviour: tiers <em>reveal</em>,
- * they never restrict, because the wheel is omnipotent so a later tier is only ever a larger one. A
- * block that refused to sell a concept until the wheel could analyse it would impose the one rule the
- * tier system does not have, and would make the price of the item irrelevant to what it buys. The
- * tier is read here for one thing only: to put revealed families at the top of the list.</p>
+ * <p>It is also why the wheel slot is not optional: with the slot empty there is no wheel to
+ * subtract anything from, so nothing is offered. The block has no answer that does not depend on
+ * the wheel in it, which is what makes it a ritual rather than a shop.</p>
+ *
+ * <p>The <b>tier</b> does not filter. Tiers <em>reveal</em>, they never restrict, because the wheel
+ * is omnipotent so a later tier is only ever a larger one. A block that refused to sell a concept
+ * until the wheel could analyse it would impose the one rule the tier system does not have, and would
+ * make the price of the item irrelevant to what it buys. The tier is read here for one thing only:
+ * to put revealed families at the top of the list.</p>
  *
  * <h2>Ordering is total</h2>
  *
  * <p>Revealed families first, then domain, then concept name. The first clause keeps the shortcut
  * towards what comes next. The rest exists because the client selects a candidate by its
- * <em>index</em> in this list: two builds of the same pool in a different order is a stone that
- * grants whatever the server's index happened to point at, which is not what the player clicked.</p>
+ * <em>index</em> in this list: two builds of the same pool in a different order is an altar that
+ * grants whatever the server's index happened to point at, which is not what the player clicked.
+ * {@code TradeMenu.exchange()} is where that index is turned back into a concept, and it resolves it
+ * by name against a freshly built pool for exactly this reason.</p>
  */
 public final class DomainExchange {
 
@@ -209,7 +221,7 @@ public final class DomainExchange {
         BY_ITEM.remove(item);
     }
 
-    /** The recipe an item stack buys into, or {@code null} if the stone does not take it. */
+    /** The recipe an item stack buys into, or {@code null} if the price list does not take it. */
     public static Recipe recipeFor(ItemStack stack) {
         return stack == null || stack.isEmpty() ? null : BY_ITEM.get(stack.getItem());
     }
@@ -224,37 +236,31 @@ public final class DomainExchange {
     }
 
     /**
-     * What the stone would offer for this recipe: everything a selector reaches.
+     * What the altar would offer for this recipe: every adaptation a selector reaches that this
+     * wheel has not finished.
      *
      * <p>Exact selectors are resolved directly, family selectors by walking the registry. See the
      * class comment for why the two cannot be treated alike.</p>
      *
-     * <p><b>Nothing here reads the wheel.</b> This used to skip whatever the wheel being fed had
-     * already finished, which meant the list was a function of two slots at once: an item alone
-     * showed adaptations, and the same item plus a wheel showed a shorter list, because the wheel is
-     * where "already finished" lives. The list is now the item's, and the exchange is the thing that
-     * refuses an adaptation the wheel already holds — with a message, rather than by making the row
-     * disappear. {@code tier} still comes from the wheel, but only to order the list.</p>
-     *
-     * <p>Never offers {@code ADBERSITY}. It is a survival challenge rather than an adaptation, and
+     * <p>Never offers {@code ADVERSITY}. It is a survival challenge rather than an adaptation, and
      * being handed one would start a timed event the player neither asked for nor could have paid
      * for — the price would be an item, and what it buys would be a fight.</p>
      */
-    public static List<String> candidates(int tier, Recipe recipe) {
+    public static List<String> candidates(PlayerAdaption data, int tier, Recipe recipe) {
         if (recipe == null) {
             return List.of();
         }
         List<String> pool = new ArrayList<>();
         for (Selector selector : recipe.selectors()) {
             if (selector.isExact()) {
-                if (!pool.contains(selector.text())) {
+                if (!isFinished(data, selector.text())) {
                     pool.add(selector.text());
                 }
                 continue;
             }
             for (AdaptationDefinition definition : AdaptationRegistry.allDefinitions()) {
                 String concept = definition.concept();
-                if (selector.matches(concept) && !pool.contains(concept)) {
+                if (selector.matches(concept) && !isFinished(data, concept) && !pool.contains(concept)) {
                     pool.add(concept);
                 }
             }
@@ -262,6 +268,18 @@ public final class DomainExchange {
         pool.remove(Concepts.ADVERSITY);
         pool.sort(orderingFor(tier));
         return List.copyOf(pool);
+    }
+
+    /**
+     * Whether this wheel is already done with a concept.
+     *
+     * <p>Either kind of "done": a one-time adaptation is in the wheel's {@code adapted} set, and a
+     * leveled one has a level at all. Both are written to the wheel's own {@code wheel_data}, whether
+     * the adaptation was bought here or earned by suffering through it, which is why reading this
+     * off the fed stack covers both cases — the block cannot tell them apart and does not need to.</p>
+     */
+    public static boolean isFinished(PlayerAdaption data, String concept) {
+        return data.isAdapted(concept) || data.level(concept) > 0;
     }
 
     /**
@@ -296,7 +314,7 @@ public final class DomainExchange {
      * </pre>
      *
      * <p><b>Nothing is ever free.</b> The floor is one level, which is the rounded-up form of the
-     * half-level minimum: a price that could reach zero would make the stone a place to stand
+     * half-level minimum: a price that could reach zero would make the altar a place to stand
      * rather than a trade, which is the thing it stopped being.</p>
      *
      * <p>Whole levels rather than fractions because vanilla experience is an integer and spending

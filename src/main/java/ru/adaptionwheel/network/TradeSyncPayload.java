@@ -35,7 +35,7 @@ public record TradeSyncPayload(List<String> candidates, int selectedIndex, int i
         implements CustomPacketPayload {
 
     public static final Type<TradeSyncPayload> TYPE =
-            new Type<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "domain_stone_sync"));
+            new Type<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "trade_sync"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, TradeSyncPayload> STREAM_CODEC =
             StreamCodec.of((buf, payload) -> {

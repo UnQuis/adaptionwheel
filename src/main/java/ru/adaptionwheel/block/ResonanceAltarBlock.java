@@ -17,8 +17,7 @@ import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.menu.ResonanceAltarMenu;
 
 /**
- * Resonance Altar: one extra Resonance rung beside it, and — since the mob-loot trade — a way to
- * spend a mob's own drop on the adaptations to fight it.
+ * Resonance Altar: the mod's one extra Resonance rung beside it, and the mod's one trade.
  *
  * <p>Two jobs on one block, and they do not collide because they answer different questions. The
  * aura is passive and about who is standing near you; the trade is active and about what you are
@@ -26,10 +25,16 @@ import ru.adaptionwheel.menu.ResonanceAltarMenu;
  * already the mod's "this is a rite, not a machine" block, and a ritual that only fires a buff
  * would have been the weak one.</p>
  *
- * <p>The aura lives in {@code RitualAuras}, which is a one-second pass over wheel-wearing players
- * and is entirely unchanged. Right-clicking opens a container — the altar's second screen, which
- * shares all of its mechanics with the Domain Stone's through
- * {@link ru.adaptionwheel.menu.TradeMenu}.</p>
+ * <p><b>The trade is the Domain Stone's as well.</b> The two were separate blocks with identical
+ * mechanics — two slots, a wheel, a list, a price — differing only in where they looked for what
+ * an offering opens. Right-clicking this block now asks both and shows the union, so the stone is
+ * gone: one block to place, one recipe, one advancement, one set of rules. What the item buys is
+ * {@link ru.adaptionwheel.menu.ResonanceAltarMenu}'s answer; the arithmetic is
+ * {@link ru.adaptionwheel.menu.TradeMenu}'s.</p>
+ *
+ * <p>The aura lives in {@code RitualAuras}, a one-second pass over wheel-wearing players, and is
+ * switched by its own config key — so a world that wants the trade without the buff, or a buff
+ * without the trade, can have either.</p>
  *
  * <p>No block entity, same as every other block here: the position travels as menu-open data, which
  * 26.3 requires to be written by hand because it dropped the {@code openMenu(provider, BlockPos)}
@@ -55,14 +60,17 @@ public class ResonanceAltarBlock extends Block {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hit) {
-        if (!AdaptionConfig.ALTAR_ENABLED.get() || !AdaptionConfig.ALTAR_TRADE_ENABLED.get()) {
+        // Only the trade is gated here. The aura is checked where it is applied, in RitualAuras,
+        // so the two switches are independent: a world can have the altar as a buff and not as a
+        // shop, or the other way round.
+        if (!AdaptionConfig.ALTAR_TRADE_ENABLED.get()) {
             return InteractionResult.PASS;
         }
         if (level.isClientSide() || !(player instanceof ServerPlayer server)) {
             return InteractionResult.PASS;
         }
-        // Not "wearing the wheel": the wheel lives in this menu's own slot, the same way it does on
-        // the stone -- the altar is where you bring it, not somewhere you have to have it equipped.
+        // Not "wearing the wheel": the wheel lives in this menu's own slot — the altar is where you
+        // bring it, not somewhere you have to have it equipped.
         server.openMenu(new Provider(pos), buf -> buf.writeBlockPos(pos));
         return InteractionResult.CONSUME;
     }

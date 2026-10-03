@@ -27,9 +27,6 @@
           },
           {
             "items": "adaptionwheel:resonance_altar"
-          },
-          {
-            "items": "adaptionwheel:domain_stone"
           }
         ]
       }
@@ -40,8 +37,7 @@
     "recipes": [
       "adaptionwheel:adaptation_brazier",
       "adaptionwheel:wheel_totem",
-      "adaptionwheel:resonance_altar",
-      "adaptionwheel:domain_stone"
+      "adaptionwheel:resonance_altar"
     ]
   }
 }

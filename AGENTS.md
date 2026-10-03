@@ -41,9 +41,9 @@
   - **Swim tuning**: Env_Liquid bonuses are intentionally BELOW land pace (WATER_MOVEMENT_EFFICIENCY +0.6, SWIM_SPEED +1.0); Aquatic Mastery stacks on top (+2.5/+1.0) as the dolphin-grade tier.
   - **Combo mutations** share `grantComboMutation` (message + max voice + themed burst + event + sync): Thermal Mastery (maxed Type_FIRE + Env_Lava, heat-scaled regen), Aquatic Mastery (`Mutation_Aquatic` = Env_Liquid + Env_Drowning; big SWIM_SPEED + WATER_MOVEMENT_EFFICIENCY modifiers + BreakSpeed ×1.5 underwater even grounded; config `mutations.aquatic*`), Impact Mastery (`Mutation_Impact` = Env_FallDamage + Env_Knockback; landing above `impactMinFallDistance` triggers a damaging shockwave via transient landing-edge tracking on the attachment).
   - **Deprecated-API policy**: no `bus = EventBusSubscriber.Bus.MOD` anywhere — FML auto-routes each `@SubscribeEvent` by whether the event implements `IModBusEvent` (verified in loader bytecode); keep it that way when adding new subscribers.
-  - **The Resonance Altar's second face** (Phase 22): right-clicking it opens a container (`menu/ResonanceAltarMenu`, `ResonanceAltarScreen`) that sells a mob's adaptations for that mob's own drop **plus experience levels** — the mod's first *offensive* content, and its resonance aura in `RitualAuras` is untouched, because the two answer different questions (who is standing near you vs. what you will spend). Two halves: `server/AltarOfferings` reads `data/adaptionwheel/domain_altar/<mob_path>.json` (58 mobs, generated from vanilla's loot tables) into an item→mobs index on first use, and a bone offers **ten** things because it drops from five kinds of skeleton — each offering *either* `Offense_NPC_<mob>` *or* `Drop_NPC_<mob>`, mob-major so a mob's two rows sit together. A `Drop_NPC_` concept is **paid in kills, not levels** (inside `AdaptionEvents.grantToWheel`) because its level is derived from a kill count everywhere else in the mod and assigning it directly would leave that counter lying — eighth-level loot-luck having killed one chicken. The Warden needed no special case: vanilla's `warden.json` already lists the sculk catalyst. The 26 mobs that drop nothing are simply **absent** rather than present-and-empty. Config `altarTradeEnabled`, separate from `altarEnabled` so the trade can be off while the aura stays.
+  - **The Resonance Altar's trade** (Phase 22, and now the mod's only trade): right-clicking it opens a container (`menu/ResonanceAltarMenu`, `TradeScreen`) that sells a mob's adaptations for that mob's own drop **plus experience levels** — the mod's first *offensive* content, and its resonance aura in `RitualAuras` is untouched, because the two answer different questions (who is standing near you vs. what you will spend). Two halves: `server/AltarOfferings` reads `data/adaptionwheel/domain_altar/<mob_path>.json` (58 mobs, generated from vanilla's loot tables) into an item→mobs index on first use, and a bone offers **ten** things because it drops from five kinds of skeleton — each offering *either* `Offense_NPC_<mob>` *or* `Drop_NPC_<mob>`, mob-major so a mob's two rows sit together. A bone is on the price list too, so it now buys eleven rows rather than ten. A `Drop_NPC_` concept is **paid in kills, not levels** (inside `AdaptionEvents.grantToWheel`) because its level is derived from a kill count everywhere else in the mod and assigning it directly would leave that counter lying — eighth-level loot-luck having killed one chicken. The Warden needed no special case: vanilla's `warden.json` already lists the sculk catalyst. The 26 mobs that drop nothing are simply **absent** rather than present-and-empty. Config `altarTradeEnabled`, separate from `altarEnabled` so the trade can be off while the aura stays.
   - **The mapping is generated and shipped, not scraped at runtime**, and that is a decision rather than an accident. Reading "which mobs drop this item" out of the loot tables is the obvious implementation and it was rejected for three reasons: `LootPool`'s entry list is a `private final` field behind `LootPoolEntryContainer`, so reaching the items needs an unwrap that differs between branches; the loot table *shape* differs between versions, so the same walk is two parsers; and a mob's loot is static data being re-derived 58 times. **Vanilla's 84 mob loot tables turned out to be byte-identical between 1.21.1 and 26.3** (`diff -rq`, no differences) — the `functions` → `modifier` / `item` → `name` rename applies to tables *the mod authors*, not to vanilla's — so the data set is one set of files for both branches. A mod that changes its mobs' drops ships its own file.
-  - **The two trading blocks share their mechanics rather than each holding a copy**: `menu/TradeMenu` (both slots, the pool, the ordering, the item price, the XP price, the legality re-check, server authority) and `TradeScreen<T extends TradeMenu>` (all drawing, in `extractLabels`). A subclass only says **what it sells**. Two copies of a trade rule is the exact trap this mod has walked into three times already. **`TradeScreen` must be generic in its menu type** — `AbstractContainerScreen` implements the *invariant* `MenuAccess<T>` (`T getMenu()`), so one screen shared by two menu types has to be `MenuAccess` in both of them or `RegisterMenuScreensEvent` rejects the registration with a type error. `TradeMenu`'s constructor takes the `MenuType` as a parameter rather than asking an abstract method for it, because an abstract method cannot be called from a super constructor.
+  - **There is one trading block and one menu, and the mechanics live in the parent rather than in each subclass**: `menu/TradeMenu` (both slots, the pool, the ordering, the item price, the XP price, the legality re-check, server authority) and `TradeScreen` (all drawing, in `extractLabels`). A subclass only says **what it sells**. Two copies of a trade rule is the exact trap this mod has walked into three times already. **`TradeScreen` is deliberately NOT generic any more**: it was `TradeScreen<T extends TradeMenu>` while two blocks shared it, because `AbstractContainerScreen` implements the *invariant* `MenuAccess<T>` (`T getMenu()`) and one screen over two menu types has to be `MenuAccess` in both; with one menu there is no type argument to supply, so it names `ResonanceAltarMenu` outright. (It also cannot be registered as `TradeScreen::new` while generic — the constructor reference's parameter is the type variable and NeoForge's `register(MenuType<? extends M>, ScreenConstructor<M,U>)` cannot infer from it.) `TradeMenu`'s constructor takes the `MenuType` as a parameter rather than asking an abstract method for it, because an abstract method cannot be called from a super constructor.
   - `server/AdaptionCommand.java` — `/adaptionwheel status|list|info|grant|analyze|reset|registry` (reads self-serve, mutations require perm 2); surgical grants go through `AdaptionEvents.debugGrant/debugReset` (no heal/voice/events).
   - `client/AdaptationScreen.java` — in-game adaptation browser (domain tabs incl. ALL, levels/ADAPTED/MAX states, live task progress bars, optional `adaptionwheel.desc.*` descriptions, scrollbar/scissor clipping, no pause); opened by `client/AdaptionKeybinds.java` (default K, MOD bus registration) via `client/AdaptionScreenOpener.java` (game-bus ClientTickEvent.Post polling `consumeClick()`); wheel tooltip shows the bound key behind an `FMLEnvironment.dist.isClient()` guard.
   - **Chaos Guardian compat (soft, string-ID based — no compile/runtime dependency on DE)**: `server/DraconicCompat.java` holds every DE identifier (`draconicevolution:draconic_guardian`, guardian wither/crystal, damage ids `guardian`, `guardian_laser`, `guardian_projectile`, `chaos_implosion`, `crystal_move`) and resolves guardian-linked sources (parts → body, projectile owner, withers/crystals inherit) to the canonical existence path. `server/GuardianDirectDamage.java` + `mixin/GuardianLaserMixin.java` handle the fully charged laser, which applies damage via a direct `setHealth` call in `LaserBeamPhase.serverTick`, bypassing ALL NeoForge damage events; the mixin is a `@Redirect` on that single callsite (handler receiver must be exactly `Player` — Mixin rejects supertypes at apply time), routed through `AdaptionEvents.handleDirectHealthReduction` (existence immunity / EXPLOSION+contact reductions / Lv5 heal / Adversity survival). Applied conditionally via `mixin/AdaptionMixinPlugin.java` (checks `FMLLoader.getLoadingModList()` for `draconicevolution`). Once `Existence_ChaosGuardian` completes, the wearer is immune to the whole arsenal and contact hits are reflected at `existenceReflection.reflectMultiplier` (default ×3, like the original) with knockback; grant also maxes Type_EXPLOSION + Type_PROJECTILE + Type_FIRE. Config: `modules.chaosGuardian`, `timing.existenceProximityBlocks`. Verified live: mixin applies cleanly when summoning the guardian on a dev server with DE installed.
@@ -88,43 +88,56 @@
   adaptations. It reads as a feature being switched off, not as progression. The environments are
   core here and stay core. Revealing and never restricting is the point: the wheel is omnipotent,
   so a later tier is only ever a larger one.
-- **The Domain Stone is the mod's first container GUI** — `server/DomainExchange.java` (price list),
-  `menu/TradeMenu.java` + `menu/DomainStoneMenu.java` + `menu/ResonanceAltarMenu.java` +
-  `menu/ModMenus.java`, `TradeScreen.java` + the two thin screens,
-  `network/TradeSyncPayload.java` (server→client) and `TradeActionPayload.java` (client→server).
-  The payloads and the screen are **generic over both trading blocks** — renamed off `DomainStone*`
-  when the altar arrived rather than duplicated, because two copies of a trade rule is the trap this
-  mod has walked into three times already. It used to hand an adaptation over **free** on a cooldown; it now trades.
+- **There is ONE trading block: the Resonance Altar.** The Domain Stone is **deleted**, not merged in
+  spirit only — no block, item, menu, screen, menu type, recipe, advancement, blockstate, model,
+  loot table, texture, pickaxe-tag entry or lang key survives it. Right-clicking the altar asks
+  **both** questions of the same offering item — `DomainExchange`'s price list and `AltarOfferings`'
+  item→mob index — and shows the union, so a bone (on the price list *and* dropped by five
+  skeletons) buys eleven rows. What survives is `menu/TradeMenu.java` (all the arithmetic),
+  `menu/ResonanceAltarMenu.java` (the one subclass, which says what it sells),
+  `menu/ModMenus.java` (one `MenuType`), `TradeScreen.java` — now **not generic**, because with one
+  menu there is no type argument to supply and the subclass that existed only to provide one was
+  deleted rather than kept as ceremony — and the two payloads. The two blocks had identical
+  mechanics; two copies of a trade rule is the trap this mod has walked into three times already.
+  The altar also keeps the resonance aura, so its two jobs have two config switches
+  (`altarEnabled` for the aura, `altarTradeEnabled` for the trade) and the menu opens on the second
+  alone. It used to hand an adaptation over **free** on a cooldown; it trades.
   **An item narrows the pool rather than naming an adaptation**: a recipe is a list of selectors,
   each an exact concept or a family ending in `*` (feather → `Debuff_levitation`, ender eye →
   `Env_Void`, nether star → `Type_*`). Families rather than a fixed list so the pool is *derived*
   and a recipe needs no edit when the registry grows — **and because `Debuff_*` and `Drop_NPC_*` are
   not in `AdaptationRegistry` at all** (their keys are minted at runtime), so a recipe naming either
   would offer nothing, silently. An **exact** selector is therefore resolved directly rather than
-  looked up. **The tier does not filter the pool**: the stone is a shortcut towards what the wheel
+  looked up. **The tier does not filter the pool**: the altar is a shortcut towards what the wheel
   has not reached, and tiers reveal rather than restrict. `ADBERSITY` is never sold — it is a
   challenge, and the price would be an item for a fight.
-- **The pool is the offering item's, never the wheel's — and it is empty until the wheel is in the
-  slot.** Both rules were violated at once and it read as a bug in the list: an item alone opened
-  four adaptations, then putting the wheel in beside it left two, because "already learned" was
-  read off the wheel being fed, so the shop emptied itself as you shopped at it and the same row
-  appeared or vanished depending on which of the two slots was filled. Nothing filters now
-  (`DomainExchange.candidates(tier, recipe)` takes no wheel; `ResonanceAltarMenu` offers both of a
-  mob's adaptations unconditionally), and **`TradeMenu.exchange()` refuses an adaptation the fed
-  wheel already holds** (`msg.stone_already`) instead of removing the row — so the player finds out
-  by clicking, not by noticing an absence. The wheel slot is not optional for the *list* either:
-  the purchase is written onto that stack, so with the slot empty there is nothing to sell and
-  `recompute()` returns an empty pool with `gui.need_wheel` as the empty state.
-- **The item price is server-computed and synced; the client cannot work it out.** The altar's price
+- **The pool is the item's offerings MINUS what the wheel in the slot has finished — and it is empty
+  without that wheel.** Both halves are the rule, and an earlier pass here got the first half wrong
+  in the other direction: an adaptation already bought *or already adapted to by suffering* must
+  **disappear** from the list. It is not a defect that the list changes as the wheel fills — it is
+  the list. Paying levels for something the wheel already has is the worst outcome available, so the
+  row is gone before it can be clicked rather than refused after. `DomainExchange.isFinished(fed,
+  concept)` is the one definition of "finished" (`isAdapted || level > 0`) and both halves of the pool
+  — the price list and the mob pairs — go through it, so the filter and the exchange's own re-check
+  cannot disagree. Both kinds of "finished" live in the fed stack's `wheel_data`, which is why reading
+  it off the fed stack covers bought and suffered alike.
+  **The wheel slot is therefore not optional**: the purchase is written onto that stack and there is
+  nothing to subtract from without it, so `recompute()` returns an empty pool and `gui.need_wheel` is
+  the empty state.
+  **Which makes a stale index dangerous, and `exchange()` resolves the clicked row by NAME**:
+  `candidates.get(selectedIndex)` — what the client saw — then `pool.contains(concept)` against a
+  freshly built pool, else `msg.trade_stale`. An index read out of the live pool instead would silently
+  buy the row that shifted up, which is the only outcome here the player cannot undo.
+- **The item price is server-computed and synced; the client cannot work it out.** The mob half's price
   is "which mobs drop this item", read out of the *server's* resources
   (`AltarOfferings.mobsFor(stack, server)`), so a client asking the same question answers zero —
   and `TradeMenu.itemCost()` used to be exactly that client-side question, returning 0, which made
   `canAfford` permanently false and left the EXCHANGE button grey and inert. It rides in
   `TradeSyncPayload` beside the pool and the selection.
-- **The player pays twice: the item is consumed, and the stone charges their own experience
+- **The player pays twice: the item is consumed, and the altar charges their own experience
   levels.** The ladder is `DomainExchange.priceFor` — **1** for a one-time adaptation, **2** for a
   leveled one, **3** for `Drop_NPC_`, **4** for `Existence_`/`Mutation_`/`Dimension_Destroy`.
-  **The floor of one level is load-bearing**: a price that could reach zero would make the stone a
+  **The floor of one level is load-bearing**: a price that could reach zero would make the altar a
   place to stand rather than a trade, which is what it stopped being. Whole levels, not fractions —
   vanilla experience is an integer and part of a level has nowhere to live. Charging is
   `giveExperienceLevels(-price)`, the same call vanilla uses for an enchanting table, so the client's
@@ -133,13 +146,13 @@
   `MAX_LEVEL` into the fed wheel — an exchange sells the adaptation whole, and the ladder says how big a
   thing that is.
   **The server owns every number**: candidates and the selected row live on the menu, and the client
-  sends *intent* ("row 3", "exchange") — a row is chosen by **index** and the pool is rebuilt
-  whenever anything in the menu changes, so a stale index must be a refusal rather than a wrong
-  grant. **No block entity**: the position travels as menu-open data, and that extra data is
+  sends *intent* ("row 3", "exchange") — the row travels as an index and the pool is rebuilt
+  whenever anything in the menu changes, so `exchange()` turns the index into a **name** and refuses
+  rather than granting whatever the shrunken pool shifted into that slot.
+  **No block entity**: the position travels as menu-open data, and that extra data is
   **mandatory** — with none, the client factory gets an empty buffer and reading a `BlockPos` off it
-  throws when a player opens the block. **All layout constants live in `DomainStoneMenu`, not the
-  screen** — now `TradeMenu`, since both trading blocks use it — because a slot's position and the
-  well drawn behind it are two numbers that must agree.
+  throws when a player opens the block. **All layout constants live in `TradeMenu`, not the
+  screen**, because a slot's position and the well drawn behind it are two numbers that must agree.
 - **Vanilla draws no slot wells.** `extractSlot` renders the contents only; the wells are baked into
   a background texture, and 26.3 no longer blits one for a container screen. **A screen that draws
   its own panel must therefore draw every well itself**, or its items sit on bare grey — which is how
@@ -299,16 +312,20 @@ names**, which is the cheap signal. Two deliberate shapes of result:
   (`WheelData.migrateLegacyConcepts` — 26.3 forked before the fist existed, so no 26.3 save can hold
   a `Fist_Copper` to migrate; `SurfaceAdaptations.fistLevel` and `AdaptionConfig.fistTierSpeed` —
   dead code on main, zero callers).
-- **The trade pool is the one divergence that is a real gap on `main`, not a port artefact.**
-  `DomainExchange.candidates(tier, recipe)` and `ResonanceAltarMenu` no longer filter by what the fed
-  wheel holds, and `TradeMenu.exchange()` refuses an already-finished concept instead —
-  `branch_bodies.py` reports all of it (`isFinished`, `addIfUnfinished`, the old `candidates`
-  signature, and `return player==null?0:itemPrice(...)`). It was fixed here first because that is
-  where the bug was reported; **`main` still empties its own shop as the player buys**, and its
-  `TradeSyncPayload` has no `itemCost` either (harmless there, because main's screen sends the
-  exchange unconditionally rather than gating the click on `canAfford`, so only the button's
-  *colour* is wrong). Port the fix when `main` is next touched; do not "restore parity" by putting
-  the filter back.
+- **The trading block is one here and two on `main`, and that is a real gap, not a port artefact.**
+  `branch_bodies.py` will report the missing `DomainStoneMenu`, `DomainStoneScreen`,
+  `DomainStoneBlock`, `ModMenus.DOMAIN_STONE`, `ModBlocks.DOMAIN_STONE`, the old
+  `candidates(tier, recipe)` signature, the `return player==null?0:itemPrice(...)` body in
+  `itemCost()`, and the whole of `ritual.json`/`pickaxe.json`. All of it is deliberate here: the two
+  blocks had identical mechanics, the user asked for one, and the price list moved into the altar.
+  **`main` still has two blocks with two recipes and two advancements**, and its `TradeSyncPayload`
+  has no `itemCost` — harmless there only because main's screen sends the exchange unconditionally
+  instead of gating the click on `canAfford`, so just the button's *colour* is wrong. Port the merge
+  when `main` is next touched; do not "restore parity" by splitting the block again.
+  Two things about the pool are **not** divergences and must stay identical on both branches: the
+  list subtracts what the fed wheel has finished, and `exchange()` resolves the clicked row by name.
+  An earlier pass here removed the subtraction on the theory that a shrinking list was a defect; it
+  is not, it is the list.
 - **Real gaps**: a method on main with a 26.3 counterpart that was *supposed* to exist. Every one
   found this way was a behaviour, not a refactor.
 

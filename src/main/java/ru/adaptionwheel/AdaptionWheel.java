@@ -62,7 +62,6 @@ public class AdaptionWheel {
                         output.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
                         output.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
                         output.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());
-                        output.accept(ru.adaptionwheel.block.ModBlocks.DOMAIN_STONE_ITEM.get());
                         output.accept(ru.adaptionwheel.entity.ModSpawnEggs.DISCIPLE_EGG.get());
                     })
                     .build());
@@ -101,10 +100,10 @@ public class AdaptionWheel {
         @SubscribeEvent
         public static void onRegisterScreens(
                 net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
-            event.register(ru.adaptionwheel.menu.ModMenus.DOMAIN_STONE.get(),
-                    ru.adaptionwheel.DomainStoneScreen::new);
+            // One screen, one line. There were three registrations here once, one per block with a
+            // container, and two screen classes that differed in nothing but the title they printed.
             event.register(ru.adaptionwheel.menu.ModMenus.RESONANCE_ALTAR_TRADE.get(),
-                    ru.adaptionwheel.ResonanceAltarScreen::new);
+                    ru.adaptionwheel.TradeScreen::new);
         }
 
         @SubscribeEvent
@@ -115,7 +114,6 @@ public class AdaptionWheel {
                 event.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
                 event.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
                 event.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());
-                event.accept(ru.adaptionwheel.block.ModBlocks.DOMAIN_STONE_ITEM.get());
             }
             if (isTab(event.getTabKey(), "spawn_eggs")) {
                 event.accept(ru.adaptionwheel.entity.ModSpawnEggs.DISCIPLE_EGG.get());

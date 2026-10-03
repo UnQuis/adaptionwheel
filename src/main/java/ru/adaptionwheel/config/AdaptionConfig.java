@@ -40,7 +40,6 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> TOTEM_ACCELERATION_TICKS;
     public static final ModConfigSpec.ConfigValue<Boolean> ALTAR_ENABLED;
     public static final ModConfigSpec.ConfigValue<Boolean> ALTAR_TRADE_ENABLED;
-    public static final ModConfigSpec.ConfigValue<Boolean> DOMAIN_STONE_ENABLED;
 
     // ---- Adaptation transfer ----
     public static final ModConfigSpec.ConfigValue<Boolean> TRANSFER_ENABLED;
@@ -309,18 +308,17 @@ public final class AdaptionConfig {
                         "within 8 blocks. It raises the rung rather than widening the search, so",
                         "stacking altars cannot stand in for other players.")
                 .define("altarEnabled", true);
-        ALTAR_TRADE_ENABLED = s.comment("Right-clicking the altar also opens a trade: put a mob's",
-                        "own drop in the upper slot and it offers that mob's adaptations -- the",
-                        "ability to hurt it, and the ability to take more from it -- for the item",
-                        "plus experience levels. The altar's resonance aura is unaffected, so this",
-                        "can be turned off on its own. Which mobs count is a data set, not code:",
-                        "data/adaptionwheel/domain_altar/<mob_path>.json.")
+        ALTAR_TRADE_ENABLED = s.comment("Right-clicking the altar opens a trade: put an offering",
+                        "item in the upper slot and the wheel in the other, and it offers what that",
+                        "item opens up. Two kinds of offering, one list: an item on the stone's",
+                        "price list buys the adaptation it names (ru.adaptionwheel.server.",
+                        "DomainExchange), and a mob's own drop buys that mob's adaptations -- the",
+                        "ability to hurt it, and the ability to take more from it (data/adaptionwheel/",
+                        "domain_altar/<mob_path>.json). The item is the price, plus experience",
+                        "levels, and an adaptation the wheel has already finished is not offered at",
+                        "all. This is the altar's trade, so it is switched off on its own; the",
+                        "resonance aura above is a separate switch.")
                 .define("altarTradeEnabled", true);
-        DOMAIN_STONE_ENABLED = s.comment("The Domain Stone trades. Put an offering item in one",
-                        "slot and the wheel in the other, and it offers the adaptations that item",
-                        "opens up -- one item per level, and no cooldown, because the item is the",
-                        "price. The price list itself is ru.adaptionwheel.server.DomainExchange.")
-                .define("domainStoneEnabled", true);
         s.pop();
 
         s.comment("--- Adaptation Transfer ---").push("transfer");
