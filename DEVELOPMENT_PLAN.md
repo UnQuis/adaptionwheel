@@ -817,3 +817,55 @@ opens and shows nothing" with no error anywhere. 26.3 has no test task, so the i
 there; the data files are the same files.
 
 Neither screen has been seen running.
+
+## Phase 23 — Everything 26.3 had and 1.21.1 did not
+
+Ported back from the `26.3` branch, in one pass, with the version differences spelled out where
+they were unavoidable. Three tools (`tools/branch_parity.py`, `branch_audit.py`,
+`branch_bodies.py`) drove the audit: method names, then call sites / config defaults / lang values
+/ block tags, then statement-level bodies. What they found and what it turned out to be:
+
+- **One trading block.** The Domain Stone is deleted outright — block, item, menu, screen, menu
+  type, recipe, advancement, blockstate, model, loot table, texture, pickaxe-tag entry, config key,
+  lang key. The altar keeps the aura and takes the trade behind `altarTradeEnabled`.
+  `TradeScreen` stops being generic, because `MenuAccess<T>` is invariant and with one menu there is
+  no type argument to supply.
+- **A purchase is one level and its price climbs** (`tradeCostGrowth` 2.0, capped by
+  `tradeMaxItems` 32 and `tradeMaxXp` 30), with the price computed on the server and synced per
+  row, because it depends on how many levels *that wheel* holds and the client has no fed wheel.
+- **The polished screens**: sunken list wells, synergy chips, a real button, an XP readout with an
+  orb, a breathing empty wheel slot, a draggable scrollbar, hit areas matching what is drawn.
+- **`/adaptionwheel debug aggro` and `debug altar`**, and an altar index that logs what it loaded
+  and forgets itself when the server stops.
+- **The altar's Blockbench model and textures**, byte-for-byte as exported, textures bound by a
+  child model because the file's own names (`block1`, `block`) cannot resolve through the block
+  atlas.
+- **The Adaptation Temple** as a jigsaw structure with a generated processor list, which needed two
+  version-specific fixes the game answered and the source would not have: the `BlockState` codec is
+  spelled `Name`/`Properties` on 1.21.1 and `id`/`properties` on 26.3, and the copper chain family
+  does not exist before 1.21.2.
+
+Verified by `./gradlew runGameTestServer`: **all 79 gametests pass**, which is what caught both
+datapack problems.
+
+### What deliberately still differs
+
+The remaining parity output is API shape, not behaviour: `renderBg`/`renderTooltip` against
+`extractLabels`/`extractTooltip` (the coordinate space is inverted between the versions),
+`GuiGraphics.drawString` against `GuiGraphicsExtractor.text`, a button index against a
+`MouseButtonEvent`, `ResourceLocation` against `Identifier`, `Identifier.parse` against
+`Registry.get(...).map(Holder.Reference::value)`, `AbstractContainerMenu.addStandardInventorySlots`
+against the hand-rolled helper 1.21.1 lacks, `Entity.hurt` against `hurtServer`, and the
+`getBoundingBoxForCulling` override that 26.x moved onto the renderer. `WheelData.migrateLegacyConcepts`,
+`SurfaceAdaptations.fistLevel` and `AdaptionConfig.fistTierSpeed` remain main-only by design: 26.3
+forked before the fist existed, so no 26.3 save can hold a `Fist_Copper` to migrate.
+
+### The altar model on 1.21.1 — open
+
+`models/block/resonance_altar.json` is the author's export, byte-for-byte, and it loads on 26.3. On
+1.21.1 it does not: **1.21.1's element rotation is single-axis** (`{"origin","axis","angle"}`), and
+216 of the 336 elements carry a two-axis Euler rotation (`x=90,z=90` and friends) that the newer
+loader accepts and this one cannot express at all. The client answers with
+`JsonSyntaxException: Missing axis, expected to find a string`. Either the rotations get baked into
+axis-aligned geometry (every angle here is a multiple of 90°, so the silhouette survives; the UVs do
+not) or the model is re-exported from Blockbench for a Java target.
