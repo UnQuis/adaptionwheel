@@ -4,7 +4,7 @@
 
 - **Not a source repo for the Terraria mod.** The `3670588280/` folder mirrors the Steam Workshop item **ADAPTIONWHEEL** (Workshop ID `3670588280`): compiled `ADAPTIONWHEEL.tmod` builds under `3670588280/<tmodLoader-version>/`, plus `workshop.json` metadata. The C# source lives elsewhere.
 - **Also the source repo for a Minecraft port**: a NeoForge 1.21.1 mod `adaptionwheel` (Adaption Wheel, Mahoraga from Jujutsu Kaisen) built from the decompiled Terraria mod for maximum fidelity. The Gradle project lives at the repo root.
-- **It IS a git repo** (this line used to say otherwise): private `github.com/UnQuis/adaptionwheel`, default branch `main`. Other branches: `26.3` (newer Minecraft, usually checked out in a worktree) and `arena/*`. Pull before working.
+- **It IS a git repo** (this line used to say otherwise): private `github.com/UnQuis/adaptionwheel`, default branch `1.21.1` (renamed from `main`; the remote `main` was deleted). Other branches: `26.3` (newer Minecraft, usually checked out in a worktree) and `arena/*`. Pull before working.
 
 ## Layout
 
@@ -73,7 +73,7 @@
 - **Advancement tree** — `advancement/AdaptationTrigger.java` + 34 advancements in `data/adaptionwheel/advancement/`. One custom criterion carries the whole tree: `concept` (prefix-matched), `min_level`, `min_adapt_count`, `min_tier`, `min_sheds`, `any_synergy`, `any_resonance` — all optional. Polled once a second from the wearer tick rather than fired at events, because completion, a tier crossing, a shed, a transfer, logging in deep and picking the wheel back up are six events and polling answers all six.
 - `src/main/resources/` — `META-INF/neoforge.mods.toml` (incl. top-level `[[mixins]]`), `adaptionwheel.mixins.json`, `pack.mcmeta`, `assets/adaptionwheel/` (lang `en_us.json`/`ru_ru.json`, textures `textures/entity/wheel.png` + `textures/entity/dharma_chakra.png` + `textures/item/*.png` + `textures/slot/empty_wheel_slot.png` + `icon.png` — wheel textures/icon converted from the original Terraria `.rawimg`, `sounds/*.ogg` — converted from the original `.wav` files). **Crafting chain**: `data/adaptionwheel/recipe/mahoraga_wheel_wood.json` (shaped: any log center + 8 sticks → `mahoraga_wheel_wood`, a plain stackable item) then an anvil upgrade in `AdaptionEvents.onAnvilUpdate` (`AnvilUpdateEvent`: wooden wheel + gold ingot, either slot order, 1 ingot, 10 XP levels → `mahoraga_wheel`). The old gold+clock shaped recipe was removed. Item textures `mahoraga_wheel*.png` are author-provided 32×32 sprites (not Terraria conversions).
 - **Curios wheel slot**: dedicated slot `wheel` that only accepts the Mahoraga Wheel — `data/adaptionwheel/curios/slots/wheel.json` (validator `curios:tag`), item tag `data/curios/tags/item/wheel.json`, player assignment `data/adaptionwheel/curios/entities/player.json`. **Entity-file format is flat**: `{"entities": ["minecraft:player"], "slots": ["wheel"]}` — a nested `"minecraft:player": {...}` object parses fine but silently assigns nothing (no log error). The wheel itself only equips in this slot (`MahoragaWheelItem.canEquip`).
-- Repo root also holds Blockbench authoring sources for the 3D wheel: `dharma_chakra.bbmodel` / `dharma_chakra.json` / `dharma_chakra.png`. Editing them does **not** change the mod — the runtime model is Java code in `DharmaChakraModel`; re-export geometry there and copy the texture into `assets`.
+- The 3D wheel's model is Java code in `DharmaChakraModel`, converted from the Blockbench source. The `.bbmodel`/`.json`/`.png` sources themselves are **no longer in the repository**; to change the wheel's geometry, edit `DharmaChakraModel` and the texture in `assets/`.
 
 ## Commands
 
@@ -88,7 +88,7 @@
 - Build: `./gradlew build --no-daemon` (first run downloads Minecraft + runs neoForm; long). Runs/tests: `./gradlew runClient`, `./gradlew runServer`, `./gradlew runData`. No lint/test framework configured.
 - Headless server smoke test: enable RCON in `runs/server/server.properties` (`enable-rcon=true`, `rcon.port=25575`, `rcon.password=...`), start `./gradlew runServer --no-daemon &`, poll the log for `Done (`, then drive it with a minimal RCON client — Gradle does NOT forward stdin to the server console, piped commands are lost.
 - Decompiled Minecraft sources for mixin/API research: `build/neoForm/neoFormJoined*/steps/decompile/output.jar` (unzip selected classes; Mojang mappings = runtime names).
-- Docs live in `DEVELOPMENT_PLAN.md` and `docs/` (adaptation-system, mod-api, version-compatibility); keep them current when changing the framework.
+- `docs/`, `tools/`, `DEVELOPMENT_PLAN.md`, `REVIEW.md` and the `dharma_chakra.*` Blockbench sources were **removed from version control** on request; they are still in git history if a tool is ever wanted back. Everything they said is now here.
 - `runData` writes generated resources to `src/generated/resources`; delete that folder after use.
 
 ## Gotchas that cost real time
