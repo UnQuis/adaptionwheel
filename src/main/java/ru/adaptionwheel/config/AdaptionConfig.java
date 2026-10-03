@@ -65,7 +65,9 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> TOTEM_ACCELERATION_TICKS;
     public static final ModConfigSpec.ConfigValue<Boolean> ALTAR_ENABLED;
     public static final ModConfigSpec.ConfigValue<Boolean> ALTAR_TRADE_ENABLED;
-    public static final ModConfigSpec.ConfigValue<Boolean> DOMAIN_STONE_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> TRADE_COST_GROWTH;
+    public static final ModConfigSpec.ConfigValue<Integer> TRADE_MAX_ITEMS;
+    public static final ModConfigSpec.ConfigValue<Integer> TRADE_MAX_XP;
 
     // ---- Adaptation transfer ----
     public static final ModConfigSpec.ConfigValue<Boolean> TRANSFER_ENABLED;
@@ -284,18 +286,32 @@ public final class AdaptionConfig {
                         "within 8 blocks. It raises the rung rather than widening the search, so",
                         "stacking altars cannot stand in for other players.")
                 .define("altarEnabled", true);
-        ALTAR_TRADE_ENABLED = s.comment("Right-clicking the altar also opens a trade: put a mob's",
-                        "own drop in the upper slot and it offers that mob's adaptations -- the",
-                        "ability to hurt it, and the ability to take more from it -- for the item",
-                        "plus experience levels. The altar's resonance aura is unaffected, so this",
-                        "can be turned off on its own. Which mobs count is a data set, not code:",
-                        "data/adaptionwheel/domain_altar/<mob_path>.json.")
+        ALTAR_TRADE_ENABLED = s.comment("Right-clicking the altar opens a trade: put an offering",
+                        "item in the upper slot and the wheel in the other, and it offers what that",
+                        "item opens up. Two kinds of offering, one list: an item on the stone's",
+                        "former price list buys the adaptation it names (ru.adaptionwheel.server.",
+                        "DomainExchange), and a mob's own drop buys that mob's adaptations -- the",
+                        "ability to hurt it, and the ability to take more from it (data/adaptionwheel/",
+                        "domain_altar/<mob_path>.json). The item is the price, plus experience",
+                        "levels, and an adaptation the wheel has already finished is not offered at",
+                        "all. This is the altar's trade, so it is switched off on its own; the",
+                        "resonance aura above is a separate switch.")
                 .define("altarTradeEnabled", true);
-        DOMAIN_STONE_ENABLED = s.comment("The Domain Stone trades. Put an offering item in one",
-                        "slot and the wheel in the other, and it offers the adaptations that item",
-                        "opens up -- one item per level, and no cooldown, because the item is the",
-                        "price. The price list itself is ru.adaptionwheel.server.DomainExchange.")
-                .define("domainStoneEnabled", true);
+        TRADE_COST_GROWTH = s.comment("One purchase is ONE level of an adaptation, not the whole",
+                        "thing, so an adaptation that goes to level 8 is bought eight times. This is",
+                        "what each of those purchases costs more than the last: the price of a level",
+                        "is multiplied by this, once per level already held, so 2.0 doubles it. The",
+                        "floor is the first level's own price -- one item for a mob's drop, or the",
+                        "recipe's price -- and the ladder by kind is 1/2/3/4 experience levels.",
+                        "Growth stops at the two caps below, which is what keeps the last levels",
+                        "reachable instead of astronomically priced.")
+                .defineInRange("tradeCostGrowth", 2.0D, 1.0D, 8.0D);
+        TRADE_MAX_ITEMS = s.comment("Ceiling on the item side of one purchase's price.")
+                .defineInRange("tradeMaxItems", 32, 1, 64);
+        TRADE_MAX_XP = s.comment("Ceiling on the experience side of one purchase's price, in",
+                        "whole levels -- the same integer vanilla stores, so part of a level has",
+                        "nowhere to live and is never charged.")
+                .defineInRange("tradeMaxXp", 30, 1, 128);
         s.pop();
 
         s.comment("--- Adaptation Transfer ---").push("transfer");

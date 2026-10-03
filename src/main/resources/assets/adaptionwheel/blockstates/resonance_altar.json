@@ -1,7 +1,7 @@
 {
   "variants": {
     "": {
-      "model": "adaptionwheel:block/resonance_altar"
+      "model": "adaptionwheel:block/resonance_altar_bound"
     }
   }
 }

@@ -16,12 +16,20 @@ import ru.adaptionwheel.item.ModItems;
  * The mod's first blocks.
  *
  * <p>Until now the wheel had no presence in the world at all: five items, two projectiles, and
- * nothing to find, place or walk past. These four are the whole of that, and they are deliberately
- * auras rather than containers or machines — every one of them gives something to a player standing
+ * nothing to find, place or walk past. These three are the whole of that, and two of them are
+ * deliberately auras rather than containers — every one of them gives something to a player standing
  * near it, and none of them asks for anything back. There is no upkeep, no fuel and no currency,
  * because the mod's premise is that the wheel only ever gives.</p>
  *
- * <p>All four are plain {@link Block}s with no block entity. Their effects are driven from one
+ * <p>The fourth of the original four, the Domain Stone, is <b>deleted rather than merged in spirit
+ * only</b>: it traded adaptations for an item, and its Resonance Altar sibling traded the same
+ * adaptations for the same item, so keeping both meant two copies of one trade rule — the exact trap
+ * this mod has walked into three times already. The altar kept the aura and took the trade, behind
+ * its own {@code altarTradeEnabled} switch so its two jobs stay separately controllable. No block,
+ * item, menu, screen, recipe, advancement, blockstate, model, loot table, texture, pickaxe-tag entry
+ * or lang key survives it.</p>
+ *
+ * <p>All three are plain {@link Block}s with no block entity. Their effects are driven from one
  * server-side pass in {@code RitualAuras} that walks the (few) wheel-wearing players rather than
  * ticking the blocks, so a player standing beside three braziers costs three block lookups a
  * second instead of three tickers running forever.</p>
@@ -54,10 +62,6 @@ public final class ModBlocks {
     public static final DeferredHolder<Block, ResonanceAltarBlock> RESONANCE_ALTAR =
             BLOCKS.register("resonance_altar", () -> new ResonanceAltarBlock());
 
-    /** Right-clicked with the wheel, hands out an adaptation the wheel has not revealed yet. */
-    public static final DeferredHolder<Block, DomainStoneBlock> DOMAIN_STONE =
-            BLOCKS.register("domain_stone", () -> new DomainStoneBlock());
-
     public static final DeferredHolder<Item, BlockItem> ADAPTATION_BRAZIER_ITEM =
             BLOCK_ITEMS.register("adaptation_brazier", () -> new BlockItem(
                     ADAPTATION_BRAZIER.get(), new Item.Properties()));
@@ -67,9 +71,6 @@ public final class ModBlocks {
     public static final DeferredHolder<Item, BlockItem> RESONANCE_ALTAR_ITEM =
             BLOCK_ITEMS.register("resonance_altar", () -> new BlockItem(
                     RESONANCE_ALTAR.get(), new Item.Properties()));
-    public static final DeferredHolder<Item, BlockItem> DOMAIN_STONE_ITEM =
-            BLOCK_ITEMS.register("domain_stone", () -> new BlockItem(
-                    DOMAIN_STONE.get(), new Item.Properties()));
 
     private ModBlocks() {
     }
@@ -79,9 +80,9 @@ public final class ModBlocks {
     /**
      * The shared look: dark, hard, faintly lit.
      *
-     * <p>All four read as one set on sight. The mod had no world presence to establish, so the
-     * blocks are what establish it, and four unrelated-looking props scattered around a world look
-     * like four unrelated mods.</p>
+     * <p>All three read as one set on sight. The mod had no world presence to establish, so the
+     * blocks are what establish it, and unrelated-looking props scattered around a world look like
+     * unrelated mods.</p>
      */
     static BlockBehaviour.Properties base(MapColor colour, float strength, float resistance) {
         return BlockBehaviour.Properties.of()

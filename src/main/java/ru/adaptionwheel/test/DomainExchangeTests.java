@@ -263,38 +263,38 @@ public class DomainExchangeTests {
         // as far as Curios is concerned, which fails the test before its body runs.
         net.minecraft.world.entity.player.Inventory inventory =
                 new net.minecraft.world.entity.player.Inventory(null);
-        ru.adaptionwheel.menu.DomainStoneMenu menu = new ru.adaptionwheel.menu.DomainStoneMenu(
+        ru.adaptionwheel.menu.ResonanceAltarMenu menu = new ru.adaptionwheel.menu.ResonanceAltarMenu(
                 1, inventory, net.minecraft.core.BlockPos.ZERO);
 
         int size = menu.slots.size();
         helper.assertTrue(size == 38,
                 "two input slots plus a 27+9 player grid, got " + size);
 
-        helper.assertTrue(menu.slots.get(ru.adaptionwheel.menu.DomainStoneMenu.OFFER_SLOT).x
-                        == ru.adaptionwheel.menu.DomainStoneMenu.OFFER_X
-                        && menu.slots.get(ru.adaptionwheel.menu.DomainStoneMenu.OFFER_SLOT).y
-                        == ru.adaptionwheel.menu.DomainStoneMenu.OFFER_Y,
+        helper.assertTrue(menu.slots.get(ru.adaptionwheel.menu.TradeMenu.OFFER_SLOT).x
+                        == ru.adaptionwheel.menu.TradeMenu.OFFER_X
+                        && menu.slots.get(ru.adaptionwheel.menu.TradeMenu.OFFER_SLOT).y
+                        == ru.adaptionwheel.menu.TradeMenu.OFFER_Y,
                 "the offering slot must sit where the screen draws its well, or the item renders"
                         + " outside its own square");
 
-        helper.assertTrue(menu.slots.get(ru.adaptionwheel.menu.DomainStoneMenu.WHEEL_SLOT).x
-                        == ru.adaptionwheel.menu.DomainStoneMenu.WHEEL_X
-                        && menu.slots.get(ru.adaptionwheel.menu.DomainStoneMenu.WHEEL_SLOT).y
-                        == ru.adaptionwheel.menu.DomainStoneMenu.WHEEL_Y,
+        helper.assertTrue(menu.slots.get(ru.adaptionwheel.menu.TradeMenu.WHEEL_SLOT).x
+                        == ru.adaptionwheel.menu.TradeMenu.WHEEL_X
+                        && menu.slots.get(ru.adaptionwheel.menu.TradeMenu.WHEEL_SLOT).y
+                        == ru.adaptionwheel.menu.TradeMenu.WHEEL_Y,
                 "the wheel slot must sit where the screen draws its well and its cross");
 
         // The last slot must be the last hotbar square, so no bound can be written past the end.
         helper.assertTrue(menu.slots.get(size - 1).y
-                        == ru.adaptionwheel.menu.DomainStoneMenu.INV_Y + 58,
+                        == ru.adaptionwheel.menu.TradeMenu.INV_Y + 58,
                 "the hotbar must end at inventory Y plus 58; anything else means a quick-move"
                         + " bound is about to index past the slot list");
 
-        helper.assertTrue(ru.adaptionwheel.menu.DomainStoneMenu.BUTTON_Y + ru.adaptionwheel.menu.DomainStoneMenu.BUTTON_H
-                        <= ru.adaptionwheel.menu.DomainStoneMenu.INV_Y,
+        helper.assertTrue(ru.adaptionwheel.menu.TradeMenu.BUTTON_Y + ru.adaptionwheel.menu.TradeMenu.BUTTON_H
+                        <= ru.adaptionwheel.menu.TradeMenu.INV_Y,
                 "the custom controls must finish above the player's own inventory, or they are drawn"
                         + " underneath it");
-        helper.assertTrue(ru.adaptionwheel.menu.DomainStoneMenu.LIST_Y + ru.adaptionwheel.menu.DomainStoneMenu.LIST_H
-                        <= ru.adaptionwheel.menu.DomainStoneMenu.BUTTON_Y,
+        helper.assertTrue(ru.adaptionwheel.menu.TradeMenu.LIST_Y + ru.adaptionwheel.menu.TradeMenu.LIST_H
+                        <= ru.adaptionwheel.menu.TradeMenu.BUTTON_Y,
                 "the candidate list must finish above the button");
 
         // Only a wheel belongs in the wheel slot, and the offer slot takes anything: a slot that
@@ -305,11 +305,11 @@ public class DomainExchangeTests {
         // pretending the slot checks by itself.
         net.minecraft.world.item.ItemStack dirt =
                 new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIRT);
-        helper.assertTrue(menu.slots.get(ru.adaptionwheel.menu.DomainStoneMenu.OFFER_SLOT).mayPlace(dirt),
+        helper.assertTrue(menu.slots.get(ru.adaptionwheel.menu.TradeMenu.OFFER_SLOT).mayPlace(dirt),
                 "the offering slot must accept any stack; what it buys is decided by the recipe");
-        helper.assertFalse(menu.slots.get(ru.adaptionwheel.menu.DomainStoneMenu.WHEEL_SLOT).mayPlace(dirt),
+        helper.assertFalse(menu.slots.get(ru.adaptionwheel.menu.TradeMenu.WHEEL_SLOT).mayPlace(dirt),
                 "the wheel slot must reject anything that is not a wheel");
-        helper.assertTrue(menu.slots.get(ru.adaptionwheel.menu.DomainStoneMenu.WHEEL_SLOT).mayPlace(
+        helper.assertTrue(menu.slots.get(ru.adaptionwheel.menu.TradeMenu.WHEEL_SLOT).mayPlace(
                         new net.minecraft.world.item.ItemStack(ru.adaptionwheel.item.ModItems.MAHORAGA_WHEEL.get())),
                 "and must accept the wheel");
         helper.succeed();

@@ -1,0 +1,14 @@
+{
+  "placement": {
+    "type": "minecraft:random_spread",
+    "salt": 2611,
+    "spacing": 32,
+    "separation": 16
+  },
+  "structures": [
+    {
+      "structure": "adaptionwheel:adaptation_temple",
+      "weight": 1
+    }
+  ]
+}

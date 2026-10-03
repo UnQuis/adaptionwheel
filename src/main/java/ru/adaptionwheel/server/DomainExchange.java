@@ -4,6 +4,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import ru.adaptionwheel.adapt.AdaptationDefinition;
+import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.adapt.AdaptationDomain;
 import ru.adaptionwheel.adapt.AdaptationRegistry;
 import ru.adaptionwheel.category.Concepts;
@@ -17,9 +18,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * What the Domain Stone will trade for, and what it will not.
+ * The Resonance Altar's price list: what an offering item buys, and what it will not buy.
  *
- * <p>The stone used to hand an adaptation over for free, on a cooldown, drawn at random from
+ * <p>This used to be the Domain Stone's, back when the stone and the altar were two blocks with the
+ * same two slots and the same arithmetic. They are one block now — see
+ * {@link ru.adaptionwheel.menu.ResonanceAltarMenu}, which asks this list <em>and</em> the mob-drop
+ * index for the same item — so the name is the one thing here that outlived its block.</p>
+ *
+ * <p>The stone originally handed an adaptation over for free, on a cooldown, drawn at random from
  * whatever the wheel had not finished. That made it the one place in the mod where progress cost
  * nothing, which quietly made the other fifty-odd adaptations — each bought with suffering and
  * time — optional. It is now an <em>exchange</em>: an item goes in, adaptations come out, and the
@@ -49,30 +55,43 @@ import java.util.Map;
  * {@code Drop_NPC_} are minted per mob — so a recipe naming either would offer nothing at all,
  * silently, with no error and no log line. Since a feather for levitation is the example the whole
  * block was sketched around, an <b>exact</b> selector is therefore resolved directly rather than
- * looked up in the registry: it names the concept, and the concept is offered if the wheel has
- * not finished it.</p>
+ * looked up in the registry: it names the concept, and the concept is offered.</p>
  *
  * <p>The consequence worth knowing: an exact selector can sell something the registry cannot
  * describe, and therefore something that sorts last by domain name, because
  * {@link AdaptationRegistry#get} returns {@code null} for it. That is only a cosmetic ordering
  * effect, and paying it is much cheaper than a recipe that quietly trades nothing.</p>
  *
- * <h2>The tier does not filter</h2>
+ * <h2>The pool is what the item opens MINUS what this wheel has finished</h2>
  *
- * <p>Everything the wheel has not already finished is fair game, whatever the wheel has revealed.
- * That is the original behaviour — the stone preferred a family the wheel had <em>not</em> reached
- * yet, which was the whole reason the block existed — and it also keeps the subsystem honest about
- * the rest of the mod: tiers <em>reveal</em>, they never restrict, because the wheel is omnipotent
- * so a later tier is only ever a larger one. A block that refused to sell a concept until the
- * wheel could analyse it would impose the one rule the tier system does not have, and would make
- * the price of the item irrelevant to what it buys.</p>
+ * <p>Both halves are load-bearing and they are not the same rule.</p>
+ *
+ * <p>The <b>subtraction</b> is the point of the block: an adaptation the wheel being fed has already
+ * finished — bought here, or adapted to by standing in the thing until it stopped mattering — is not
+ * on offer. Paying experience levels for something the wheel already has is the worst outcome
+ * available, because the item would be gone and nothing would have changed, so the row is removed
+ * before it can be clicked rather than refused after. This also means <b>which wheel</b> is in the
+ * slot decides the list, and that is deliberate: the list is a shopping list for that wheel, not a
+ * catalogue of the item.</p>
+ *
+ * <p>It is also why the wheel slot is not optional: with the slot empty there is no wheel to
+ * subtract anything from, so nothing is offered. The block has no answer that does not depend on
+ * the wheel in it, which is what makes it a ritual rather than a shop.</p>
+ *
+ * <p>The <b>tier</b> does not filter. Tiers <em>reveal</em>, they never restrict, because the wheel
+ * is omnipotent so a later tier is only ever a larger one. A block that refused to sell a concept
+ * until the wheel could analyse it would impose the one rule the tier system does not have, and would
+ * make the price of the item irrelevant to what it buys. The tier is read here for one thing only:
+ * to put revealed families at the top of the list.</p>
  *
  * <h2>Ordering is total</h2>
  *
  * <p>Revealed families first, then domain, then concept name. The first clause keeps the shortcut
  * towards what comes next. The rest exists because the client selects a candidate by its
- * <em>index</em> in this list: two builds of the same pool in a different order is a stone that
- * grants whatever the server's index happened to point at, which is not what the player clicked.</p>
+ * <em>index</em> in this list: two builds of the same pool in a different order is an altar that
+ * grants whatever the server's index happened to point at, which is not what the player clicked.
+ * {@code TradeMenu.exchange()} is where that index is turned back into a concept, and it resolves it
+ * by name against a freshly built pool for exactly this reason.</p>
  */
 public final class DomainExchange {
 
@@ -203,7 +222,7 @@ public final class DomainExchange {
         BY_ITEM.remove(item);
     }
 
-    /** The recipe an item stack buys into, or {@code null} if the stone does not take it. */
+    /** The recipe an item stack buys into, or {@code null} if the price list does not take it. */
     public static Recipe recipeFor(ItemStack stack) {
         return stack == null || stack.isEmpty() ? null : BY_ITEM.get(stack.getItem());
     }
@@ -218,13 +237,13 @@ public final class DomainExchange {
     }
 
     /**
-     * What the stone would offer for this recipe: every adaptation the wheel has not finished that
-     * a selector reaches.
+     * What the altar would offer for this recipe: every adaptation a selector reaches that this
+     * wheel has not finished.
      *
      * <p>Exact selectors are resolved directly, family selectors by walking the registry. See the
      * class comment for why the two cannot be treated alike.</p>
      *
-     * <p>Never offers {@code ADBERSITY}. It is a survival challenge rather than an adaptation, and
+     * <p>Never offers {@code ADVERSITY}. It is a survival challenge rather than an adaptation, and
      * being handed one would start a timed event the player neither asked for nor could have paid
      * for — the price would be an item, and what it buys would be a fight.</p>
      */
@@ -252,7 +271,15 @@ public final class DomainExchange {
         return List.copyOf(pool);
     }
 
-    private static boolean isFinished(PlayerAdaption data, String concept) {
+    /**
+     * Whether this wheel is already done with a concept.
+     *
+     * <p>Either kind of "done": a one-time adaptation is in the wheel's {@code adapted} set, and a
+     * leveled one has a level at all. Both are written to the wheel's own {@code wheel_data}, whether
+     * the adaptation was bought here or earned by suffering through it, which is why reading this
+     * off the fed stack covers both cases — the block cannot tell them apart and does not need to.</p>
+     */
+    public static boolean isFinished(PlayerAdaption data, String concept) {
         return data.isAdapted(concept) || data.level(concept) > 0;
     }
 
@@ -288,7 +315,7 @@ public final class DomainExchange {
      * </pre>
      *
      * <p><b>Nothing is ever free.</b> The floor is one level, which is the rounded-up form of the
-     * half-level minimum: a price that could reach zero would make the stone a place to stand
+     * half-level minimum: a price that could reach zero would make the altar a place to stand
      * rather than a trade, which is the thing it stopped being.</p>
      *
      * <p>Whole levels rather than fractions because vanilla experience is an integer and spending
@@ -307,6 +334,59 @@ public final class DomainExchange {
             return 3;
         }
         return Concepts.isLevelBased(concept) ? 2 : 1;
+    }
+
+    /**
+     * What the <em>next</em> level of a concept costs in experience.
+     *
+     * <p>The ladder above is the price of the <em>first</em> level, and every level after it costs
+     * more, so an adaptation that goes to level eight is bought eight times at eight different
+     * prices rather than once. The growth is multiplicative ({@code tradeCostGrowth}, 2.0 by
+     * default) and stops at {@code tradeMaxXp}, which is what keeps the last levels reachable.</p>
+     *
+     * <p>Takes the level the fed wheel <em>already holds</em>, not the one being bought: a level's
+     * price must depend on how far along the adaptation already is, and that is the same number the
+     * list itself filters on — so the row on screen and the price of it cannot disagree.</p>
+     *
+     * <p>A one-time concept has no levels, so {@code heldLevel} is 0 by construction and this is
+     * the flat first-level price.</p>
+     */
+    public static int priceForLevel(String concept, int heldLevel) {
+        return grow(priceFor(concept), heldLevel, AdaptionConfig.TRADE_MAX_XP.get());
+    }
+
+    /**
+     * What the next level costs in items, given the recipe's own price for one.
+     *
+     * <p>Same shape as {@link #priceForLevel}: the recipe's {@code itemsPerTrade} is the first
+     * level's price and every level after it is a multiple of it, capped at {@code tradeMaxItems}.
+     * A mob's drop has no recipe and so a base of one.</p>
+     */
+    public static int itemsForLevel(int baseItems, int heldLevel) {
+        return grow(baseItems, heldLevel, AdaptionConfig.TRADE_MAX_ITEMS.get());
+    }
+
+    /**
+     * One level up the ladder, capped.
+     *
+     * <p>The cap is applied inside the loop rather than after it, so a growth factor and a cap cannot
+     * combine into an overflow before anyone notices: 32 doubled eight times is 8192, which is
+     * harmless as an int, but the same code with a cap of 30 and a growth of 8 would be asked for a
+     * price of 30 * 8^30 by a misconfigured file, and that is not harmless.</p>
+     *
+     * <p>A base of zero or less means the altar does not take this item at all, and stays zero:
+     * growth must never turn "not for sale" into "very expensive".</p>
+     */
+    private static int grow(int base, int heldLevel, int cap) {
+        if (base <= 0) {
+            return 0;
+        }
+        double factor = Math.max(1.0D, AdaptionConfig.TRADE_COST_GROWTH.get());
+        int price = base;
+        for (int level = 0; level < heldLevel && price < cap; level++) {
+            price = Math.min(cap, (int) Math.ceil(price * factor));
+        }
+        return Math.min(price, cap);
     }
 
     /** The most expensive thing on offer, so the screen can scale its readout against something. */
