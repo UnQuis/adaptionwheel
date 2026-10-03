@@ -4,10 +4,10 @@
       "id": "minecraft:netherite_ingot"
     },
     "title": {
-      "translate": "adv.adaptionwheel.instrebreak.title"
+      "translate": "adv.adaptionwheel.instabreak.title"
     },
     "description": {
-      "translate": "adv.adaptionwheel.instrebreak.desc"
+      "translate": "adv.adaptionwheel.instabreak.desc"
     },
     "frame": "goal",
     "show_toast": true,

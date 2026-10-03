@@ -393,6 +393,41 @@ with a single menu there is no type argument to supply, so the subclass that exi
 one is deleted rather than kept as ceremony. The arithmetic is unchanged and still lives in
 `TradeMenu`.
 
+### Later: a purchase is one level, and the price climbs
+
+The altar used to sell the whole adaptation — one item, some levels, `MAX_LEVEL` — which made a
+leveled adaptation worth exactly as much as a one-time one and left the price list nothing to say
+about progress. It now sells **one level**, and the price of a level grows with the level it is
+buying: the first level costs what the ladder always said (1 item and 1–4 experience, by kind),
+and each level after it costs double that, capped at **32 items** and **30 experience** for a single
+purchase.
+
+The caps are what keep the last levels reachable. Without them a level-8 adaptation is 128 items deep
+and the interesting question becomes arithmetic; with them the whole climb is 127 items and 93 levels
+for a `Type_*`, and a mob's drop is 63 items for its two adaptations at eight. A `Drop_NPC_` still pays
+in kills — `grantToWheel` tops the kill count up to whatever the level being bought costs, and the
+level is recomputed from it — so its price climbs exactly like everything else's.
+
+The price of a level depends on how many levels **that wheel** already holds, so the client cannot
+compute it: the fed wheel is a menu stack, not the player's attachment. One `(items, xp)` pair per
+row therefore travels in the trade sync beside the row it belongs to, and the server recomputes both
+halves live before charging, because a player who makes the list stale must not thereby buy a level
+cheaply.
+
+### And: an empty list now says which of the two reasons it is
+
+"The altar opens and offers me nothing" had two causes that look identical on screen — the item is
+not an offering, or this wheel has already finished everything the item opens — and the second is
+invisible *by design*, since the list subtracts what the wheel knows. So the sync carries a flag
+saying whether the altar takes the offering at all, and the screen picks between "put something it
+takes in the slot" and "your wheel has learned everything this item offers".
+
+The index that answers "which mobs does this item open" had the same problem one level down: a
+data file naming an unknown item is skipped, a malformed file is skipped with a warning, and a mob
+with no file is simply absent. It now logs one line on server start saying how many mobs and how
+many offering items it built, and warns per item it could not resolve — which is what turns
+"nothing on offer" from a shrug into something checkable.
+
 The list is also unchanged in the way that matters, and it is worth writing down because it was
 nearly changed in the other direction: **the list is the item's offerings minus what the wheel in
 the slot has already finished** — bought here or adapted to by suffering, both of which live in the

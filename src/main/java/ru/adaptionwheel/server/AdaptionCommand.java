@@ -10,6 +10,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import org.jetbrains.annotations.Nullable;
@@ -230,6 +232,25 @@ public final class AdaptionCommand {
                 .requires(net.minecraft.commands.Commands.hasPermission(
                                 net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
                 .executes(AdaptionCommand::registry));
+
+        // ---- diagnostics: two questions the game answers, not this mod ----
+        //
+        // Both exist because "it does not work" was reported and the mod's own code was innocent in
+        // both cases. Reading the answer off the running game beats guessing from the source, and
+        // these are the two places where the answer is not in the mod at all.
+        root.then(net.minecraft.commands.Commands.literal("debug")
+                .then(net.minecraft.commands.Commands.literal("aggro")
+                        .requires(net.minecraft.commands.Commands.hasPermission(
+                                net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
+                        .executes(ctx -> aggro(ctx, self(ctx))))
+                .then(net.minecraft.commands.Commands.literal("altar")
+                        .requires(net.minecraft.commands.Commands.hasPermission(
+                                net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
+                        .executes(ctx -> altarLookup(ctx, null))
+                        .then(net.minecraft.commands.Commands.argument("item",
+                                        StringArgumentType.word())
+                                .executes(ctx -> altarLookup(ctx,
+                                        StringArgumentType.getString(ctx, "item"))))));
 
         event.getDispatcher().register(root);
     }
@@ -571,6 +592,104 @@ public final class AdaptionCommand {
         ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.reset_done",
                 target.getName()), true);
         return 1;
+    }
+
+    /**
+     * Why mobs are or are not angry at a player, as the game itself sees it.
+     *
+     * <p>Every vanilla path that stops a mob choosing a target runs through
+     * {@code TargetingConditions.test}, and it fails in exactly four places: the target is not alive,
+     * the target is a spectator, the target reports itself invulnerable, or the difficulty is
+     * peaceful. The third is the interesting one, because {@code Player} overrides
+     * {@code canBeSeenAsEnemy()} as {@code !abilities.invulnerable && super} — so a player in
+     * creative or spectator mode is untargetable <em>by design</em>, and no amount of wheel changes
+     * it. This prints each answer rather than a guess.</p>
+     */
+    private static int aggro(CommandContext<CommandSourceStack> ctx, ServerPlayer target) {
+        CommandSourceStack source = ctx.getSource();
+        ServerLevel level = target.level();
+        source.sendSuccess(() -> Component.literal("— why mobs do or do not target "
+                + target.getName().getString() + " —"), false);
+        source.sendSuccess(() -> Component.literal("difficulty: " + level.getDifficulty()
+                + "   (peaceful makes every hostile mob passive)"), false);
+        source.sendSuccess(() -> Component.literal("gamemode: " + target.gameMode()
+                + "   abilities.invulnerable=" + target.getAbilities().invulnerable), false);
+        source.sendSuccess(() -> Component.literal("canBeSeenByAnyone: " + target.canBeSeenByAnyone()
+                + "   isSpectator=" + target.isSpectator() + "   isAlive=" + target.isAlive()), false);
+        source.sendSuccess(() -> Component.literal("canBeSeenAsEnemy: " + target.canBeSeenAsEnemy()
+                + "   isInvulnerable=" + target.isInvulnerable()
+                + "   isInvisible=" + target.isInvisible()), false);
+        if (!target.canBeSeenAsEnemy()) {
+            source.sendSuccess(() -> Component.literal("=> NO MOB CAN TARGET THIS PLAYER. "
+                    + "Creative, spectator, dead, or explicitly invulnerable."), false);
+        }
+        String effects = target.getActiveEffects().stream()
+                .map(effect -> effect.getEffect().getRegisteredName() + " " + (effect.getAmplifier() + 1))
+                .reduce((a, b) -> a + ", " + b).orElse("(none)");
+        source.sendSuccess(() -> Component.literal("effects: " + effects), false);
+
+        // The nearest mobs that would fight a player, and what each is aimed at right now.
+        List<net.minecraft.world.entity.Mob> hostile = level.getEntitiesOfClass(
+                net.minecraft.world.entity.Mob.class, target.getBoundingBox().inflate(24.0D),
+                mob -> mob instanceof net.minecraft.world.entity.monster.Enemy);
+        source.sendSuccess(() -> Component.literal("hostile mobs within 24 blocks: " + hostile.size()), false);
+        int shown = 0;
+        for (net.minecraft.world.entity.Mob mob : hostile) {
+            if (shown++ >= 5) {
+                source.sendSuccess(() -> Component.literal("... and " + (hostile.size() - 5) + " more"), false);
+                break;
+            }
+            var mobTarget = mob.getTarget();
+            source.sendSuccess(() -> Component.literal("  " + mob.getName().getString() + " -> "
+                    + (mobTarget == null ? "(nothing)"
+                    : mobTarget.getName().getString() + " at "
+                    + String.format(java.util.Locale.ROOT, "%.1f", mob.distanceTo(target)) + " blocks")), false);
+        }
+        return 1;
+    }
+
+    /**
+     * What the altar thinks of an item: which mobs it opens, and what one level would cost.
+     *
+     * <p>Exists because "the altar gives me nothing for this item" has two answers that look
+     * identical on screen — the item opens nothing, or this wheel has already finished everything
+     * it opens — and the second is invisible by design. Asking here names the mobs the item is
+     * mapped to, which settles it without opening a menu.</p>
+     */
+    private static int altarLookup(CommandContext<CommandSourceStack> ctx, String itemId) {
+        CommandSourceStack source = ctx.getSource();
+        MinecraftServer server = source.getServer();
+        if (itemId == null) {
+            int mobs = AltarOfferings.allMobs(server).size();
+            source.sendSuccess(() -> Component.literal(mobs
+                    + " mobs have loot here. /adaptionwheel debug altar <item> for one item."), false);
+            return mobs;
+        }
+        var id = net.minecraft.resources.Identifier.tryParse(itemId);
+        if (id == null || !net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(id)) {
+            source.sendSuccess(() -> Component.literal("no such item: " + itemId), false);
+            return 0;
+        }
+        var stack = new net.minecraft.world.item.ItemStack(
+                net.minecraft.core.registries.BuiltInRegistries.ITEM.get(id).map(holder -> holder.value()).orElse(net.minecraft.world.item.Items.AIR));
+        List<String> mobs = AltarOfferings.mobsFor(stack, server);
+        source.sendSuccess(() -> Component.literal(itemId + " opens: "
+                + (mobs.isEmpty() ? "(nothing - not an offering)"
+                : String.join(", ", mobs))), false);
+        ru.adaptionwheel.server.DomainExchange.Recipe recipe =
+                ru.adaptionwheel.server.DomainExchange.recipeFor(stack);
+        if (recipe != null) {
+            source.sendSuccess(() -> Component.literal("  price list: " + recipe.itemsPerTrade()
+                    + " item(s) for the first level, selectors "
+                    + recipe.selectors().stream()
+                            .map(ru.adaptionwheel.server.DomainExchange.Selector::text)
+                            .reduce((a, b) -> a + ", " + b).orElse("?")), false);
+        }
+        for (String mob : mobs) {
+            source.sendSuccess(() -> Component.literal("  " + Concepts.offense(mob) + ", "
+                    + Concepts.drop(mob)), false);
+        }
+        return Math.max(1, mobs.size());
     }
 
     private static int registry(CommandContext<CommandSourceStack> ctx) {

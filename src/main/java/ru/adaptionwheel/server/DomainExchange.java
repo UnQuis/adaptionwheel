@@ -4,6 +4,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import ru.adaptionwheel.adapt.AdaptationDefinition;
+import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.adapt.AdaptationDomain;
 import ru.adaptionwheel.adapt.AdaptationRegistry;
 import ru.adaptionwheel.category.Concepts;
@@ -333,6 +334,59 @@ public final class DomainExchange {
             return 3;
         }
         return Concepts.isLevelBased(concept) ? 2 : 1;
+    }
+
+    /**
+     * What the <em>next</em> level of a concept costs in experience.
+     *
+     * <p>The ladder above is the price of the <em>first</em> level, and every level after it costs
+     * more, so an adaptation that goes to level eight is bought eight times at eight different
+     * prices rather than once. The growth is multiplicative ({@code tradeCostGrowth}, 2.0 by
+     * default) and stops at {@code tradeMaxXp}, which is what keeps the last levels reachable.</p>
+     *
+     * <p>Takes the level the fed wheel <em>already holds</em>, not the one being bought: a level's
+     * price must depend on how far along the adaptation already is, and that is the same number the
+     * list itself filters on — so the row on screen and the price of it cannot disagree.</p>
+     *
+     * <p>A one-time concept has no levels, so {@code heldLevel} is 0 by construction and this is
+     * the flat first-level price.</p>
+     */
+    public static int priceForLevel(String concept, int heldLevel) {
+        return grow(priceFor(concept), heldLevel, AdaptionConfig.TRADE_MAX_XP.get());
+    }
+
+    /**
+     * What the next level costs in items, given the recipe's own price for one.
+     *
+     * <p>Same shape as {@link #priceForLevel}: the recipe's {@code itemsPerTrade} is the first
+     * level's price and every level after it is a multiple of it, capped at {@code tradeMaxItems}.
+     * A mob's drop has no recipe and so a base of one.</p>
+     */
+    public static int itemsForLevel(int baseItems, int heldLevel) {
+        return grow(baseItems, heldLevel, AdaptionConfig.TRADE_MAX_ITEMS.get());
+    }
+
+    /**
+     * One level up the ladder, capped.
+     *
+     * <p>The cap is applied inside the loop rather than after it, so a growth factor and a cap cannot
+     * combine into an overflow before anyone notices: 32 doubled eight times is 8192, which is
+     * harmless as an int, but the same code with a cap of 30 and a growth of 8 would be asked for a
+     * price of 30 * 8^30 by a misconfigured file, and that is not harmless.</p>
+     *
+     * <p>A base of zero or less means the altar does not take this item at all, and stays zero:
+     * growth must never turn "not for sale" into "very expensive".</p>
+     */
+    private static int grow(int base, int heldLevel, int cap) {
+        if (base <= 0) {
+            return 0;
+        }
+        double factor = Math.max(1.0D, AdaptionConfig.TRADE_COST_GROWTH.get());
+        int price = base;
+        for (int level = 0; level < heldLevel && price < cap; level++) {
+            price = Math.min(cap, (int) Math.ceil(price * factor));
+        }
+        return Math.min(price, cap);
     }
 
     /** The most expensive thing on offer, so the screen can scale its readout against something. */

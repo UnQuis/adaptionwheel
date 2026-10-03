@@ -40,6 +40,9 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> TOTEM_ACCELERATION_TICKS;
     public static final ModConfigSpec.ConfigValue<Boolean> ALTAR_ENABLED;
     public static final ModConfigSpec.ConfigValue<Boolean> ALTAR_TRADE_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> TRADE_COST_GROWTH;
+    public static final ModConfigSpec.ConfigValue<Integer> TRADE_MAX_ITEMS;
+    public static final ModConfigSpec.ConfigValue<Integer> TRADE_MAX_XP;
 
     // ---- Adaptation transfer ----
     public static final ModConfigSpec.ConfigValue<Boolean> TRANSFER_ENABLED;
@@ -319,6 +322,21 @@ public final class AdaptionConfig {
                         "all. This is the altar's trade, so it is switched off on its own; the",
                         "resonance aura above is a separate switch.")
                 .define("altarTradeEnabled", true);
+        TRADE_COST_GROWTH = s.comment("One purchase is ONE level of an adaptation, not the whole",
+                        "thing, so an adaptation that goes to level 8 is bought eight times. This is",
+                        "what each of those purchases costs more than the last: the price of a level",
+                        "is multiplied by this, once per level already held, so 2.0 doubles it. The",
+                        "floor is the first level's own price -- one item for a mob's drop, or the",
+                        "recipe's price -- and the ladder by kind is 1/2/3/4 experience levels.",
+                        "Growth stops at the two caps below, which is what keeps the last levels",
+                        "reachable instead of astronomically priced.")
+                .defineInRange("tradeCostGrowth", 2.0D, 1.0D, 8.0D);
+        TRADE_MAX_ITEMS = s.comment("Ceiling on the item side of one purchase's price.")
+                .defineInRange("tradeMaxItems", 32, 1, 64);
+        TRADE_MAX_XP = s.comment("Ceiling on the experience side of one purchase's price, in",
+                        "whole levels -- the same integer vanilla stores, so part of a level has",
+                        "nowhere to live and is never charged.")
+                .defineInRange("tradeMaxXp", 30, 1, 128);
         s.pop();
 
         s.comment("--- Adaptation Transfer ---").push("transfer");

@@ -48,6 +48,10 @@ import java.util.List;
  *
  * <p>New lang keys: {@code adaptionwheel.gui.select_first}, {@code adaptionwheel.gui.not_enough_levels}.</p>
  *
+ * <p>The price line carries the item cost as well as the experience, because a purchase is one level
+ * of an adaptation and both halves of what that costs grow as the adaptation climbs — see
+ * {@link ru.adaptionwheel.server.DomainExchange#priceForLevel}.</p>
+ *
  * <p><b>Everything is drawn in {@code extractLabels}, in coordinates relative to
  * {@code (leftPos, topPos)}.</b> On 26.3 that hook runs inside the translate vanilla pushes before
  * the slots, so it is the one window in which a slot well can be drawn under its own item — and
@@ -184,7 +188,11 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         if (!menu.hasWheel()) {
             return Component.translatable("adaptionwheel.gui.need_wheel");
         }
-        return menu.hasOffering()
+        // Two empty lists that want opposite things from the player: a wrong item means put
+        // something else in, a wheel that already knows everything this item opens means there is
+        // nothing to do here at all. The server answers which one it is, because only it knows
+        // whether the item is on the price list or is somebody's drop.
+        return menu.isOfferingAccepted()
                 ? Component.translatable("adaptionwheel.gui.all_learned")
                 : Component.translatable("adaptionwheel.gui.need_item");
     }
@@ -243,7 +251,11 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         if (menu.selectedConcept() != null) {
             int py = y + BAR_H + 15;
             orb(g, x, py + 1, affordable);
-            g.text(this.font, Component.translatable("adaptionwheel.gui.price", price).getVisualOrderText(),
+            // Both halves of the price, because both grow with the level: a player watching items
+            // vanish from the slot with only an experience number on screen cannot tell a rising
+            // price from a broken block.
+            g.text(this.font, Component.translatable("adaptionwheel.gui.price",
+                            price, menu.itemCost()).getVisualOrderText(),
                     x + 8, py, affordable ? TEXT : TEXT_SHORT, false);
         }
     }

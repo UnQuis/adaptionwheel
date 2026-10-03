@@ -119,7 +119,7 @@ public class ResonanceAltarMenu extends TradeMenu {
      * out of the exchange rather than letting it buy a thing for nothing.</p>
      */
     @Override
-    protected int itemPrice(ServerPlayer player, ItemStack offering) {
+    protected int baseItemPrice(ServerPlayer player, ItemStack offering) {
         DomainExchange.Recipe recipe = DomainExchange.recipeFor(offering);
         if (recipe != null) {
             return recipe.itemsPerTrade();
@@ -135,7 +135,8 @@ public class ResonanceAltarMenu extends TradeMenu {
      * it lives next to the grant it changes rather than here.</p>
      */
     @Override
-    protected void grant(ServerPlayer player, PlayerAdaption fed, ItemStack wheel, String concept) {
-        AdaptionEvents.grantToWheel(player, fed, wheel, concept, PlayerAdaption.MAX_LEVEL);
+    protected void grant(ServerPlayer player, PlayerAdaption fed, ItemStack wheel, String concept,
+                         int targetLevel) {
+        AdaptionEvents.grantToWheel(player, fed, wheel, concept, targetLevel);
     }
 }

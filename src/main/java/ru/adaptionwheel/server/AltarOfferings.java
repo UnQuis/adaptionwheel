@@ -52,6 +52,7 @@ import java.util.Map;
  * <p>Built once, on first use, and cleared on server stop so a {@code /reload} that swaps datapacks
  * is not answered from a stale index.</p>
  */
+@net.neoforged.fml.common.EventBusSubscriber(modid = ru.adaptionwheel.AdaptionWheel.MODID)
 public final class AltarOfferings {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("adaptionwheel/domain_altar");
@@ -66,11 +67,34 @@ public final class AltarOfferings {
     private static final Map<String, List<String>> BY_MOB = new LinkedHashMap<>();
 
     /**
-     * Forgets the index. Called when the server stops, so a stale answer cannot outlive the world
-     * that produced it.
+     * Forgets the index, so a stale answer cannot outlive the world that produced it.
+     *
+     * <p>Wired to the server stopping by {@link #onServerStopped} below. It used to be documented as
+     * "called when the server stops" and was called by nothing at all — harmless while there was one
+     * process per world, and wrong the moment two of them shared a JVM, which is exactly what a
+     * dedicated server and an integrated one do not do and a test harness does.</p>
      */
     public static void forget() {
         index = null;
+    }
+
+    /**
+     * Warms the index at server start rather than at the first menu open.
+     *
+     * <p>Two reasons, and the second is the one that matters. The first is that building it is a
+     * directory walk and a JSON parse per file, and doing that inside the first player's first click
+     * is a latency nobody asked for. The second is that {@link #ensureLoaded} logs what it loaded,
+     * and an index that only announces itself on demand cannot be checked without reproducing the
+     * demand.</p>
+     */
+    @net.neoforged.bus.api.SubscribeEvent
+    public static void onServerStarted(net.neoforged.neoforge.event.server.ServerStartedEvent event) {
+        allMobs(event.getServer());
+    }
+
+    @net.neoforged.bus.api.SubscribeEvent
+    public static void onServerStopped(net.neoforged.neoforge.event.server.ServerStoppedEvent event) {
+        forget();
     }
 
     /**
@@ -120,6 +144,20 @@ public final class AltarOfferings {
             readOne(server, resource.getKey(), resource.getValue(), built);
         }
         index = built;
+        // Say what was loaded, once, at INFO.
+        //
+        // <p>This index is data-driven and its failure is silent in the worst way: a data file
+        // naming an item this build does not have is skipped, a file that fails to parse is logged
+        // and skipped, and a mob with no file at all is simply absent — so "the altar opens and
+        // offers me nothing" looks identical to "this item is not an offering" and to "my wheel
+        // already knows everything it opens". One line naming the count turns the first of those
+        // three into something checkable, and it is the difference between debugging this with the
+        // game in front of you and without.</p>
+        //
+        // <p>Also counts the items nothing maps to in the other direction, because that is the
+        // other silent half: an offering item that resolves to a real item but to no mobs.</p>
+        LOGGER.info("Domain altar offerings: {} mobs, {} offering items",
+                BY_MOB.size(), built.size());
     }
 
     private static void readOne(MinecraftServer server, Identifier location,
@@ -156,6 +194,10 @@ public final class AltarOfferings {
                     .map(net.minecraft.core.Holder.Reference::value).orElse(null);
             if (item != null) {
                 built.computeIfAbsent(item, k -> new ArrayList<>()).add(mob);
+            } else {
+                // Named by the data and absent from the game: worth a line each, because the player
+                // will otherwise be told an offering opens nothing, for an item they can hold.
+                LOGGER.warn("{} offers {}, which this build has no item for", mob, itemId);
             }
         }
     }

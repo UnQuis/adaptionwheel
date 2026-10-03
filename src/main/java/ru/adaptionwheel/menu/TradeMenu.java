@@ -11,6 +11,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.WheelTier;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.item.ModItems;
@@ -18,6 +19,7 @@ import ru.adaptionwheel.network.TradeSyncPayload;
 import ru.adaptionwheel.server.AdaptionEvents;
 import ru.adaptionwheel.server.DomainExchange;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -88,12 +90,23 @@ public abstract class TradeMenu extends AbstractContainerMenu {
     private List<String> candidates = List.of();
     private int selectedIndex = -1;
     /**
-     * The item price of the current trade, as of the last {@link #recompute()}.
+     * One price per candidate, in the same order, as of the last {@link #recompute()}.
      *
-     * <p>Server-computed and synced; see {@link #itemCost()}. Set in the same pass as the pool,
-     * because it is a property of the offering in the slot and must move with it.</p>
+     * <p>Server-computed and synced; see {@link TradePrice}. The two lists are built and sent
+     * together and are always the same length, because a price with no row to belong to is a price
+     * the player cannot act on.</p>
      */
-    private int itemCost;
+    private List<TradePrice> prices = List.of();
+    /**
+     * Whether the altar takes the offering <em>at all</em>, which is a different question from
+     * whether anything is left to buy with it.
+     *
+     * <p>This is what lets an empty list say which of the two things happened. A wrong item and a
+     * wheel that already knows everything this item opens are both an empty list and they want
+     * opposite answers from the player, so the screen is told which one it is looking at rather
+     * than being left to guess from an empty box.</p>
+     */
+    private boolean offeringAccepted;
 
     // The wheel being fed, and the stack its state was read from.
     //
@@ -178,23 +191,47 @@ public abstract class TradeMenu extends AbstractContainerMenu {
     protected abstract List<String> candidatesFor(ServerPlayer player, PlayerAdaption data,
                                                   ItemStack offering);
 
-    /** How many of the item one exchange consumes. */
-    protected abstract int itemPrice(ServerPlayer player, ItemStack offering);
+    /**
+     * What one item is worth at the altar, before any level is bought: the recipe's own price, or
+     * one for a mob's drop.
+     *
+     * <p><b>This is the FIRST level's price, not the price of a purchase.</b> Every level after it
+     * is a multiple of this, capped, and the multiplication is {@code DomainExchange}'s job rather
+     * than each block's — see {@link DomainExchange#itemsForLevel}. A base of zero means the altar
+     * does not take this item at all, and it is also how the screen tells "wrong item" from
+     * "nothing left to learn".</p>
+     */
+    protected abstract int baseItemPrice(ServerPlayer player, ItemStack offering);
 
     /**
-     * Grants the chosen adaptation into the wheel being fed, and writes it onto that wheel.
+     * Grants ONE level of the chosen adaptation into the wheel being fed, and writes it onto it.
      *
-     * <p>Separate from the trade because the two concepts are not the same kind of thing: a
-     * {@code Drop_NPC_} level is <em>derived</em> from a kill count, so buying it has to pay in
-     * kills rather than assign the level. That difference lives in one place —
-     * {@code AdaptionEvents.grantToWheel} — rather than in each block, so both buy the same
-     * thing.</p>
+     * <p>One level, not the whole adaptation: an adaptation that goes to level eight is bought eight
+     * times, at a price that grows each time, and that is the point of the block. One-time
+     * adaptations ignore the number — they have no levels — and a {@code Drop_NPC_} level is still
+     * <em>derived</em> from a kill count, so buying it tops the kills up rather than assigning a
+     * level. That difference lives in one place, {@code AdaptionEvents.grantToWheel}, rather than in
+     * each block, so both buy the same thing.</p>
      *
-     * @param fed   the fed wheel's own state, from {@link #fedData()}; never the player's attachment
-     * @param wheel the stack to write back onto
+     * @param fed         the fed wheel's own state, from {@link #fedData()}; never the player's attachment
+     * @param wheel       the stack to write back onto
+     * @param targetLevel the level being bought, i.e. the level held plus one
      */
     protected abstract void grant(ServerPlayer player, PlayerAdaption fed, ItemStack wheel,
-                                  String concept);
+                                  String concept, int targetLevel);
+
+    /**
+     * One row's price, as the server computed it.
+     *
+     * <p>Sent rather than recomputed on the client: the price depends on the level the fed wheel
+     * already holds, and the client does not have the fed wheel's state at all. A screen that
+     * guessed would be a screen that can be wrong, and this one shows a number next to a button.</p>
+     *
+     * @param items how many of the offering this purchase consumes
+     * @param xp    how many whole levels of the player's own experience
+     */
+    public record TradePrice(int items, int xp) {
+    }
 
     public String titleKey() {
         return "container.adaptionwheel.resonance_altar";
@@ -319,19 +356,44 @@ public abstract class TradeMenu extends AbstractContainerMenu {
         // the purchase is written onto that same stack — so with the slot empty there is nothing to
         // subtract from and nothing to write to. The block has no answer that does not depend on the
         // wheel in it, which is what makes it a ritual rather than a shop.
+        ItemStack offering = input.getItem(OFFER_SLOT);
         if (isWheel(input.getItem(WHEEL_SLOT))) {
-            candidates = candidatesFor(player, fedData(), input.getItem(OFFER_SLOT));
+            candidates = candidatesFor(player, fedData(), offering);
         } else {
             candidates = List.of();
         }
+        // The base price doubles as the answer to "does this altar take this item": the subclasses
+        // return zero for anything they do not take, and growth must never make a zero into a price.
+        int base = isWheel(input.getItem(WHEEL_SLOT)) ? baseItemPrice(player, offering) : 0;
+        offeringAccepted = base > 0;
+        // Priced here rather than in the screen, because the price of a level depends on how many
+        // levels the fed wheel already holds -- a number the client does not have.
+        PlayerAdaption fed = fedData();
+        List<TradePrice> built = new ArrayList<>(candidates.size());
+        for (String concept : candidates) {
+            built.add(priceFor(fed, concept, base));
+        }
+        prices = List.copyOf(built);
         // The pool shrank under the selection — which it does on every purchase, because the thing
         // bought is no longer unfinished — or there is no pool at all. Clear rather than clamp: a
         // clamped index would silently point at a neighbouring adaptation nobody asked for.
         if (selectedIndex < 0 || selectedIndex >= candidates.size()) {
             selectedIndex = candidates.isEmpty() ? -1 : 0;
         }
-        itemCost = itemPrice(player, input.getItem(OFFER_SLOT));
         sync(player);
+    }
+
+    /**
+     * What one more level of {@code concept} costs this wheel.
+     *
+     * <p>The level the wheel already holds is what the price grows from, and it is the same number
+     * the list is filtered by — so a row cannot be priced as though it were further along than it
+     * is, or nearer than it is.</p>
+     */
+    private static TradePrice priceFor(PlayerAdaption fed, String concept, int baseItems) {
+        int held = Concepts.isLevelBased(concept) ? fed.level(concept) : 0;
+        return new TradePrice(DomainExchange.itemsForLevel(baseItems, held),
+                DomainExchange.priceForLevel(concept, held));
     }
 
     /**
@@ -384,10 +446,16 @@ public abstract class TradeMenu extends AbstractContainerMenu {
             refuse(player, "adaptionwheel.msg.trade_no_wheel");
             return;
         }
+        if (!offeringAccepted) {
+            // Not an offering at all — the altar does not take this item. A different sentence from
+            // the one below, because the player's next move is different: put something else in.
+            refuse(player, "adaptionwheel.msg.trade_not_offering");
+            return;
+        }
         if (candidates.isEmpty()) {
-            // Genuinely nothing on offer, as opposed to a row that has gone: the item opens nothing
-            // this wheel has left to learn. The two deserve different words, because only one of them
-            // is the player's fault.
+            // Genuinely nothing on offer, as opposed to a row that has gone: the item opens only
+            // what this wheel has already finished. The two deserve different words, because only one
+            // of them is the player's fault.
             refuse(player, "adaptionwheel.msg.trade_nothing");
             return;
         }
@@ -408,29 +476,33 @@ public abstract class TradeMenu extends AbstractContainerMenu {
             refuse(player, "adaptionwheel.msg.trade_stale");
             return;
         }
-        int items = itemPrice(player, offering);
-        if (items <= 0 || offering.getCount() < items) {
+        // The price, computed live rather than read out of what the screen drew: it depends on the
+        // level this wheel already holds, and the wheel may have gained one by another route since
+        // the row was drawn. Charging the drawn price would be a way to buy a level cheaply by
+        // making the list stale first.
+        TradePrice price = priceFor(fed, concept, baseItemPrice(player, offering));
+        if (price.items() <= 0 || offering.getCount() < price.items()) {
             refuse(player, "adaptionwheel.msg.trade_too_few");
             return;
         }
         // Experience is the second price. Checked before either is taken, so a refusal costs the
         // player nothing.
-        int price = DomainExchange.priceFor(concept);
-        if (player.experienceLevel < price) {
+        if (player.experienceLevel < price.xp()) {
             player.sendSystemMessage(Component.translatable("adaptionwheel.msg.trade_no_experience",
-                    price, player.experienceLevel));
+                    price.xp(), player.experienceLevel));
             sync(player);
             return;
         }
 
-        offering.shrink(items);
+        offering.shrink(price.items());
         // giveExperienceLevels takes a negative amount -- this is exactly how vanilla charges an
         // enchanting table, so the client's experience bar updates through the normal path.
-        player.giveExperienceLevels(-price);
-        // Grants into the fed wheel and writes it straight back onto that stack: the wheel is in
-        // this menu, not in a Curios slot, so nothing else would save it, and the player's own
+        player.giveExperienceLevels(-price.xp());
+        // Grants ONE level into the fed wheel and writes it straight back onto that stack: the wheel
+        // is in this menu, not in a Curios slot, so nothing else would save it, and the player's own
         // attachment is the wrong store because it belongs to the wheel they took off.
-        grant(player, fed, wheel, concept);
+        int held = Concepts.isLevelBased(concept) ? fed.level(concept) : 0;
+        grant(player, fed, wheel, concept, held + 1);
         // fedData() re-read on a different stack, so drop the memoised one: the stack it was read
         // from is the same instance, which would otherwise make it look unchanged when it is not.
         fedStack = null;
@@ -457,10 +529,12 @@ public abstract class TradeMenu extends AbstractContainerMenu {
     }
 
     /** Applies a server sync on the client. */
-    public void acceptSync(List<String> pool, int selected, int itemCost) {
+    public void acceptSync(List<String> pool, List<TradePrice> prices, int selected,
+                           boolean offeringAccepted) {
         this.candidates = pool;
+        this.prices = prices;
         this.selectedIndex = selected;
-        this.itemCost = itemCost;
+        this.offeringAccepted = offeringAccepted;
     }
 
     // ------------------------------------------------------------------ read by both sides
@@ -471,6 +545,11 @@ public abstract class TradeMenu extends AbstractContainerMenu {
 
     public List<String> candidates() {
         return candidates;
+    }
+
+    /** One price per candidate, in the same order. */
+    public List<TradePrice> prices() {
+        return prices;
     }
 
     public int selectedIndex() {
@@ -502,12 +581,32 @@ public abstract class TradeMenu extends AbstractContainerMenu {
      * unreachable.</p>
      */
     public int itemCost() {
-        return itemCost;
+        return priceOfSelected().items();
     }
 
     /** What the current choice costs in whole levels of the player's own experience. */
     public int xpPrice() {
-        return DomainExchange.priceFor(selectedConcept());
+        return priceOfSelected().xp();
+    }
+
+    /** Whether the altar takes the offering at all, as opposed to having nothing left to sell. */
+    public boolean isOfferingAccepted() {
+        return offeringAccepted;
+    }
+
+    /**
+     * The selected row's price, or nothing at all if there is no row.
+     *
+     * <p>Both lists are built and sent in one pass and are always the same length, so the index that
+     * names a candidate names a price — but a sync from a mismatched build could still be short, and
+     * an out-of-range read here would be a crash on the client's render thread rather than a wrong
+     * number.</p>
+     */
+    private TradePrice priceOfSelected() {
+        if (selectedIndex < 0 || selectedIndex >= prices.size()) {
+            return new TradePrice(0, 0);
+        }
+        return prices.get(selectedIndex);
     }
 
     /** Whether both prices are covered: the items in the slot and the levels the player holds. */
