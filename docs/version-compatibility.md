@@ -78,15 +78,20 @@ but not honey/powder-snow/berry/bubble columns.
 ### 5.1 Loader-version tolerance (26.3 branch)
 
 Single-version does **not** mean single-loader-build. `gradle.properties` tracks one `neo_version`
-(26.3.0.43-beta) and the dependency range stays wide (`[26.3.0,)`), because between two
-pre-releases of the same Minecraft version NeoForge can break **binary** compatibility — the
-observed example is `ModConfig.Type.SERVER` renamed to `SYNCED` in 26.3.0.43-beta, which kills a
-jar built against 26.3.0.16-beta with `NoSuchFieldError` inside the mod constructor, before any
-mod code runs. Two rules follow, and they are the only version policy on this branch:
+and the dependency range stays wide (`[26.3.0,)`), because between two pre-releases of the same
+Minecraft version NeoForge can break **binary** compatibility. The observed case is
+`ModConfig.Type`, renamed wholesale: NeoForge `26.3.0.26-beta` (FancyModLoader 12.0.1) has
+`COMMON / CLIENT / SERVER / STARTUP`, and `26.3.0.43-beta` (FML 12.0.8) has
+`LOCAL / CLIENT / SYNCED / STARTUP`. A jar built against one end dies with `NoSuchFieldError`
+inside the mod constructor before any mod code runs — and it is not only our mod: the 26.3 build
+of Curios asks for `COMMON`, so it loads on the older NeoForge and cannot load on the newer one at
+all, which is why `neo_version` is the older `26.3.0.26-beta` rather than the newest patch.
+Two rules follow, and they are the only version policy on this branch:
 
 - **A renamed or moved enum/constant gets resolved by name, not referenced directly.** See
   `AdaptionWheel.configType("SYNCED", "SERVER")`, which asks `ModConfig.Type.values()` for a
-  constant by name and falls back to the older spelling, so one jar loads on both loader builds.
+  constant by name and tries the other spelling, so one jar loads on both loader builds even though
+  the repo compiles against only one of them.
   Every config type goes through it — the client one included — and `javap -c` on the compiled
   class shows no `getstatic` left against `ModConfig$Type`, which is the part that actually
   guarantees it.
