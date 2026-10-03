@@ -299,6 +299,16 @@ names**, which is the cheap signal. Two deliberate shapes of result:
   (`WheelData.migrateLegacyConcepts` — 26.3 forked before the fist existed, so no 26.3 save can hold
   a `Fist_Copper` to migrate; `SurfaceAdaptations.fistLevel` and `AdaptionConfig.fistTierSpeed` —
   dead code on main, zero callers).
+- **The trade pool is the one divergence that is a real gap on `main`, not a port artefact.**
+  `DomainExchange.candidates(tier, recipe)` and `ResonanceAltarMenu` no longer filter by what the fed
+  wheel holds, and `TradeMenu.exchange()` refuses an already-finished concept instead —
+  `branch_bodies.py` reports all of it (`isFinished`, `addIfUnfinished`, the old `candidates`
+  signature, and `return player==null?0:itemPrice(...)`). It was fixed here first because that is
+  where the bug was reported; **`main` still empties its own shop as the player buys**, and its
+  `TradeSyncPayload` has no `itemCost` either (harmless there, because main's screen sends the
+  exchange unconditionally rather than gating the click on `canAfford`, so only the button's
+  *colour* is wrong). Port the fix when `main` is next touched; do not "restore parity" by putting
+  the filter back.
 - **Real gaps**: a method on main with a 26.3 counterpart that was *supposed* to exist. Every one
   found this way was a behaviour, not a refactor.
 
