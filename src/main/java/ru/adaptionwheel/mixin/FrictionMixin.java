@@ -12,10 +12,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import ru.adaptionwheel.SurfaceAdaptations;
 
-/**
- * Adapted players treat ice and slime like normal ground: the surface friction
- * is clamped to 0.6 so vanilla acceleration and momentum math applies unchanged.
- */
 @Mixin(LivingEntity.class)
 public abstract class FrictionMixin {
 

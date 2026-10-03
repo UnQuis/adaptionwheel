@@ -7,7 +7,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import ru.adaptionwheel.AdaptionWheel;
 
-/** Client→server: the local player swung the sword at empty air (LeftClickEmpty). */
 public record FireSlashPayload() implements CustomPacketPayload {
 
     public static final FireSlashPayload INSTANCE = new FireSlashPayload();

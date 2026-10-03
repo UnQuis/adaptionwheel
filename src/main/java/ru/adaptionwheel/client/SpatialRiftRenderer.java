@@ -9,7 +9,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.AABB;
 import ru.adaptionwheel.entity.SpatialRiftProjectile;
 
-/** Textured flying slash used for the Dimension Destroy instant-kill rift. */
 public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile, SlashRenderState> {
 
     private static final int[] BLADE_VIOLET = {242, 218, 255};
@@ -32,7 +31,6 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile, S
         state.age = entity.tickCount + partialTick;
     }
 
-    /** See {@link CursedSlashRenderer#getBoundingBoxForCulling}. */
     @Override
     protected AABB getBoundingBoxForCulling(SpatialRiftProjectile entity, float partialTicks) {
         return super.getBoundingBoxForCulling(entity, partialTicks).inflate(8.0);

@@ -4,23 +4,11 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
-/**
- * Concept keys mirror the original Terraria mod's adaptation naming scheme:
- * Type_*, Contact_*, Offense_NPC_*, Drop_NPC_* are level-based (Lv1-8);
- * Env_*, Debuff_*, ADBERSITY are one-time. Drop_NPC_ levels come from kill counts.
- */
 public final class Concepts {
 
     public static final String SELF_DAMAGE = "Self_Damage";
     public static final String ADVERSITY = "ADBERSITY";
 
-    /**
-     * Key prefixes of the concept families. The dynamic families are generated per mob and per
-     * boss, so nothing in them is ever registered — every lookup that has to work "by family" has
-     * to test these strings instead. They live here, next to the keys they name, because
-     * {@link #contact}, {@link #offense} and {@link #existence} build on them and the two must
-     * not be allowed to drift apart.
-     */
     public static final String CONTACT_PREFIX = "Contact_";
     public static final String OFFENSE_PREFIX = "Offense_NPC_";
     public static final String DROP_PREFIX = "Drop_NPC_";
@@ -38,17 +26,11 @@ public final class Concepts {
     public static final String DIMENSION_PREFIX = "Dimension_";
     public static final String DAMAGE_CLASS_PREFIX = "DamageClass_";
 
-    /** Combo mutations unlocked by conditions over other completed adaptations. One-time. */
     public static final String MUTATION_THERMAL = "Mutation_Thermal";
     public static final String MUTATION_AQUATIC = "Mutation_Aquatic";
     public static final String MUTATION_IMPACT = "Mutation_Impact";
     public static final String MUTATION_FIST = "Mutation_Fist";
 
-    /**
-     * Transcendence-tier ultimate from the original mod ("Dimension Destroy"):
-     * unlocked past the adaptation-count threshold; Sword of Extermination
-     * swings then fire spatial rifts that sever lives outright.
-     */
     public static final String DIMENSION_DESTROY = "Dimension_Destroy";
 
     public static final String ENV_FALL = "Env_FallDamage";
@@ -65,28 +47,18 @@ public final class Concepts {
     public static final String ENV_SLIME = "Env_Slime";
     public static final String ENV_COBWEB = "Env_Cobweb";
 
-    /**
-     * Adaptation to Discomfort: block-imposed movement restrictions.
-     * These are one-time adaptations triggered by sustained exposure,
-     * following the same analysis-task flow as the Env_* family.
-     */
     public static final String MOVE_SOUL_SAND = "Move_SoulSand";
     public static final String MOVE_HONEY = "Move_Honey";
     public static final String MOVE_POWDER_SNOW = "Move_PowderSnow";
     public static final String MOVE_BERRY_BUSH = "Move_BerryBush";
     public static final String MOVE_BUBBLE_COLUMN = "Move_BubbleColumn";
 
-    /**
-     * Adaptation to Discomfort: mining, combat and perception domains.
-     * Mine_Labor / Combat_Cooldown are leveled; the other two are one-time.
-     */
     public static final String MINE_LABOR = "Mine_Labor";
     public static final String COMBAT_COOLDOWN = "Combat_Cooldown";
     public static final String COMBAT_SHIELD_LOCK = "Combat_ShieldLock";
     public static final String COMBAT_SKILL_ISSUE = "Combat_SkillIssue";
     public static final String PERCEP_STEADY_GAZE = "Percep_SteadyGaze";
 
-    /** HUD / chat bar colors per concept family, matching the original mod. */
     public static final int COLOR_CONTACT = 0xFF55FF55;
     public static final int COLOR_OFFENSE = 0xFFFF5555;
     public static final int COLOR_DROP = 0xFFB464FF;
@@ -101,7 +73,7 @@ public final class Concepts {
     public static final int COLOR_DAMAGE_CLASS = 0xFFFFA500;
     public static final int COLOR_SPECIAL = 0xFF9370DB;
     public static final int COLOR_MUTATION = 0xFFFF8C00;
-    public static final int COLOR_EXISTENCE = 0xFFFFFFFF; // rainbow — computed dynamically in HUD
+    public static final int COLOR_EXISTENCE = 0xFFFFFFFF;
     public static final int COLOR_GENERIC = 0xFFFFFFFF;
 
     private Concepts() {
@@ -131,11 +103,6 @@ public final class Concepts {
         return EXISTENCE_PREFIX + mobPath;
     }
 
-    /**
-     * Leveled vs one-time resolution is registry-first so mixed families
-     * (e.g. leveled Combat_Cooldown + one-time Combat_ShieldLock) work,
-     * with the legacy prefix rules as fallback for dynamic keys.
-     */
     public static boolean isLevelBased(String concept) {
         ru.adaptionwheel.adapt.AdaptationDefinition def = ru.adaptionwheel.adapt.AdaptationRegistry.get(concept);
         if (def != null) {
@@ -165,7 +132,6 @@ public final class Concepts {
         return concept.startsWith(OFFENSE_PREFIX);
     }
 
-    /** Per-material color for a {@code Fist_*} concept; falls back to the mining gray. */
     private static int fistColor(String tier) {
         for (int i = 0; i < ru.adaptionwheel.category.FistTiers.TIER_COUNT; i++) {
             if (ru.adaptionwheel.category.FistTiers.concept(i).equals("Fist_" + tier)) {
@@ -175,7 +141,6 @@ public final class Concepts {
         return COLOR_MINING;
     }
 
-    /** Bar/text color for a concept, mirroring the original HUD colors. */
     public static int color(String concept) {
         if (concept.startsWith(CONTACT_PREFIX)) return COLOR_CONTACT;
         if (concept.startsWith(OFFENSE_PREFIX)) return COLOR_OFFENSE;
@@ -196,11 +161,6 @@ public final class Concepts {
         return COLOR_GENERIC;
     }
 
-    /**
-     * Name shown in chat/HUD, mirroring the original mod's finalName logic:
-     * env concepts are uppercased (FALLDAMAGE, LAVA...), injuries become "Injure",
-     * debuffs/mobs use their localized names. Unstyled: callers apply colors.
-     */
     public static Component chatName(String concept) {
         if (concept.equals(SELF_DAMAGE)) {
             return Component.literal("Injure");
@@ -247,7 +207,6 @@ public final class Concepts {
         return displayName(concept);
     }
 
-    /** Client/server-safe display name for a concept key. Unstyled. */
     public static Component displayName(String concept) {
         if (concept.equals(SELF_DAMAGE)) {
             return Component.translatable("adaptionwheel.concept.self_damage");
@@ -297,11 +256,6 @@ public final class Concepts {
         return Component.literal(concept);
     }
 
-    /**
-     * Organizational domain of a concept (GUI/HUD grouping). Delegates to
-     * {@link ru.adaptionwheel.adapt.AdaptationRegistry#domainOf(String)} so
-     * dynamically registered concepts resolve consistently on both sides.
-     */
     public static ru.adaptionwheel.adapt.AdaptationDomain domain(String concept) {
         return ru.adaptionwheel.adapt.AdaptationRegistry.domainOf(concept);
     }

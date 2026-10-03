@@ -22,10 +22,6 @@ public final class ModItems {
     public static final DeferredItem<AllAdaptionItem> ALL_ADAPTION =
             ITEMS.registerItem("all_adaption", AllAdaptionItem::new, () -> new Item.Properties().stacksTo(1));
 
-    /**
-     * 26.x has no SwordItem class any more: sword behaviour (attributes, tool component,
-     * "sweep" attack) is fully data-driven via {@link Item.Properties#sword}.
-     */
     public static final DeferredItem<SwordOfExterminationItem> SWORD_OF_EXTERMINATION =
             ITEMS.registerItem("sword_of_extermination", SwordOfExterminationItem::new, () -> new Item.Properties()
                     .sword(ToolMaterial.NETHERITE, 12f, -2.4f)

@@ -9,7 +9,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.AABB;
 import ru.adaptionwheel.entity.CursedSlashProjectile;
 
-/** Textured cursed-energy flying slash fired by the normal sword mode. */
 public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile, SlashRenderState> {
 
     private static final int[] BLADE_CYAN = {185, 245, 255};
@@ -32,11 +31,6 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile, S
         state.age = entity.tickCount + partialTick;
     }
 
-    /**
-     * The visual blade extends far beyond the 0.5-block entity hitbox; without an
-     * inflated culling box the frustum test drops the entity while its glow is
-     * still on screen.
-     */
     @Override
     protected AABB getBoundingBoxForCulling(CursedSlashProjectile entity, float partialTicks) {
         return super.getBoundingBoxForCulling(entity, partialTicks).inflate(8.0);
@@ -46,8 +40,7 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile, S
     public void submit(SlashRenderState state, PoseStack poseStack, SubmitNodeCollector collector,
                        CameraRenderState camera) {
         float age = state.age;
-        // Keep the visual alive for the full block-to-block flight, with only a
-        // short fade at the end rather than turning invisible after 30 ticks.
+
         float fade = age < 24f ? 1f : Mth.clamp(1f - (age - 24f) / 12f, 0f, 1f);
 
         poseStack.pushPose();

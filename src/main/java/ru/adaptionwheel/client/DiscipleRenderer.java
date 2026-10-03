@@ -6,15 +6,6 @@ import net.minecraft.resources.Identifier;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.entity.DiscipleEntity;
 
-/**
- * Renders a Disciple.
- *
- * <p>26.3's shape: three type parameters with a render state in the middle, a
- * {@code createRenderState()} to make the state, and {@code getTextureLocation} taking the state
- * rather than the entity because the renderer no longer has one. {@code LivingEntityRenderer} fills
- * the humanoid fields of the state in its own {@code extractRenderState}, so there is nothing to
- * override beyond the texture.</p>
- */
 public class DiscipleRenderer
         extends LivingEntityRenderer<DiscipleEntity, DiscipleRenderState, DiscipleModel> {
 

@@ -9,14 +9,6 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.client.ClientAdaption;
 
-/**
- * Server→client: the fist's block counter, pushed the moment a block is broken.
- *
- * <p>The regular adaptation sync only goes out once a second, so a break used to sit invisible
- * in the HUD bar for 100-700 ms depending on where in the tick the sync happened to land. This
- * is four bytes and fires only on an actual break, so it makes the bar immediate without
- * dragging the (much larger) full-state payload up to break frequency.</p>
- */
 public record FistProgressPayload(int done, int total) implements CustomPacketPayload {
 
     public static final Type<FistProgressPayload> TYPE =

@@ -31,18 +31,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Developer/debug tooling: inspect and manipulate the adaptation state.
- * Read subcommands are usable by any player on themselves; mutating
- * subcommands require permission level 2 (ops).
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public final class AdaptionCommand {
 
     private AdaptionCommand() {
     }
 
-    /** Suggests every registered concept plus dynamic per-entity/per-effect families. */
     private static final com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> CONCEPT_SUGGESTIONS =
             (ctx, builder) -> {
                 for (AdaptationDefinition def : AdaptationRegistry.allDefinitions()) {
@@ -55,7 +49,6 @@ public final class AdaptionCommand {
                 return builder.buildFuture();
             };
 
-    /** Suggests domain filters for /adaptionwheel list. */
     private static final com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> DOMAIN_SUGGESTIONS =
             (ctx, builder) -> {
                 for (AdaptationDomain domain : AdaptationDomain.values()) {
@@ -64,45 +57,15 @@ public final class AdaptionCommand {
                 return builder.buildFuture();
             };
 
-    /**
-     * Concept argument node with suggestions, reused by info/grant/ungrant/analyze.
-     *
-     * <p>{@link StringArgumentType#string()}, not {@code word()}, and not a custom
-     * {@code ArgumentType}. Both of those were tried:</p>
-     * <ul>
-     *   <li>{@code word()} reads only {@code 0-9 A-Z a-z _ - . +} and does not <em>reject</em> a
-     *       colon, it stops reading at one, so {@code Existence_ns:path} arrived as
-     *       {@code Existence_ns}: the command reported a successful grant, nothing happened, no
-     *       error anywhere. That silently killed every namespaced concept.</li>
-     *   <li>A custom argument type fixes the parsing but is <b>impossible</b> here. The command
-     *       tree is mirrored to the client, and the client can only rebuild a node it has a
-     *       serializer for: {@code ArgumentTypeInfos.byClass} looks the class up in a private
-     *       static map filled from a hardcoded bootstrap list, with no NeoForge registration
-     *       hook. An unregistered type makes the client reject the whole packet
-     *       ({@code Unrecognized argument type}), which fails player login outright with
-     *       "Invalid player data" — a far worse outcome than a mangled argument.</li>
-     * </ul>
-     *
-     * <p>So: {@code string()} accepts a quoted argument, which is how vanilla itself carries any
-     * value containing a colon. {@code grant Type_Fire} still needs no quotes;
-     * {@code grant "Contact_minecraft:zombie"} does. {@link #reportUnknownConcept} turns a
-     * forgotten quote into an explicit message instead of silence.</p>
-     */
     private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String>
             conceptArg(String name) {
         return net.minecraft.commands.Commands.argument(name, StringArgumentType.string())
                 .suggests(CONCEPT_SUGGESTIONS);
     }
 
-    /**
-     * Level argument. The upper bound tracks {@link PlayerAdaption#MAX_LEVEL} instead of being
-     * written as a literal 8, so the command cannot quietly disagree with the data cap if that
-     * constant ever moves.
-     */
     private static final com.mojang.brigadier.arguments.IntegerArgumentType LEVEL_ARG =
             IntegerArgumentType.integer(0, PlayerAdaption.MAX_LEVEL);
 
-    /** Sentinel meaning "no level was typed": max it for a leveled concept, ignore it otherwise. */
     private static final int LEVEL_DEFAULT = -1;
 
     private static int level(CommandContext<CommandSourceStack> ctx) {
@@ -114,14 +77,12 @@ public final class AdaptionCommand {
         LiteralArgumentBuilder<CommandSourceStack> root = net.minecraft.commands.Commands
                 .literal("adaptionwheel");
 
-        // Bare /adaptionwheel prints usage so the tree is discoverable.
         root.executes(ctx -> {
             ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.usage"), false);
             ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.usage_hint"), false);
             return 1;
         });
 
-        // ---- reads: self by default, optional explicit target ----
         root.then(net.minecraft.commands.Commands.literal("status")
                 .executes(ctx -> status(ctx, self(ctx)))
                 .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
@@ -147,12 +108,11 @@ public final class AdaptionCommand {
                             try {
                                 target = self(ctx);
                             } catch (Exception e) {
-                                target = null; // console: show metadata only
+                                target = null;
                             }
                             return info(ctx, target, StringArgumentType.getString(ctx, "concept"));
                         })));
 
-        // ---- mutations of state: ops only ----
         root.then(net.minecraft.commands.Commands.literal("grant")
                 .requires(net.minecraft.commands.Commands.hasPermission(
                                 net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
@@ -171,12 +131,9 @@ public final class AdaptionCommand {
                                         .executes(ctx -> grantAll(ctx, EntityArgument.getPlayer(ctx, "target"),
                                                 concept(ctx))))))
                 .then(conceptArg("concept")
-                        // No level given: max for a leveled concept, plain grant for a one-time one.
+
                         .executes(ctx -> grant(ctx, selfOrTarget(ctx, "target"), concept(ctx), LEVEL_DEFAULT))
-                        // `grant <concept> <player>` — a SIBLING of the level node, not a child of
-                        // it. Nested under `level` it only ever matched `<concept> <level> <player>`,
-                        // which already existed, so naming another player without inventing a level
-                        // still died with "Expected integer" pointing at the player's name.
+
                         .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
                                 .requires(net.minecraft.commands.Commands.hasPermission(
                                 net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
@@ -197,16 +154,11 @@ public final class AdaptionCommand {
                                 .executes(ctx -> ungrant(ctx, EntityArgument.getPlayer(ctx, "target"),
                                         concept(ctx))))));
 
-        // Shedding is a player verb, not an operator tool: doing it to yourself needs no
-        // permission, and the named-target form below is what requires gamemaster level, so the
-        // two are gated separately rather than the whole node being off-limits.
         root.then(net.minecraft.commands.Commands.literal("shed")
                 .then(conceptArg("concept")
                         .executes(ctx -> shed(ctx, selfOrTarget(ctx, "target"), concept(ctx)))
                         .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
-                                // hasPermission is a PermissionProviderCheck factory on 26.3, not a
-                                // Predicate, so it is passed as a method reference and not wrapped
-                                // in a lambda -- the lambda compiles to the wrong type.
+
                                 .requires(net.minecraft.commands.Commands.hasPermission(
                                         net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
                                 .executes(ctx -> shed(ctx, EntityArgument.getPlayer(ctx, "target"),
@@ -233,11 +185,6 @@ public final class AdaptionCommand {
                                 net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
                 .executes(AdaptionCommand::registry));
 
-        // ---- diagnostics: two questions the game answers, not this mod ----
-        //
-        // Both exist because "it does not work" was reported and the mod's own code was innocent in
-        // both cases. Reading the answer off the running game beats guessing from the source, and
-        // these are the two places where the answer is not in the mod at all.
         root.then(net.minecraft.commands.Commands.literal("debug")
                 .then(net.minecraft.commands.Commands.literal("aggro")
                         .requires(net.minecraft.commands.Commands.hasPermission(
@@ -259,13 +206,12 @@ public final class AdaptionCommand {
         return ctx.getSource().getPlayerOrException();
     }
 
-    /** Optional trailing target argument; falls back to the executing player. */
     private static ServerPlayer selfOrTarget(CommandContext<CommandSourceStack> ctx, String name)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         try {
             return EntityArgument.getPlayer(ctx, name);
         } catch (IllegalArgumentException ignored) {
-            // argument not present in this node
+
         }
         try {
             return ctx.getSource().getPlayerOrException();
@@ -326,7 +272,7 @@ public final class AdaptionCommand {
             }
             final String fKey = key;
             final String fState = state;
-            // Raw components resolve on the receiving client, so names stay localized.
+
             ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.list_entry",
                     Concepts.displayName(fKey), domainTag(fKey), fState), false);
             shown++;
@@ -358,7 +304,7 @@ public final class AdaptionCommand {
         boolean oneTime = def != null ? !def.leveled() : Concepts.isOneTime(concept);
         int maxLevel = def != null ? def.maxLevel() : PlayerAdaption.MAX_LEVEL;
         if (target == null) {
-            // Console / no player: metadata only.
+
             final String kind = oneTime ? "one-time" : "leveled 1-" + maxLevel;
             ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.info",
                     Concepts.displayName(concept),
@@ -382,14 +328,6 @@ public final class AdaptionCommand {
         return 1;
     }
 
-    /**
-     * Grants one concept.
-     *
-     * <p>{@code level} is {@link #LEVEL_DEFAULT} when the operator did not type one. That is
-     * resolved rather than defaulted up front, because the two concept kinds want opposite
-     * treatment: a leveled concept wants its maximum, while a one-time concept has no level at
-     * all and used to have a meaningless number written next to it in the command line.</p>
-     */
     private static int grant(CommandContext<CommandSourceStack> ctx, ServerPlayer target,
                              String concept, int level) {
         Component truncated = truncationHint(concept);
@@ -403,7 +341,7 @@ public final class AdaptionCommand {
         }
         boolean oneTime = Concepts.isOneTime(concept);
         if (oneTime && level != LEVEL_DEFAULT) {
-            // Saying so beats silently discarding it, which is what the old command did.
+
             ctx.getSource().sendSuccess(() -> Component.translatable(
                     "adaptionwheel.cmd.grant_level_ignored", concept), false);
         }
@@ -416,13 +354,6 @@ public final class AdaptionCommand {
         return 1;
     }
 
-    /**
-     * Grants every registered concept, optionally limited to one domain. Leveled concepts go to
-     * their maximum and one-time ones are simply set, which is what makes this a usable shortcut
-     * for testing a late-game state instead of a hundred separate commands.
-     *
-     * @param domain a domain name, or {@code null} for every domain.
-     */
     private static int grantAll(CommandContext<CommandSourceStack> ctx, ServerPlayer target,
                                 String domain) {
         AdaptationDomain filter = parseDomain(domain);
@@ -435,8 +366,7 @@ public final class AdaptionCommand {
                     def.leveled() ? def.maxLevel() : PlayerAdaption.MAX_LEVEL);
             granted++;
         }
-        // Dynamic keys have no definition and cannot be enumerated; say so rather than let the
-        // operator assume a Contact_<mob> they already earned was just wiped.
+
         final int count = granted;
         final String filterName = filter == null ? "all" : filter.getKey();
         ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.grant_all_done",
@@ -444,12 +374,6 @@ public final class AdaptionCommand {
         return count;
     }
 
-    /**
-     * Gives one adaptation up for a Wild Release burst.
-     *
-     * <p>Reports the specific refusal rather than a generic failure, because the ways this can be
-     * declined are each a different thing the player can do something about.</p>
-     */
     private static int shed(CommandContext<CommandSourceStack> ctx, ServerPlayer target,
                            String concept) {
         Component truncated = truncationHint(concept);
@@ -469,7 +393,6 @@ public final class AdaptionCommand {
         return 1;
     }
 
-    /** Removes a single adaptation, the counterpart to {@code grant}. */
     private static int ungrant(CommandContext<CommandSourceStack> ctx, ServerPlayer target,
                                String concept) {
         Component truncated = truncationHint(concept);
@@ -487,11 +410,6 @@ public final class AdaptionCommand {
         return 1;
     }
 
-    /**
-     * Rejects an unknown concept, and says what was probably meant. With a registry this size a
-     * flat "unknown concept" is a dead end — the operator has to go and run {@code /registry}
-     * and read through it. Offering close matches turns a dead end into a one-line fix.
-     */
     private static void reportUnknownConcept(CommandContext<CommandSourceStack> ctx, String concept) {
         ctx.getSource().sendFailure(Component.translatable("adaptionwheel.cmd.unknown_concept", concept));
         List<String> near = nearMatches(concept);
@@ -503,18 +421,6 @@ public final class AdaptionCommand {
         }
     }
 
-    /**
-     * Detects the shape Brigadier's own unquoted-string reader leaves behind, and reports it as
-     * the forgotten quote it almost always is.
-     *
-     * <p>Without this the original bug is invisible: {@code grant Contact_minecraft:zombie} parses
-     * to {@code Contact_minecraft}, which is a perfectly plausible key prefix, so the command
-     * grants it, reports success, and the player concludes that granting does not work. A key that
-     * ends in a known mod namespace is the fingerprint of a string that was cut at its colon, so
-     * that is what gets checked.</p>
-     *
-     * @return the message to send, or {@code null} if the input does not look truncated.
-     */
     @Nullable
     private static Component truncationHint(String concept) {
         for (String namespace : knownNamespaces()) {
@@ -526,7 +432,6 @@ public final class AdaptionCommand {
         return null;
     }
 
-    /** Every namespace a concept key could have been built from: vanilla plus every loaded mod. */
     private static java.util.Set<String> knownNamespaces() {
         java.util.Set<String> out = new java.util.LinkedHashSet<>();
         out.add("minecraft");
@@ -535,12 +440,11 @@ public final class AdaptionCommand {
                 out.add(mod.getModId());
             }
         } catch (Throwable ignored) {
-            // Mod list unavailable (very early call); vanilla alone still catches the common case.
+
         }
         return out;
     }
 
-    /** Registered concepts containing {@code needle} case-insensitively, capped so chat stays readable. */
     private static List<String> nearMatches(String needle) {
         String lower = needle.toLowerCase(java.util.Locale.ROOT);
         List<String> hits = new ArrayList<>();
@@ -555,12 +459,6 @@ public final class AdaptionCommand {
         return hits;
     }
 
-    /**
-     * Accepts registered definitions plus the dynamic per-entity/per-effect key families, which
-     * are generated at runtime and so can never be in the registry. The prefix list is the full
-     * set — it used to be missing several families, so a dynamic key outside the registered ones
-     * was rejected outright instead of being accepted and doing nothing.
-     */
     private static boolean isPlausibleConcept(String concept) {
         if (AdaptationRegistry.isRegistered(concept)) {
             return true;
@@ -594,17 +492,6 @@ public final class AdaptionCommand {
         return 1;
     }
 
-    /**
-     * Why mobs are or are not angry at a player, as the game itself sees it.
-     *
-     * <p>Every vanilla path that stops a mob choosing a target runs through
-     * {@code TargetingConditions.test}, and it fails in exactly four places: the target is not alive,
-     * the target is a spectator, the target reports itself invulnerable, or the difficulty is
-     * peaceful. The third is the interesting one, because {@code Player} overrides
-     * {@code canBeSeenAsEnemy()} as {@code !abilities.invulnerable && super} — so a player in
-     * creative or spectator mode is untargetable <em>by design</em>, and no amount of wheel changes
-     * it. This prints each answer rather than a guess.</p>
-     */
     private static int aggro(CommandContext<CommandSourceStack> ctx, ServerPlayer target) {
         CommandSourceStack source = ctx.getSource();
         ServerLevel level = target.level();
@@ -628,7 +515,6 @@ public final class AdaptionCommand {
                 .reduce((a, b) -> a + ", " + b).orElse("(none)");
         source.sendSuccess(() -> Component.literal("effects: " + effects), false);
 
-        // The nearest mobs that would fight a player, and what each is aimed at right now.
         List<net.minecraft.world.entity.Mob> hostile = level.getEntitiesOfClass(
                 net.minecraft.world.entity.Mob.class, target.getBoundingBox().inflate(24.0D),
                 mob -> mob instanceof net.minecraft.world.entity.monster.Enemy);
@@ -648,14 +534,6 @@ public final class AdaptionCommand {
         return 1;
     }
 
-    /**
-     * What the altar thinks of an item: which mobs it opens, and what one level would cost.
-     *
-     * <p>Exists because "the altar gives me nothing for this item" has two answers that look
-     * identical on screen — the item opens nothing, or this wheel has already finished everything
-     * it opens — and the second is invisible by design. Asking here names the mobs the item is
-     * mapped to, which settles it without opening a menu.</p>
-     */
     private static int altarLookup(CommandContext<CommandSourceStack> ctx, String itemId) {
         CommandSourceStack source = ctx.getSource();
         MinecraftServer server = source.getServer();

@@ -20,49 +20,8 @@ import ru.adaptionwheel.network.TradeActionPayload;
 
 import java.util.List;
 
-/**
- * The Resonance Altar's screen, and the mod's only container screen.
- *
- * <p>It was generic over the menu, because the Domain Stone and the Resonance Altar each had one and
- * both needed the same screen. There is one menu now, so there is nothing to be generic over: the
- * class names {@link ResonanceAltarMenu} outright, and the per-block subclass that existed only to
- * supply a type argument is gone. Layout constants still come from {@link TradeMenu}, so a slot and
- * the well drawn behind it cannot drift apart.</p>
- *
- * <p>What the polish pass changed against the first version:</p>
- * <ul>
- *   <li><b>The list is a sunken well.</b> Dark inset body, light-on-dark rows with a stripe in the
- *       concept's own colour, zebra shading, a bright outline on the selected row. The colour
- *       grouping now reads at a glance instead of only on selection.</li>
- *   <li><b>A real vanilla-style button</b> with three states (disabled / idle / hovered), a bevel,
- *       white hover outline, click sound and an explanatory tooltip when it is disabled.</li>
- *   <li><b>Experience readout</b> with a lit fill, quarter ticks, a highlight row and an XP orb
- *       next to the price.</li>
- *   <li><b>The empty wheel slot breathes</b>: a soft golden pulse around the well tells the player
- *       where the wheel goes before they have read anything.</li>
- *   <li><b>A draggable scrollbar</b> with a bevelled knob, a result counter in the list header and
- *       a wrapped, centred empty-state message.</li>
- *   <li>Hit areas now match what is drawn, to the pixel (rows used to start 4px left of the
- *       visible row).</li>
- * </ul>
- *
- * <p>New lang keys: {@code adaptionwheel.gui.select_first}, {@code adaptionwheel.gui.not_enough_levels}.</p>
- *
- * <p>The price line carries the item cost as well as the experience, because a purchase is one level
- * of an adaptation and both halves of what that costs grow as the adaptation climbs — see
- * {@link ru.adaptionwheel.server.DomainExchange#priceForLevel}.</p>
- *
- * <p><b>Everything is drawn in {@code extractLabels}, in coordinates relative to
- * {@code (leftPos, topPos)}.</b> On 26.3 that hook runs inside the translate vanilla pushes before
- * the slots, so it is the one window in which a slot well can be drawn under its own item — and
- * adding {@code leftPos} again puts the whole panel at double the offset, shoved into the
- * bottom-right corner with the wells twice as far from the items as the items are from each other.
- * The mouse arrives in screen coordinates and is offset by hand where it is hit-tested. See also
- * {@link AdaptationScreen}.</p>
- */
 public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
 
-    // ---- vanilla palette, sampled out of textures/gui/container/generic_54.png
     private static final int PANEL_EDGE = 0xFF000000;
     private static final int PANEL_HILIGHT = 0xFFFFFFFF;
     private static final int PANEL_BODY = 0xFFC6C6C6;
@@ -71,7 +30,6 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
     private static final int SLOT_BODY = 0xFF8B8B8B;
     private static final int SLOT_SHADOW = 0xFFFFFFFF;
 
-    // ---- experience bar
     private static final int BAR_FRAME = 0xFF09100C;
     private static final int BAR_EMPTY = 0xFF28332D;
     private static final int BAR_FULL = 0xFF71A549;
@@ -79,14 +37,12 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
     private static final int BAR_SHORT = 0xFF9A4B4B;
     private static final int BAR_SHORT_HI = 0xFFD98080;
 
-    // ---- the list well
     private static final int LIST_BG = 0xFF1E1E24;
     private static final int ROW_ZEBRA = 0x0FFFFFFF;
     private static final int ROW_HOVER = 0x26FFFFFF;
     private static final int ROW_TEXT = 0xFFC8C8C8;
     private static final int ROW_TEXT_SELECTED = 0xFFFFFFFF;
 
-    // ---- button
     private static final int BTN_BODY = 0xFF707070;
     private static final int BTN_BODY_HOT = 0xFF6F7FB8;
     private static final int BTN_BODY_OFF = 0xFF4A4A4A;
@@ -99,17 +55,16 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
     private static final int TEXT_HEADER = 0xFF3F3F3F;
     private static final int TEXT_SHORT = 0xFFA02020;
 
-    /** The mod's Curio wheel-slot icon, 32x32, drawn into a 16x16 well. */
     private static final Identifier WHEEL_SLOT_ICON = Identifier.fromNamespaceAndPath(
             ru.adaptionwheel.AdaptionWheel.MODID, "textures/slot/empty_wheel_slot.png");
 
     private static final int BAR_H = 5;
     private static final int ROW_H = 12;
     private static final int PAD = 7;
-    /** Rows visible in the list. Sized so the sunken well always ends inside the panel's body. */
+
     private static final int LIST_ROWS = (TradeMenu.LIST_H - 19) / ROW_H;
     private static final int LIST_BODY_Y = 15;
-    /** Space a drawn scrollbar takes out of the row width (5px track + 1px gap + 2px breathing). */
+
     private static final int SCROLLER_GAP = 8;
     private static final int SCROLLER_W = 5;
 
@@ -117,36 +72,23 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
     private boolean draggingScroller;
 
     public TradeScreen(ResonanceAltarMenu menu, Inventory inventory, Component title) {
-        // Both sizes go to super: they are final here, so assigning them afterwards is not an option.
+
         super(menu, inventory, title, TradeMenu.IMAGE_WIDTH, TradeMenu.IMAGE_HEIGHT);
         this.inventoryLabelY = TradeMenu.INVENTORY_LABEL_Y;
     }
 
-    // ------------------------------------------------------------------ drawing
-
     @Override
     protected void extractLabels(GuiGraphicsExtractor g, int mouseX, int mouseY) {
-        // Coordinates here are already relative to (leftPos, topPos): extractContents pushes
-        // translate(leftPos, topPos) before calling this, and extractSlots runs inside the same
-        // push. Adding leftPos again drew the whole panel at double the offset -- shoved into the
-        // bottom-right corner and running off the screen, with the slot wells twice as far apart
-        // as the items vanilla draws in them. So drawing is relative throughout, and the mouse,
-        // which arrives in screen coordinates, is offset by hand where it is hit-tested.
+
         panel(g, 0, 0, this.imageWidth, this.imageHeight);
 
-        // A slot's x/y is where the 16x16 ITEM goes. The well around it is 18x18 and hangs one
-        // pixel further out on each side -- vanilla's own slot sprite does the same -- so the well
-        // is drawn at -1. Drawn at slot.x instead, every item sat one pixel up and left of the
-        // square that was meant to hold it.
         for (Slot slot : menu.slots) {
             slotWell(g, slot.x - 1, slot.y - 1);
         }
 
         if (!menu.hasWheel()) {
             wheelHint(g, TradeMenu.WHEEL_X - 1, TradeMenu.WHEEL_Y - 1);
-            // 26.3's blit takes corners plus normalised UVs; the 1.21.1 form this was written
-            // against took u/v, width and height in pixels. Same picture either way: the 32x32 icon
-            // into the 16x16 well.
+
             g.blit(WHEEL_SLOT_ICON, TradeMenu.WHEEL_X, TradeMenu.WHEEL_Y,
                     TradeMenu.WHEEL_X + 16, TradeMenu.WHEEL_Y + 16, 0f, 1f, 0f, 1f);
         }
@@ -162,7 +104,7 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
     @Override
     protected void extractTooltip(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         super.extractTooltip(g, mouseX, mouseY);
-        // vanilla has already queued the item tooltip; ours goes on top of everything else
+
         if (within(mouseX, mouseY, this.leftPos + TradeMenu.BUTTON_X, this.topPos + TradeMenu.BUTTON_Y,
                 TradeMenu.BUTTON_W, TradeMenu.BUTTON_H) && !canExchange()) {
             Component why = menu.selectedConcept() == null
@@ -176,22 +118,11 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         return Component.translatable(menu.titleKey());
     }
 
-    /**
-     * What the empty list says, which is one of three different situations.
-     *
-     * <p>They are ordered by what the player has to do about them: no wheel means the list cannot
-     * exist at all, no offering means nothing has been asked, and an empty list with both slots full
-     * means the wheel has already learned everything this item opens — which is a <em>result</em>, not
-     * a thing to fix, and says so in those words rather than asking for another item.</p>
-     */
     protected Component hintFor() {
         if (!menu.hasWheel()) {
             return Component.translatable("adaptionwheel.gui.need_wheel");
         }
-        // Two empty lists that want opposite things from the player: a wrong item means put
-        // something else in, a wheel that already knows everything this item opens means there is
-        // nothing to do here at all. The server answers which one it is, because only it knows
-        // whether the item is on the price list or is somebody's drop.
+
         return menu.isOfferingAccepted()
                 ? Component.translatable("adaptionwheel.gui.all_learned")
                 : Component.translatable("adaptionwheel.gui.need_item");
@@ -201,7 +132,6 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         return menu.selectedConcept() != null && menu.canAfford(playerLevel());
     }
 
-    /** The chest GUI's slot well, exact. */
     private void slotWell(GuiGraphicsExtractor g, int x, int y) {
         g.fill(x, y, x + 18, y + 18, SLOT_FRAME);
         g.fill(x + 1, y, x + 18, y + 1, SLOT_BODY);
@@ -211,7 +141,6 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         g.fill(x + 1, y + 1, x + 17, y + 17, SLOT_BODY);
     }
 
-    /** A slow golden pulse around the empty wheel slot: "put the wheel here". */
     private void wheelHint(GuiGraphicsExtractor g, int x, int y) {
         float pulse = 0.5F + 0.5F * (float) Math.sin(System.currentTimeMillis() / 380.0);
         int alpha = 0x38 + (int) (0x68 * pulse);
@@ -220,10 +149,8 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         g.fill(x - 1, y + 18, x + 19, y + 19, col);
         g.fill(x - 1, y, x, y + 18, col);
         g.fill(x + 18, y, x + 19, y + 18, col);
-        // wheelHint is now handed the well's top-left, so the ring is one pixel further out.
-    }
 
-    // ---- experience
+    }
 
     private void renderExperience(GuiGraphicsExtractor g, int x, int y) {
         int playerLevel = playerLevel();
@@ -240,7 +167,7 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
                 g.fill(x + 1, y + 1, x + 1 + filled, y + 2, affordable ? BAR_FULL_HI : BAR_SHORT_HI);
             }
         }
-        // quarter ticks
+
         for (int i = 1; i < 4; i++) {
             int tx = x + 1 + (w - 2) * i / 4;
             g.fill(tx, y + 1, tx + 1, y + BAR_H - 1, 0x55000000);
@@ -251,16 +178,13 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         if (menu.selectedConcept() != null) {
             int py = y + BAR_H + 15;
             orb(g, x, py + 1, affordable);
-            // Both halves of the price, because both grow with the level: a player watching items
-            // vanish from the slot with only an experience number on screen cannot tell a rising
-            // price from a broken block.
+
             g.text(this.font, Component.translatable("adaptionwheel.gui.price",
                             price, menu.itemCost()).getVisualOrderText(),
                     x + 8, py, affordable ? TEXT : TEXT_SHORT, false);
         }
     }
 
-    /** A 5x5 experience orb, drawn from fills. */
     private static void orb(GuiGraphicsExtractor g, int x, int y, boolean lit) {
         int edge = lit ? 0xFF4FAE1E : 0xFF5A5A5A;
         int core = lit ? 0xFFB6FF3C : 0xFF8A8A8A;
@@ -274,8 +198,6 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
     private int playerLevel() {
         return Minecraft.getInstance().player == null ? 0 : Minecraft.getInstance().player.experienceLevel;
     }
-
-    // ---- button
 
     private void renderButton(GuiGraphicsExtractor g, int x, int y, int mouseX, int mouseY) {
         int w = TradeMenu.BUTTON_W;
@@ -301,8 +223,6 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         }
     }
 
-    // ---- list
-
     private void renderList(GuiGraphicsExtractor g, int x, int y, int w, int h, int mouseX, int mouseY) {
         panel(g, x, y, w, h);
         List<String> pool = menu.candidates();
@@ -314,7 +234,6 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         int rowX = x + 4;
         int textW = w - 8 - (maxScroll > 0 ? SCROLLER_GAP : 0);
 
-        // header + counter
         g.text(this.font, Component.translatable("adaptionwheel.gui.choose").getVisualOrderText(),
                 rowX, y + 5, TEXT_HEADER, false);
         if (!pool.isEmpty()) {
@@ -322,7 +241,6 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
             g.text(this.font, count, x + w - 5 - this.font.width(count), y + 5, TEXT_DIM, false);
         }
 
-        // the sunken well
         inset(g, x + 3, top - 1, w - 6, rowsH + 2, LIST_BG);
 
         if (pool.isEmpty()) {
@@ -358,7 +276,7 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
             } else if (hot) {
                 g.fill(rowX, ry, rowX + textW, ry + ROW_H, ROW_HOVER);
             }
-            // the concept's own colour, always visible
+
             g.fill(rowX + 2, ry + 2, rowX + 4, ry + ROW_H - 2, 0xFF000000 | bright);
 
             g.text(this.font, clipped(Concepts.displayName(concept), textW - 9),
@@ -388,8 +306,6 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         return Math.max(8, trackH * LIST_ROWS / (LIST_ROWS + maxScroll));
     }
 
-    // ---- primitives
-
     private void panel(GuiGraphicsExtractor g, int x, int y, int w, int h) {
         if (w < 8 || h < 8) {
             return;
@@ -400,16 +316,15 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         g.fill(x + w - 1, y, x + w, y + h, PANEL_EDGE);
         g.fill(x + 1, y + 1, x + w - 1, y + 3, PANEL_HILIGHT);
         g.fill(x + 1, y + 1, x + 3, y + h - 1, PANEL_HILIGHT);
-        // bottom-right shades, like the real container: a darker edge, not a second highlight
+
         g.fill(x + 1, y + h - 3, x + w - 1, y + h - 1, 0xFF555555);
         g.fill(x + w - 3, y + 1, x + w - 1, y + h - 1, 0xFF555555);
         g.fill(x + 3, y + 3, x + w - 3, y + h - 3, PANEL_BODY);
-        // soften the corners the way the vanilla texture does
+
         g.fill(x + w - 3, y + 1, x + w - 1, y + 3, PANEL_BODY);
         g.fill(x + 1, y + h - 3, x + 3, y + h - 1, PANEL_BODY);
     }
 
-    /** A sunken well: dark top-left, light bottom-right. */
     private void inset(GuiGraphicsExtractor g, int x, int y, int w, int h, int body) {
         g.fill(x, y, x + w, y + h, SLOT_FRAME);
         g.fill(x + w - 1, y, x + w, y + h, SLOT_SHADOW);
@@ -417,7 +332,6 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         g.fill(x + 1, y + 1, x + w - 1, y + h - 1, body);
     }
 
-    /** {@code rgb} moved {@code amount} of the way to white. */
     private static int lighten(int rgb, float amount) {
         int r = (int) ((rgb >> 16 & 0xFF) + (255 - (rgb >> 16 & 0xFF)) * amount);
         int gg = (int) ((rgb >> 8 & 0xFF) + (255 - (rgb >> 8 & 0xFF)) * amount);
@@ -433,14 +347,10 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         return this.font.plainSubstrByWidth(plain, Math.max(0, maxWidth - this.font.width("..."))) + "...";
     }
 
-    // ------------------------------------------------------------------ input
-
-    /** Relative to (leftPos, topPos), like everything drawn in {@link #extractLabels}. */
     private int trackX() {
         return TradeMenu.LIST_X + TradeMenu.LIST_W - 10;
     }
 
-    /** Relative to (leftPos, topPos), like everything drawn in {@link #extractLabels}. */
     private int listTop() {
         return TradeMenu.LIST_Y + LIST_BODY_Y;
     }
@@ -468,8 +378,7 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         double my = event.y() - this.topPos;
         int x = 0;
         int y = 0;
-        // Not the literal 0: 26.3 numbers the left button 1. See MouseButtons. Anything else falls
-        // straight through to the slot handling below, which is what a right-click should do.
+
         if (!MouseButtons.isLeft(event)) {
             return super.mouseClicked(event, doubleClick);
         }

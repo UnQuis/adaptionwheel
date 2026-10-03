@@ -4,10 +4,6 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 
 import java.util.List;
 
-/**
- * Wheel of Adaptation — configuration.
- * All values are tuned for Minecraft's combat balance (not Terraria's).
- */
 public final class AdaptionConfig {
 
     private static final double[] DEFENSE_REDUCTION = {5, 10, 15, 20, 25, 30, 45, 60};
@@ -19,21 +15,16 @@ public final class AdaptionConfig {
     private static final double[] DROP_RATE_INCREASE = {100, 300, 500, 1000, 1500, 3000, 5000, 10000};
     private static final double[] DROP_RATE_KILLS = {1, 5, 10, 30, 100, 300, 500, 1000};
 
-    // ---- General ----
-    /** One cost multiplier per fist material; a wrong-length user list is repaired against this. */
     private static final double[] DEFAULT_FIST_TIER_COST = {1.0, 1.5, 2.5, 4.0, 5.0};
 
-    // ---- Wheel awakening ----
     public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_TIERS_ENABLED;
 
-    // ---- Shedding (voluntarily paying an adaptation away) ----
     public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_ENABLED;
     public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_BASE_TICKS;
     public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_TICKS_PER_LEVEL;
     public static final ModConfigSpec.ConfigValue<Double> SHEDDING_REATTACH_TIMER_FACTOR;
     public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_PROTECT_TIER;
 
-    // ---- Ritual blocks ----
     public static final ModConfigSpec.ConfigValue<Boolean> BRAZIER_HEAL_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> BRAZIER_HEAL_PER_SECOND;
     public static final ModConfigSpec.ConfigValue<Boolean> TOTEM_ENABLED;
@@ -44,10 +35,8 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> TRADE_MAX_ITEMS;
     public static final ModConfigSpec.ConfigValue<Integer> TRADE_MAX_XP;
 
-    // ---- Adaptation transfer ----
     public static final ModConfigSpec.ConfigValue<Boolean> TRANSFER_ENABLED;
 
-    // ---- Resonance ----
     public static final ModConfigSpec.ConfigValue<Boolean> RESONANCE_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> RESONANCE_BLOCKS;
     public static final ModConfigSpec.ConfigValue<Boolean> RESONANCE_PARTICLES;
@@ -57,7 +46,6 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> RESET_ADAPTATIONS_ON_DEATH;
     public static final ModConfigSpec.ConfigValue<Boolean> KEEP_DATA_ON_UNEQUIP;
 
-    // ---- Analysis durations (ticks → seconds) ----
     public static final ModConfigSpec.ConfigValue<Double> ENV_ANALYSIS_SECONDS;
     public static final ModConfigSpec.ConfigValue<Double> DEBUFF_ANALYSIS_SECONDS;
     public static final ModConfigSpec.ConfigValue<Double> DEFENSE_ANALYSIS_SECONDS;
@@ -69,7 +57,6 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Double> EXISTENCE_PROXIMITY_BLOCKS;
     public static final ModConfigSpec.ConfigValue<Double> FALL_ANALYSIS_SECONDS;
 
-    // ---- Module switches ----
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DEFENSE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_OFFENSE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_ENVIRONMENT;
@@ -85,13 +72,10 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_AQUATIC;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_IMPACT;
 
-    // ---- Mining scaling ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
 
-    // ---- Combat scaling ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> COOLDOWN_RECOVERY_LEVELS;
 
-    // ---- Fist Mastery (adaptation to breaking) ----
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_ENABLED;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_HARVEST_WITHOUT_TOOL;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> FIST_TIER_COST_MULTIPLIER;
@@ -103,68 +87,54 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_DEFAULT_ON;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_LUCK_ENABLED;
 
-    // ---- Client-side visuals ----
     public static final ModConfigSpec.ConfigValue<Boolean> DARKNESS_LIGHTMAP_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> DARKNESS_LIGHTMAP_FLOOR;
 
-    // ---- Impact Mastery stomp ----
     public static final ModConfigSpec.ConfigValue<Double> IMPACT_STOMP_MIN_FALL;
     public static final ModConfigSpec.ConfigValue<Double> IMPACT_STOMP_DAMAGE_PER_BLOCK;
     public static final ModConfigSpec.ConfigValue<Double> IMPACT_STOMP_RADIUS;
 
-    // ---- Aquatic Mastery ----
     public static final ModConfigSpec.ConfigValue<Double> AQUATIC_SWIM_SPEED_BONUS;
 
-    // ---- Skill Issue (ranged homing) ----
     public static final ModConfigSpec.ConfigValue<Boolean> SKILL_ISSUE_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_RADIUS;
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_STRENGTH;
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_MAX_DISTANCE;
 
-    // ---- Dimension Destroy (transcendence ultimate) ----
     public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_DESTROY_ENABLED;
     public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_DESTROY_REQUIRED;
 
-    // ---- Contact immunity ----
     public static final ModConfigSpec.ConfigValue<Integer> CONTACT_IMMUNITY_LEVEL;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> CONTACT_PROTECTION_LEVELS;
 
-    // ---- Shortcuts ----
     public static final ModConfigSpec.ConfigValue<Boolean> INSTANT_STARVE;
     public static final ModConfigSpec.ConfigValue<Boolean> RAPID_FALL_ANALYSIS;
     public static final ModConfigSpec.ConfigValue<Integer> VOICE_VOLUME;
 
-    // ---- Defense scaling tables ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_REDUCTION_LEVELS;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_HEAL_RATIO_LEVELS;
 
-    // ---- Regeneration ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> REGEN_SPEED_LEVELS;
     public static final ModConfigSpec.ConfigValue<Double> REGEN_HP_THRESHOLD;
     public static final ModConfigSpec.ConfigValue<Boolean> THERMAL_REGEN_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> THERMAL_REGEN_HP_PER_SECOND;
 
-    // ---- Offense scaling tables ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> OFFENSE_DAMAGE_LEVELS;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> OFFENSE_CRIT_LEVELS;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> OFFENSE_ARMOR_PEN_LEVELS;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_SLASH_HP_PERCENT;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_SLASH_CHANCE;
 
-    // ---- Loot scaling tables ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> LOOT_BONUS_LEVELS;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> LOOT_KILL_THRESHOLDS;
 
-    // ---- Cumulative bonuses per completed adaptation ----
     public static final ModConfigSpec.ConfigValue<Double> BONUS_DAMAGE_PCT;
     public static final ModConfigSpec.ConfigValue<Double> BONUS_CRIT_PCT;
     public static final ModConfigSpec.ConfigValue<Double> BONUS_HP_PCT;
     public static final ModConfigSpec.ConfigValue<Double> BONUS_ARMOR_FLAT;
 
-    // ---- Existence reflection ----
     public static final ModConfigSpec.ConfigValue<Double> EXISTENCE_REFLECT_MULTIPLIER;
 
-    // ---- Client-side ----
     public static final ModConfigSpec.ConfigValue<Boolean> HUD_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> HUD_SCALE;
     public static final ModConfigSpec.ConfigValue<Integer> HUD_OFFSET_X;
@@ -602,14 +572,6 @@ public final class AdaptionConfig {
         CLIENT_SPEC = c.build();
     }
 
-    /**
-     * Per-tier cost multiplier, repaired when the user's list is the wrong length.
-     *
-     * <p>{@code defineList} takes only an <em>element</em> validator — there is no length
-     * validator overload — so a stale list from an older material count is accepted and kept
-     * forever. Tier 0 still reads entry 0, but every later tier would read the wrong multiplier,
-     * so the size is checked here and the default restored once.</p>
-     */
     public static double fistTierCost(int tier) {
         List<? extends Double> configured = FIST_TIER_COST_MULTIPLIER.get();
         if (configured.size() != ru.adaptionwheel.category.FistTiers.TIER_COUNT) {
@@ -628,7 +590,6 @@ public final class AdaptionConfig {
         FIST_TIER_COST_MULTIPLIER.set(doubleList(DEFAULT_FIST_TIER_COST));
     }
 
-    /** Blocks of the current tier's material needed to go from {@code currentLevel} to the next. */
     public static int fistBlocksForNextLevel(int tier, int currentLevel) {
         double base = Math.max(1, FIST_FIRST_LEVEL_BLOCKS.get());
         double growth = Math.max(1.0, FIST_LEVEL_COST_GROWTH.get());
@@ -652,12 +613,10 @@ public final class AdaptionConfig {
         return table(CONTACT_PROTECTION_LEVELS, level, DEFENSE_REDUCTION);
     }
 
-    /** Mining speed bonus % for Mine_Labor level (0 at level 0). */
     public static double miningSpeedBonus(int level) {
         return table(MINING_SPEED_LEVELS, level, new double[]{15, 30, 50, 75, 105, 140, 185, 240});
     }
 
-    /** Attack-cooldown penalty removal % for Combat_Cooldown level (0 at level 0). */
     public static double cooldownRecovery(int level) {
         return table(COOLDOWN_RECOVERY_LEVELS, level, new double[]{25, 42, 56, 70, 82, 91, 97, 100});
     }
@@ -690,7 +649,6 @@ public final class AdaptionConfig {
         return table(LOOT_KILL_THRESHOLDS, level, DROP_RATE_KILLS);
     }
 
-    /** Drop level (0-8) for a given kill count using the configured thresholds. */
     public static int dropLevelFromKills(int kills) {
         int level = 0;
         for (int lv = 1; lv <= 8; lv++) {
@@ -701,7 +659,6 @@ public final class AdaptionConfig {
         return level;
     }
 
-    /** Level is 1-based; clamps to the 8-entry table. */
     private static double table(ModConfigSpec.ConfigValue<List<? extends Double>> config, int level, double[] fallback) {
         if (level < 1) {
             return 0;

@@ -69,10 +69,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Server-side adaptation logic.
- * Adaptations are stored on the Wheel ITEM (via Data Component), not on the player.
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public class AdaptionEvents {
 
@@ -87,28 +83,19 @@ public class AdaptionEvents {
     private static final Identifier AQUATIC_SWIM_EFFICIENCY_MODIFIER =
             Identifier.fromNamespaceAndPath("adaptionwheel", "aquatic_swim_efficiency");
 
-    /** Health fraction at the moment of death; restored (scaled) once the wheel is worn again. */
     private static final Map<UUID, Float> PENDING_RESPAWN_HEALTH = new HashMap<>();
     private static final Set<UUID> PENDING_RESPAWN_ARMED = new HashSet<>();
 
-    /** XP levels charged for the anvil upgrade wooden wheel + gold ingot -> Mahoraga Wheel. */
     private static final long WHEEL_GOLD_COST = 10L;
 
-    /**
-     * Per-tick memo for the Curios slot scan. The curios inventory query walks the
-     * player's slot inventories and is by far the most expensive check in the hot
-     * tick path; entries are valid only for the exact tick they were computed in,
-     * so equipment changes are still noticed on the very next tick.
-     */
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("AdaptionWheel/Events");
 
     private static final Map<UUID, Long> DIMENSION_SLASH_LAST = new HashMap<>();
     private static final int DIMENSION_SLASH_COOLDOWN_TICKS = 20;
     private static final Map<UUID, long[]> WEARING_CACHE = new HashMap<>();
 
-    /** Ticks a wheel mismatch has to persist before it counts as a real wheel swap. */
     private static final int WHEEL_SWAP_CONFIRM_TICKS = 5;
-    /** Minimum ticks between two "wheel swapped" log lines, so a broken lookup can never spam the log. */
+
     private static final int WHEEL_SWAP_LOG_INTERVAL = 100;
     private static int lastWheelSwapLog = -WHEEL_SWAP_LOG_INTERVAL;
 
@@ -126,17 +113,14 @@ public class AdaptionEvents {
         return wearing;
     }
 
-    /** Public per-tick-cached check for other server subsystems (movement triggers, commands, API). */
     public static boolean isWearingWheel(Player player) {
         return wearingWheel(player);
     }
 
-    /** Public access to a player's runtime adaptation data (server side only). */
     public static PlayerAdaption dataOf(ServerPlayer player) {
         return data(player);
     }
 
-    /** Leveled-concept lookup for cross-side helpers; 0 unless the wheel is worn. */
     public static int conceptLevel(Player player, String concept) {
         if (!(player instanceof ServerPlayer serverPlayer) || !wearingWheel(serverPlayer)) {
             return 0;
@@ -152,7 +136,6 @@ public class AdaptionEvents {
         return player.getData(ru.adaptionwheel.data.AttachmentTypes.ADAPTION);
     }
 
-    /** Server-side adaptation check for common code (mixins). */
     public static boolean hasAdaptation(Player player, String concept) {
         if (!(player instanceof ServerPlayer serverPlayer) || !wearingWheel(serverPlayer)) {
             return false;
@@ -164,15 +147,6 @@ public class AdaptionEvents {
         getWheelStack(player).ifPresent(stack -> saveToStack(stack, data));
     }
 
-    /**
-     * Writes the player's adaptations onto a wheel stack.
-     *
-     * <p>Public because the Domain Stone hands the wheel to the player through a menu slot rather
-     * than through the Curios slot, so at the moment of a purchase {@code getWheelStack} is
-     * answering about a different item than the one being fed. The attachment stays the source of
-     * truth — this only makes the stack the player is holding reflect it immediately instead of at
-     * the next one-second tick.</p>
-     */
     public static void saveToStack(ItemStack stack, PlayerAdaption data) {
         stack.set(ModDataComponents.WHEEL_DATA.get(), WheelData.fromPlayer(data));
     }
@@ -189,21 +163,11 @@ public class AdaptionEvents {
         return key != null ? key.toString() : type.toShortString();
     }
 
-    /**
-     * Entity path for concept keys, unwrapping multi-part bodies (Ender Dragon,
-     * Chaos Guardian) and projectile owners so hits on a part count for the boss.
-     */
     private static String pathOf(LivingEntity target) {
         LivingEntity root = BossHelper.resolveLiving(target);
         return root != null ? entityPath(root.getType()) : entityPath(target.getType());
     }
 
-    /**
-     * Returns the adapted existence path matching this damage source, or null.
-     * Covers vanilla bosses resolved through {@link BossHelper} and — when the
-     * Chaos Guardian compat is enabled — its withers/crystals/projectiles which
-     * all inherit from the guardian's existence adaptation.
-     */
     private static String adaptedExistenceTarget(PlayerAdaption data, DamageSource source) {
         LivingEntity boss = BossHelper.resolveBossFromSource(source);
         if (boss != null) {
@@ -220,19 +184,11 @@ public class AdaptionEvents {
         return null;
     }
 
-    // ================= FULL IMMUNITY (prevents red flash) =================
-
-    /**
-     * LivingAttackEvent fires BEFORE hurtTime is set (no red flash).
-     * We cancel the attack entirely for fully-immune sources so the player
-     * never visually flinches or turns red.
-     */
     @SubscribeEvent
     public static void onAttack(LivingIncomingDamageEvent event) {
         if (event.getEntity() instanceof ServerPlayer player
                 && SynergyEffects.tryAbsorbVoid(player, event.getSource())) {
-            // Unmaker: the void heals instead of hurting. Cancelled at the very top of hurt(),
-            // because anything cancelled later is undone by the reduction that follows it.
+
             event.setCanceled(true);
             return;
         }
@@ -242,7 +198,6 @@ public class AdaptionEvents {
         DamageSource source = event.getSource();
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        // Environment immunities (no red flash)
         if (category == AdaptionCategory.FALL && data.isAdapted(Concepts.ENV_FALL)) {
             event.setCanceled(true); return;
         }
@@ -265,7 +220,6 @@ public class AdaptionEvents {
             event.setCanceled(true); return;
         }
 
-        // Contact immunity (configurable level, default 0 = off)
         int immunityLevel = AdaptionConfig.CONTACT_IMMUNITY_LEVEL.get();
         if (immunityLevel > 0) {
             Entity direct = source.getDirectEntity();
@@ -278,14 +232,10 @@ public class AdaptionEvents {
             }
         }
 
-        // Existence adaptation: full immunity to the boss AND its projectiles/attacks (no red flash).
-        // Chaos Guardian minions (withers/crystals) inherit the guardian's existence adaptation.
         if (adaptedExistenceTarget(data, source) != null) {
             event.setCanceled(true);
         }
     }
-
-    // ================= DAMAGE TAKEN =================
 
     @SubscribeEvent
     public static void onDamage(LivingDamageEvent.Pre event) {
@@ -294,7 +244,6 @@ public class AdaptionEvents {
         float original = event.getOriginalDamage();
         float newDamage = event.getNewDamage();
 
-        // ---- Offense: the player is the attacker ----
         Entity attackerEntity = source.getEntity();
         if (attackerEntity instanceof ServerPlayer attacker
                 && event.getEntity() instanceof LivingEntity target
@@ -303,12 +252,9 @@ public class AdaptionEvents {
             applyOffense(attacker, target, event);
         }
 
-        // ---- Defense: the player is the victim ----
         if (!(event.getEntity() instanceof ServerPlayer player) || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
 
-        // Existence reflection: attacks from adapted bosses are reflected back.
-        // Guardian withers/crystals/projectiles count as the guardian itself here.
         String reflectedBoss = adaptedExistenceTarget(data, source);
         if (reflectedBoss != null) {
             Entity reflectSource = source.getDirectEntity() != null ? source.getDirectEntity() : source.getEntity();
@@ -323,7 +269,6 @@ public class AdaptionEvents {
 
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        // ---- Full immunity once the hazard is adapted ----
         if (category == AdaptionCategory.FALL && data.isAdapted(Concepts.ENV_FALL)) {
             event.setNewDamage(0); return;
         }
@@ -370,13 +315,12 @@ public class AdaptionEvents {
             }
         }
 
-        // ---- Damage reduction from every applicable adapted concept ----
         float reduction = 0f;
         for (String concept : concepts) {
             int level = data.level(concept);
             if (level > 0) {
                 if (concept.startsWith("Contact_")) {
-                    // Contact: use the dedicated contact protection table
+
                     reduction = Math.max(reduction, (float) (AdaptionConfig.contactProtection(level) / 100.0));
                 } else {
                     reduction += (float) (AdaptionConfig.defenseReduction(level) / 100.0);
@@ -389,13 +333,9 @@ public class AdaptionEvents {
             newDamage = event.getNewDamage();
         }
 
-        // Gravebloom: a quarter of what actually landed goes back into whatever did it. Placed
-        // after the reduction, so the returned share is of real damage rather than of the
-        // pre-mitigation number.
         SynergyEffects.onHurtTaken(player, event.getSource().getEntity() instanceof LivingEntity attacker
                 ? attacker : null, newDamage);
 
-        // ---- Healing on hit at level 5+ ----
         int bestLevel = 0;
         for (String concept : concepts) {
             bestLevel = Math.max(bestLevel, data.level(concept));
@@ -410,7 +350,6 @@ public class AdaptionEvents {
             player.setInvulnerableTime(Math.max(player.getInvulnerableTime(), 120));
         }
 
-        // ---- Start / accelerate analysis tasks ----
         if (AdaptionConfig.ENABLE_DEFENSE.get()) {
             if (!envCategory) {
                 startOrAccelerate(player, data, Concepts.type(category),
@@ -421,13 +360,12 @@ public class AdaptionEvents {
                         (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
             }
         }
-        // Perception: every hit on the wearer trains a steady gaze (no hurt-cam shake).
+
         if (AdaptionConfig.ENABLE_PERCEPTION.get()) {
             startOrAccelerate(player, data, Concepts.PERCEP_STEADY_GAZE,
                     (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
         }
 
-        // ---- Environment tasks triggered by damage ----
         if (AdaptionConfig.ENABLE_ENVIRONMENT.get()) {
             if (category == AdaptionCategory.FALL) {
                 double fallTime = AdaptionConfig.RAPID_FALL_ANALYSIS.get()
@@ -465,20 +403,12 @@ public class AdaptionEvents {
             }
         }
 
-        // ---- Adversity: survive a lethal hit ----
         if (tryAdversitySurvival(player, data, newDamage)) {
-            // The helper already wrote the reduced health directly;
-            // cancel what's left of this hit so vanilla doesn't apply it twice.
+
             event.setNewDamage(0f);
         }
     }
 
-    /**
-     * Adversity: when a hit would kill the wearer and the mechanism is off cooldown,
-     * survive at 30 HP below the blow and start a 24 second mass analysis.
-     *
-     * @return true when the adversity trigger fired (damage was rewritten).
-     */
     private static boolean tryAdversitySurvival(ServerPlayer player, PlayerAdaption data, float damage) {
         if (!AdaptionConfig.ENABLE_ADVERSITY.get()
                 || player.isCreative()
@@ -486,14 +416,12 @@ public class AdaptionEvents {
                 || damage < player.getHealth()) {
             return false;
         }
-        // Survive "30 HP below the blow", but never below 1 HP — with the vanilla
-        // 20-point pool the old unclamped math (20 - 30 -> 0) meant guaranteed death
-        // on the very first lethal hit, so the mechanic never fired for most wearers.
+
         player.setHealth(Math.max(1f, player.getHealth() - 30f));
         data.adversityActive = true;
-        data.adversityTimer = 480; // 24 seconds analysis
+        data.adversityTimer = 480;
         player.setInvulnerableTime(60);
-        // Totem-style burst in front of the player's face.
+
         if (player.level() instanceof ServerLevel serverLevel) {
             var random = player.getRandom();
             double ex = player.getX(), ey = player.getEyeY(), ez = player.getZ();
@@ -505,26 +433,13 @@ public class AdaptionEvents {
                         0, dx * 0.35, (random.nextDouble() - 0.5) * 0.1, dz * 0.35, 1.0);
             }
         }
-        // Immediate sync so the client's face-flash/overlay starts on the trigger tick.
+
         sync(player, data, true);
         player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adversity")
                 .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD));
         return true;
     }
 
-    // ================= DIRECT HEALTH WRITES (Chaos Guardian laser) =================
-
-    /**
-     * Handles the Chaos Guardian's fully charged laser, which applies damage by
-     * calling {@code setHealth} directly — no NeoForge damage event fires for it.
-     * Invoked from {@code GuardianLaserMixin} via {@link GuardianDirectDamage}.
-     *
-     * Everything that is not a health REDUCTION on a wheel-wearing player passes
-     * through untouched. For an adapted player the hit is nullified entirely; for
-     * everyone else the same reduction tables as the normal pipeline apply
-     * (the laser damage type is tagged {@code is_explosion}, plus the guardian's
-     * contact protection), including Adversity survival.
-     */
     public static void handleDirectHealthReduction(LivingEntity target, float newHealth) {
         float current = target.getHealth();
         if (!(target instanceof ServerPlayer player) || player.level().isClientSide() || newHealth >= current) {
@@ -539,7 +454,6 @@ public class AdaptionEvents {
         PlayerAdaption data = data(player);
         boolean existenceEnabled = AdaptionConfig.ENABLE_EXISTENCE.get();
 
-        // Adapted to the guardian's existence: the beam does nothing at all.
         if (existenceEnabled && data.existenceAdapted.contains(DraconicCompat.GUARDIAN_ID)) {
             return;
         }
@@ -550,7 +464,6 @@ public class AdaptionEvents {
 
         float raw = current - newHealth;
 
-        // The bypassing hit still counts as guardian combat and feeds analysis tasks.
         if (existenceEnabled) {
             noteBossEncounter(data, DraconicCompat.GUARDIAN_ID);
         }
@@ -558,7 +471,6 @@ public class AdaptionEvents {
         startOrAccelerate(player, data, Concepts.type(AdaptionCategory.EXPLOSION), defenseTicks, true);
         startOrAccelerate(player, data, Concepts.contact(DraconicCompat.GUARDIAN_ID), defenseTicks, true);
 
-        // During adversity (or its cooldown) the wearer is deliberately vulnerable.
         if (data.adversityActive || data.adversityCooldownTimer > 0) {
             target.setHealth(Math.max(current - raw, 0f));
             return;
@@ -588,13 +500,13 @@ public class AdaptionEvents {
 
         float resulting = current - applied;
         if (resulting <= 0f && tryAdversitySurvival(player, data, applied)) {
-            return; // survived through adversity — health already written by the helper
+            return;
         }
         target.setHealth(Math.max(resulting, 0f));
     }
 
     private static void reflectAttack(ServerPlayer player, Entity direct, float damage) {
-        // Find the actual source entity to reflect damage back to
+
         Entity reflectTarget = direct;
         if (direct instanceof Projectile projectile && projectile.getOwner() != null) {
             reflectTarget = projectile.getOwner();
@@ -602,14 +514,12 @@ public class AdaptionEvents {
         if (reflectTarget instanceof LivingEntity living && reflectTarget != player) {
             float multiplier = (float) (double) AdaptionConfig.EXISTENCE_REFLECT_MULTIPLIER.get();
             living.hurt(player.damageSources().playerAttack(player), damage * multiplier);
-            // Push the attacker away from the wearer, like the original mod's contact reflection.
+
             living.knockback(1.2, player.getX() - living.getX(), player.getZ() - living.getZ(),
                     player.damageSources().playerAttack(player), damage * multiplier);
             player.setInvulnerableTime(Math.max(player.getInvulnerableTime(), 10));
         }
     }
-
-    // ================= OFFENSE =================
 
     private static boolean claimDimensionSlash(ServerPlayer attacker) {
         long now = attacker.level().getGameTime();
@@ -623,16 +533,14 @@ public class AdaptionEvents {
 
     private static void applyOffense(ServerPlayer attacker, LivingEntity target, LivingDamageEvent.Pre event) {
         PlayerAdaption data = data(attacker);
-        // Unwrap multi-part bodies so hits on a Chaos Guardian part count for the guardian.
+
         String path = pathOf(target);
         String concept = Concepts.offense(path);
         int level = data.level(concept);
         float damage = event.getNewDamage();
 
         if (level > 0) {
-            // flatDamageBonus is documented as a FLAT add, so add it. The old form was
-            // `damage * max(1, bonus / 10)`, which clamped every level below 7 to a x1.0
-            // multiplier -- i.e. no bonus at all -- and turned 7-8 into a multiplier.
+
             float base = damage + (float) AdaptionConfig.offenseDamageBonus(level);
             double armor = target.getArmorValue();
             base += (float) (armor * (AdaptionConfig.offenseArmorPen(level) / 100.0));
@@ -643,14 +551,8 @@ public class AdaptionEvents {
             base *= (float) (1.0 + data.getAdaptCount() * AdaptionConfig.BONUS_DAMAGE_PCT.get() / 100.0);
             event.setNewDamage(base);
 
-            // Ashwalker / Glacierblood / Stormcall. After the offence maths has settled, so the
-            // bonuses ride the final damage instead of a pre-reduction estimate.
             SynergyEffects.onHit(attacker, target, event.getSource());
 
-
-            // A Dimension Slash is itself a playerAttack, so it re-enters applyOffense and
-            // re-rolls the same chance. It is deferred via server.execute, so a durable boss
-            // could chain slashes without bound. One per second per attacker closes that off.
             if (level >= 8 && attacker.getRandom().nextFloat() * 100f
                     < AdaptionConfig.DIMENSION_SLASH_CHANCE.get()
                     && claimDimensionSlash(attacker)) {
@@ -681,8 +583,6 @@ public class AdaptionEvents {
         }
     }
 
-    // ================= DROP ADAPTATION =================
-
     private static ServerPlayer killerOf(DamageSource source) {
         Entity attacker = source.getEntity();
         if (attacker instanceof ServerPlayer sp) return sp;
@@ -709,7 +609,6 @@ public class AdaptionEvents {
         }
     }
 
-    /** Drop-rate adaptation also multiplies the experience a killed mob grants. */
     @SubscribeEvent
     public static void onExperienceDrop(net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent event) {
         if (event.getEntity().level().isClientSide()) return;
@@ -760,7 +659,7 @@ public class AdaptionEvents {
 
         ServerLevel serverLevel = (ServerLevel) dead.level();
         DamageSource source = event.getSource();
-        // 26.x: loot tables are optional per entity; nothing to roll without one.
+
         java.util.Optional<net.minecraft.resources.ResourceKey<net.minecraft.world.level.storage.loot.LootTable>> lootTable = dead.getLootTable();
         if (lootTable.isEmpty()) return;
         net.minecraft.resources.ResourceKey<net.minecraft.world.level.storage.loot.LootTable> lootTableKey = lootTable.get();
@@ -778,7 +677,6 @@ public class AdaptionEvents {
         builder.withOptionalParameter(LootContextParams.LAST_DAMAGE_PLAYER, player);
         LootParams params = builder.create(LootContextParamSets.ENTITY);
 
-        // Collect already-dropped items as fallback for mobs with empty/no loot tables
         java.util.List<ItemStack> baseDrops = new java.util.ArrayList<>();
         for (ItemEntity ie : event.getDrops()) {
             if (!ie.getItem().isEmpty()) baseDrops.add(ie.getItem().copy());
@@ -805,24 +703,6 @@ public class AdaptionEvents {
         }
     }
 
-    // ================= LOGIN / DEATH =================
-
-    /**
-     * Avoid treating re-login while wearing the wheel as a fresh equip (clears tasks /
-     * reloads stale item data).
-     *
-     * <p>Syncs unconditionally rather than only while wearing. The client mirror is static and
-     * the periodic sync is gated on {@code wearing}, so a world where the player is not wearing
-     * the wheel would otherwise never send anything and the client would keep the previous
-     * world's levels indefinitely — which showed up as a freshly created world opening with
-     * the last world's fist progress bar still on the HUD. One packet on login makes "this
-     * world starts empty" true by construction rather than by the next world happening to wipe
-     * it.</p>
-     *
-     * <p>No client-side check: {@code instanceof ServerPlayer} already guarantees the server
-     * side, and on 26.3 {@code Level.isClientSide} is a private field with no accessor, so the
-     * old {@code player.level().isClientSide} guard no longer compiles here anyway.</p>
-     */
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) {
@@ -845,9 +725,7 @@ public class AdaptionEvents {
         WEARING_CACHE.remove(id);
         NEARBY_BOSS_CACHE.remove(id);
         LAST_VOICE_TICK.remove(id);
-        // Per-session caches owned by the new content. All three are static maps keyed by player
-        // and none of them is adaptation data, so none of it may outlive the session -- a leaked
-        // entry is a permanently buffed offline player or a stone that stays on cooldown.
+
         SynergyEffects.forget(id);
         FistMastery.forget(id);
     }
@@ -856,8 +734,7 @@ public class AdaptionEvents {
     public static void onPlayerDeath(LivingDeathEvent event) {
         if (event.getEntity().level().isClientSide()) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        // Remember the health fraction so a respawn that full-heals into the vanilla
-        // max (before our modifier is re-applied) can be restored once the wheel is worn.
+
         float maxHealth = player.getMaxHealth();
         if (maxHealth > 0f) {
             PENDING_RESPAWN_HEALTH.put(player.getUUID(), player.getHealth() / maxHealth);
@@ -871,9 +748,6 @@ public class AdaptionEvents {
         wipeWheelItem(player, data);
     }
 
-    // ================= TICK =================
-
-    /** Arms the pending health restore for exactly the first tick of the new life. */
     @SubscribeEvent
     public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
         if (PENDING_RESPAWN_HEALTH.containsKey(event.getEntity().getUUID())) {
@@ -887,7 +761,6 @@ public class AdaptionEvents {
         PlayerAdaption data = data(player);
         boolean wearing = wearingWheel(player);
 
-        // ---- Item-bound adaptation: equip/unequip transitions ----
         if (wearing && !data.wasWearing) {
             data.tasks.clear();
             data.bossCombatTicks.clear();
@@ -898,7 +771,7 @@ public class AdaptionEvents {
             loadFromItem(player, data);
         }
         if (!wearing && data.wasWearing) {
-            // Running analyses are canceled on unequip and must NOT persist to the item.
+
             data.tasks.clear();
             data.bossCombatTicks.clear();
             data.equippedStack = null;
@@ -912,17 +785,10 @@ public class AdaptionEvents {
             sync(player, data, false);
         }
 
-        // ---- Detect the equipped wheel being SWAPPED while worn (e.g., cursor-swapping
-        // two wheels in the curios slot): persist onto the old wheel, adopt the new one's data.
         if (wearing && !player.isDeadOrDying()) {
             ItemStack equipped = getWheelStack(player).orElse(null);
             if (equipped != null && data.equippedStack != null) {
-                //NOTE: the ItemStack a Curios slot hands out is NOT identity stable between ticks (its lookup is
-                //cached per game time, so a fresh SlotResult, and with it a fresh stack instance, is produced every
-                //tick). Comparing by reference therefore took the "the wheel was swapped" branch on EVERY tick, which
-                //reset the whole adaptation state and wiped every running analysis, so analyses could never progress
-                //and their triggers restarted them over and over. The stacks are therefore compared by content, and
-                //only a mismatch that survives several ticks counts as a real swap (e.g. cursor swapping two wheels).
+
                 if (ItemStack.isSameItemSameComponents(equipped, data.equippedStack)) {
                     data.wheelSwapMismatchTicks = 0;
                 } else if (++data.wheelSwapMismatchTicks >= WHEEL_SWAP_CONFIRM_TICKS) {
@@ -952,7 +818,6 @@ public class AdaptionEvents {
             return;
         }
 
-        // ---- Adversity state ----
         if (data.adversityCooldownTimer > 0) data.adversityCooldownTimer--;
         if (data.adversityActive) {
             data.adversityTimer--;
@@ -961,13 +826,10 @@ public class AdaptionEvents {
                 data.adversityActive = false;
                 data.adversityCooldownTimer = (int) (AdaptionConfig.ADVERSITY_COOLDOWN_SECONDS.get() * 20);
                 player.heal(player.getMaxHealth());
-                // Tasks present when Adversity started were deliberately frozen for
-                // the whole challenge. Resolve that snapshot now, regardless of how
-                // much time remained on each progress bar.
+
                 completeAllTasks(player, data);
                 grantOneTime(player, data, Concepts.ADVERSITY);
-                // Apply attribute changes immediately instead of waiting for the
-                // next one-second passive-stat refresh.
+
                 applyStats(player, data);
                 playAdaptVoice(player, 1f, 1f);
                 player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adversity_done")
@@ -977,14 +839,12 @@ public class AdaptionEvents {
             data.wheelRotation += 0.2f;
             applyEnvEffects(player, data);
             if (!player.isDeadOrDying()) {
-                // The early return below must not starve the client of live adversity state
-                // (active flag + timer drive the overlay's bar and face-wheel).
+
                 if (finished || player.tickCount % 20 == 0) sync(player, data, true);
             }
             return;
         }
 
-        // ---- Analysis tasks ----
         Iterator<AdaptionTask> it = data.tasks.iterator();
         while (it.hasNext()) {
             AdaptionTask task = it.next();
@@ -995,7 +855,6 @@ public class AdaptionEvents {
             }
         }
 
-        // ---- Environment triggers by state ----
         if (AdaptionConfig.ENABLE_ENVIRONMENT.get()) {
             if (player.isInLava()) {
                 startTask(player, data, Concepts.ENV_LAVA, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
@@ -1006,8 +865,7 @@ public class AdaptionEvents {
             if (player.getAirSupply() <= 0) {
                 startTask(player, data, Concepts.ENV_DROWN, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
-            // Block/light based checks run every 4 ticks: analysis timers are seconds long,
-            // so a 200 ms detection delay costs nothing while saving three scans per tick.
+
             if (player.tickCount % 4 == 0) {
                 if (isInDarkness(player)) {
                     startTask(player, data, Concepts.ENV_DARKNESS, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
@@ -1024,11 +882,9 @@ public class AdaptionEvents {
             }
         }
 
-        // ---- One-time env adaptation effects ----
         applyEnvEffects(player, data);
         applySurfaceEffects(player, data);
 
-        // ---- Mutations: combos of completed adaptations ----
         if (!data.isAdapted(Concepts.MUTATION_THERMAL)
                 && data.level(Concepts.type(AdaptionCategory.FIRE)) >= PlayerAdaption.MAX_LEVEL
                 && data.isAdapted(Concepts.ENV_LAVA)) {
@@ -1051,19 +907,16 @@ public class AdaptionEvents {
             }
         }
 
-        // ---- Transcendence: Dimension Destroy (original mod's ultimate) ----
         if (AdaptionConfig.DIMENSION_DESTROY_ENABLED.get()
                 && !data.isAdapted(Concepts.DIMENSION_DESTROY)
                 && data.getAdaptCount() > AdaptionConfig.DIMENSION_DESTROY_REQUIRED.get()) {
             grantComboMutation(player, data, Concepts.DIMENSION_DESTROY);
         }
 
-        // ---- Wheel particles (port of the original mod's MahoragaWheelLayer dust) ----
         if (AdaptionConfig.ENABLE_WHEEL_PARTICLES.get()) {
             spawnWheelParticles(player, data);
         }
 
-        // ---- Debuffs ----
         if (AdaptionConfig.ENABLE_DEBUFF.get() && !player.getActiveEffects().isEmpty()) {
             for (MobEffectInstance effect : new ArrayList<>(player.getActiveEffects())) {
                 MobEffect mobEffect = effect.getEffect().value();
@@ -1078,7 +931,6 @@ public class AdaptionEvents {
             }
         }
 
-        // ---- Injuries: analysis below HP threshold, then regeneration ----
         double hpPct = AdaptionConfig.REGEN_HP_THRESHOLD.get() / 100.0;
         int injureLevel = data.level(Concepts.SELF_DAMAGE);
         if (player.getHealth() <= player.getMaxHealth() * hpPct) {
@@ -1094,12 +946,10 @@ public class AdaptionEvents {
             }
         }
 
-        // ---- Existence: boss combat accumulation ----
         if (AdaptionConfig.ENABLE_EXISTENCE.get()) {
             accumulateBossCombat(player, data);
         }
 
-        // ---- Wheel rotation animation ----
         if (data.tasks.isEmpty() && !data.adversityActive) {
             float diff = data.targetRotation - data.wheelRotation;
             data.wheelRotation += diff * 0.08f;
@@ -1108,7 +958,6 @@ public class AdaptionEvents {
             data.wheelRotation += 0.2f;
         }
 
-        // ---- Passive stats (guarded no-ops most ticks; a 1 s refresh is plenty) ----
         if (player.tickCount % 20 == 0) {
             applyStats(player, data);
         }
@@ -1118,36 +967,23 @@ public class AdaptionEvents {
         SynergyEffects.refresh(player, data);
         SynergyEffects.tickPassive(player);
 
-        // ---- Sync every second (also persists tasks so a dropped wheel keeps running analyses) ----
         if (player.tickCount % 20 == 0) {
-            // One cube scan, three consumers. The ritual auras, the Resonance rung and the
-            // neighbouring-player count all want the same volume around this player, and
-            // scanning it once per second per wearer is cheap; scanning it three times is not.
+
             RitualAuras.Auras auras = RitualAuras.scan(player);
             if (auras.any()) {
                 RitualAuras.apply(player, data, auras);
             }
             Resonance.tick(player, auras);
-            // Advancement criteria, evaluated against the same state as everything else above.
-            // Polling rather than event-driven, so a login with a deep wheel, a shed, a transfer
-            // and a tier crossing all light up without four separate call sites.
+
             ru.adaptionwheel.advancement.AdaptationTrigger.evaluate(player, data);
-            // saveToItem after the totem acceleration, so an accelerated timer is the one that
-            // gets persisted rather than being overwritten a tick later.
+
             saveToItem(player, data);
             sync(player, data, wearing);
         }
     }
 
-    /**
-     * Vanilla full-heals the respawned player into the VANILLA max health before our
-     * modifier is back, clamping current HP. Restore the death-time fraction (scaled
-     * to the adapted max) once, while the wheel is worn.
-     */
     private static void restorePendingRespawnHealth(ServerPlayer player) {
-        // Exactly the first tick of the new life. Restoring on any later tick would also undo
-        // damage taken in between, and on a tick where applyStats has not run yet the target is
-        // computed from the vanilla max rather than the adapted one.
+
         if (!PENDING_RESPAWN_ARMED.remove(player.getUUID())) {
             return;
         }
@@ -1155,7 +991,7 @@ public class AdaptionEvents {
         if (fraction == null) {
             return;
         }
-        // Re-apply the modifiers first: the target is derived from the adapted max health.
+
         applyStats(player, data(player));
         float max = player.getMaxHealth();
         if (max <= 0f) {
@@ -1167,11 +1003,6 @@ public class AdaptionEvents {
         }
     }
 
-    /**
-     * Accumulate existence progress only for bosses the player has already fought
-     * (first hit dealt or received), while that boss type remains nearby.
-     * A single entity scan per tick feeds every accumulated boss type at once.
-     */
     private static void accumulateBossCombat(ServerPlayer player, PlayerAdaption data) {
         if (data.bossCombatTicks.isEmpty()) return;
         int threshold = (int) (AdaptionConfig.EXISTENCE_REQUIRED_SECONDS.get() * 20);
@@ -1200,11 +1031,6 @@ public class AdaptionEvents {
         data.bossCombatTicks.putIfAbsent(bossPath, 0);
     }
 
-    /**
-     * Per-tick cache of the entity types recognized as bosses around the player.
-     * The scan is the single most expensive existence operation; without the cache
-     * it ran once per tracked boss per tick plus once more inside every sync.
-     */
     private static final class NearbyBossCache {
         long stamp = -1;
         Set<String> paths = Set.of();
@@ -1234,25 +1060,16 @@ public class AdaptionEvents {
         return cache.paths;
     }
 
-    /**
-     * Grant existence adaptation to a boss.
-     * Removes related tasks, sets contact + offense to max, grants one-time existence flag.
-     */
     private static void grantExistenceAdaptation(ServerPlayer player, PlayerAdaption data, String bossPath) {
         String existenceConcept = Concepts.existence(bossPath);
         String contactConcept = Concepts.contact(bossPath);
         String offenseConcept = Concepts.offense(bossPath);
 
-        // Remove running tasks related to this boss (superseded by existence)
         data.tasks.removeIf(t -> t.concept.equals(contactConcept) || t.concept.equals(offenseConcept));
 
-        // Set contact and offense to max level
         data.levels.put(contactConcept, PlayerAdaption.MAX_LEVEL);
         data.levels.put(offenseConcept, PlayerAdaption.MAX_LEVEL);
 
-        // Set max level for the damage type this boss primarily uses
-        // Wither → WITHER, EnderDragon → MAGIC, Warden → MAGIC (sonic_boom),
-        // Chaos Guardian → EXPLOSION + PROJECTILE + FIRE (fireballs, laser, implosion).
         if (bossPath.contains("wither")) {
             data.levels.put(Concepts.type(AdaptionCategory.WITHER), PlayerAdaption.MAX_LEVEL);
         } else if (bossPath.contains("ender_dragon")) {
@@ -1268,7 +1085,6 @@ public class AdaptionEvents {
             data.levels.put(Concepts.type(AdaptionCategory.MOB), PlayerAdaption.MAX_LEVEL);
         }
 
-        // Grant the existence one-time adaptation
         data.adapted.add(existenceConcept);
         data.existenceAdapted.add(bossPath);
 
@@ -1292,17 +1108,10 @@ public class AdaptionEvents {
         return player.level().getMaxLocalRawBrightness(player.blockPosition()) <= 4;
     }
 
-    // ================= MUTATIONS (combo adaptations) =================
-
     private static final int THERMAL_REGEN_INTERVAL_TICKS = 40;
-    /** Per-player cached proximity-heat result; the block scan runs only every 15 ticks. */
+
     private static final Map<UUID, Float> PROXIMITY_HEAT_CACHE = new HashMap<>();
 
-    /**
-     * Grants a combo mutation unlocked by conditions over other completed
-     * adaptations. Pure combo concepts: no new damage type, no immunities —
-     * each mutation carries its own passive ability.
-     */
     public static void grantComboMutation(ServerPlayer player, PlayerAdaption data, String concept) {
         grantOneTime(player, data, concept);
         player.sendSystemMessage(Component.translatable("adaptionwheel.msg.mutation_unlocked",
@@ -1314,7 +1123,6 @@ public class AdaptionEvents {
         sync(player, data, true);
     }
 
-    /** Celebration burst around the wearer, themed per mutation. */
     private static void spawnMutationBurst(ServerPlayer player, String concept) {
         if (!(player.level() instanceof ServerLevel serverLevel)) return;
         var particle = switch (concept) {
@@ -1333,11 +1141,6 @@ public class AdaptionEvents {
         }
     }
 
-    /**
-     * Heat-scaled regeneration. temperatureFactor: 0 normal ambient, ~0.15 hot biome,
-     * ~0.35 near fire/lava/magma, 0.7 on fire, 1.0 in lava. Heals a controlled amount
-     * every THERMAL_REGEN_INTERVAL_TICKS; never at full HP.
-     */
     private static void tickThermalRegeneration(ServerPlayer player, PlayerAdaption data) {
         if (!AdaptionConfig.THERMAL_REGEN_ENABLED.get()) return;
         float factor = thermalFactor(player);
@@ -1365,7 +1168,7 @@ public class AdaptionEvents {
             if (recompute) {
                 PROXIMITY_HEAT_CACHE.put(player.getUUID(), scanProximityHeat(player));
             }
-            // getOrDefault: no autoboxing NPE on the very first ticks before any entry exists.
+
             float proximity = PROXIMITY_HEAT_CACHE.getOrDefault(player.getUUID(), 0f);
             factor = proximity > 0f ? 0.35f : 0f;
             if (factor <= 0f && player.level().getBiome(player.blockPosition()).value().getBaseTemperature() >= 1.5f) {
@@ -1375,12 +1178,6 @@ public class AdaptionEvents {
         return factor;
     }
 
-    /**
-     * Impact Mastery: a hard landing (fall distance above the configured
-     * threshold) detonates into a shockwave that damages and hurls every living
-     * creature around the wearer. The wearer themselves is untouched — they are
-     * already adapted to falls and knockback by the parent adaptations.
-     */
     private static void tickImpactStomp(ServerPlayer player, PlayerAdaption data) {
         boolean grounded = player.onGround();
         float lastFall = data.impactLastFallDistance;
@@ -1409,7 +1206,6 @@ public class AdaptionEvents {
             target.push(away.x / horizontal * 1.2, 0.5, away.z / horizontal * 1.2);
         }
 
-        // Visual ring + low thump so the ability reads as weight, not an explosion.
         double ex = player.getX(), ey = player.getY() + 0.1, ez = player.getZ();
         int steps = Math.max(10, (int) (radius * 6));
         for (int i = 0; i < steps; i++) {
@@ -1423,7 +1219,6 @@ public class AdaptionEvents {
                 SoundSource.PLAYERS, 0.7f, 0.6f);
     }
 
-    /** Cheap 5x4x5 box scan for nearby heat sources (fire blocks, lava, magma). */
     private static float scanProximityHeat(Player player) {
         BlockPos base = player.blockPosition();
         for (BlockPos pos : BlockPos.betweenClosed(base.offset(-2, -1, -2), base.offset(2, 2, 2))) {
@@ -1451,11 +1246,7 @@ public class AdaptionEvents {
                 count, 0, 0.02, 0, 0);
     }
 
-    /**
-     * Sparkles around the floating wheel: sparse idle shimmer that grows with the
-     * adaptation count, dense shimmer plus sparks converging into the wheel while
-     * an analysis is running. Port of MahoragaWheelLayer.cs (dust 228, noGravity).
-     */    private static void spawnWheelParticles(ServerPlayer player, PlayerAdaption data) {
+    private static void spawnWheelParticles(ServerPlayer player, PlayerAdaption data) {
         if (!(player.level() instanceof ServerLevel serverLevel)) return;
         boolean analyzing = !data.tasks.isEmpty();
         var random = player.getRandom();
@@ -1483,8 +1274,7 @@ public class AdaptionEvents {
             double px = cx + Math.cos(angle) * dist;
             double pz = cz + Math.sin(angle) * dist;
             double py = cy + (random.nextDouble() - 0.5) * dist;
-            // CRIT sparks converge into the wheel; FIREWORK renders as a flat
-            // untextured quad and reads as an ugly white square up close.
+
             serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.ENCHANT,
                     px, py, pz, 0,
                     (cx - px) * 0.12, (cy - py) * 0.12, (cz - pz) * 0.12,
@@ -1514,10 +1304,6 @@ public class AdaptionEvents {
         return false;
     }
 
-    /**
-     * Server-side mirror of the client lava-swim correction so both simulations
-     * stay consistent. Cobweb is handled by WebBlockMixin on both sides.
-     */
     private static void applySurfaceEffects(ServerPlayer player, PlayerAdaption data) {
         if (!data.isAdapted(Concepts.ENV_LAVA) || !player.isInLava()) return;
         double waterEff = player.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY)
@@ -1532,7 +1318,6 @@ public class AdaptionEvents {
                 v.z * decayRatio);
     }
 
-    /** Apply all passive env adaptation effects. Called even during adversity. */
     private static void applyEnvEffects(ServerPlayer player, PlayerAdaption data) {
         if (data.isAdapted(Concepts.ENV_DROWN)) {
             player.setAirSupply(player.getMaxAirSupply());
@@ -1540,8 +1325,7 @@ public class AdaptionEvents {
         if (data.isAdapted(Concepts.ENV_LAVA)) {
             player.clearFire();
         }
-        // Re-applying an identical effect every tick spams effect packets; 40 ticks
-        // keeps the duration comfortably topped up at zero visible difference.
+
         if (data.isAdapted(Concepts.ENV_DARKNESS) && player.tickCount % 40 == 0) {
             player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 2400, 0, false, false));
         }
@@ -1552,7 +1336,6 @@ public class AdaptionEvents {
         }
     }
 
-    /** Reset FoodData.exhaustionLevel to 0 via reflection. */
     private static final java.lang.reflect.Field EXHAUSTION_FIELD;
     static {
         java.lang.reflect.Field f = null;
@@ -1578,26 +1361,14 @@ public class AdaptionEvents {
         return key != null ? key.getPath() : "unknown";
     }
 
-    // ================= TASKS =================
-
-    /**
-     * Extra analysis time per already-reached level. Action-fed discomforts
-     * (mining labor, combat rhythm) retrain 3x faster than passive exposure
-     * concepts — each hit/break already feeds the task directly.
-     */
     private static int levelPenaltyTicks(String concept) {
         return concept.startsWith("Mine_") || concept.startsWith("Combat_") ? 60 : 180;
     }
 
-    /** Starts (or keeps) an analysis task; public so trigger subsystems can request analyses. */
     public static void startTask(ServerPlayer player, PlayerAdaption data, String concept, int timer) {
-        // Adversity freezes the tasks that were already running. Do not let a
-        // secondary trigger sneak a new task into the frozen set.
+
         if (data.adversityActive || data.isAdapted(concept) || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
-        // Wheel awakening: a family the wheel has not reached yet cannot be analysed at all.
-        // Placed here rather than at each of the dozen trigger sites because this is the one
-        // place every analysis in the mod goes through, so one check covers all of them — and a
-        // second site is a second chance to forget it.
+
         if (AdaptionConfig.WHEEL_TIERS_ENABLED.get()
                 && !ru.adaptionwheel.category.WheelTier.familyUnlocked(
                         concept, ru.adaptionwheel.category.WheelTier.forCount(data.getAdaptCount()))) {
@@ -1618,7 +1389,6 @@ public class AdaptionEvents {
         sync(player, data, true);
     }
 
-    /** Starts or accelerates an analysis task; public so trigger subsystems can request analyses. */
     public static void startOrAccelerate(ServerPlayer player, PlayerAdaption data, String concept, int baseTicks, boolean accelerate) {
         startOrAccelerate(player, data, concept, baseTicks, accelerate,
                 (int) (AdaptionConfig.DEFENSE_ACCELERATION_SECONDS.get() * 20));
@@ -1626,8 +1396,7 @@ public class AdaptionEvents {
 
     private static void startOrAccelerate(ServerPlayer player, PlayerAdaption data, String concept, int baseTicks,
                                           boolean accelerate, int accelerationTicks) {
-        // Keep both the task list and each timer completely frozen during
-        // Adversity; completion happens atomically when the challenge ends.
+
         if (data.adversityActive || data.isAdapted(concept) || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
         AdaptionTask existing = null;
         for (AdaptionTask task : data.tasks) {
@@ -1635,9 +1404,7 @@ public class AdaptionEvents {
         }
         if (existing == null) {
             if (data.tasks.size() >= AdaptionConfig.MAX_SIMULTANEOUS_ADAPTATIONS.get()) return;
-            // A shed concept re-analyses in a fraction of the time, because the wheel remembers
-            // what it already worked out. Applied here rather than at each trigger because this is
-            // the one place every analysis goes through.
+
             int timer = (int) Math.max(1, Math.round(
                     (baseTicks + data.level(concept) * levelPenaltyTicks(concept))
                             * Shedding.reattachFactor(data, concept)));
@@ -1650,49 +1417,18 @@ public class AdaptionEvents {
         }
     }
 
-    /** Public for the same reason as {@link #sync}: the fist tiers grant levels through it. */
     public static void completeTask(ServerPlayer player, PlayerAdaption data, String concept) {
         completeTaskUpTo(player, data, concept, -1);
     }
 
-    /**
-     * The same ceremony, for a concept bought at a chosen level rather than advanced one step.
-     *
-     * @param targetLevel the level to reach, or {@code -1} to mean "one more than it is now" --
-     *                    which is what an analysis completing means. Ignored for a
-     *                    {@code Drop_NPC_} concept, whose level is derived from its kill count:
-     *                    buying one to eight would leave that counter as decoration.
-     */
     public static void completeTaskUpTo(ServerPlayer player, PlayerAdaption data, String concept,
                                         int targetLevel) {
         applyGrant(player, data, concept, targetLevel);
-        // The tail below only makes sense when `data` IS the player's own state, i.e. the wheel is
-        // being worn. A trade mutates a detached state instead and must not do any of this:
-        // saveToItem would overwrite the WORN wheel with the fed one's, and syncing would push the
-        // fed wheel onto the HUD.
+
         saveToItem(player, data);
         sync(player, data, true);
     }
 
-    /**
-     * Buys an adaptation into a wheel that is being <em>fed</em> rather than worn.
-     *
-     * <p>The mirror image of {@link #completeTaskUpTo}, and it exists because the two answer
-     * different questions. A trade's subject is the stack sitting in the menu's wheel slot, while
-     * the player's attachment belongs to the wheel they took <em>off</em> to put it there — and
-     * unequipping empties that attachment. Granting into the attachment and writing it onto the fed
-     * stack therefore replaces fifty adaptations with the one just bought, which is exactly what it
-     * used to do.</p>
-     *
-     * <p>So the fed wheel gets its own detached state, this writes to that, and nothing here reads
-     * or writes the player's attachment.</p>
-     *
-     * <p>A <b>drop-rate adaptation is paid in kills</b>, not assigned a level. Its level is derived
-     * from a kill count everywhere else in the mod, so setting it directly would leave that counter
-     * lying — a player holding eighth-level loot-luck having killed one chicken. The count is topped
-     * up to whatever the existing table says that level costs, and the existing rule in
-     * {@code applyGrant} turns that into the level. One rule, one table, one number.</p>
-     */
     public static void grantToWheel(ServerPlayer player, PlayerAdaption fed, ItemStack wheel,
                                     String concept, int targetLevel) {
         if (Concepts.isDrop(concept)) {
@@ -1706,13 +1442,6 @@ public class AdaptionEvents {
         saveToStack(wheel, fed);
     }
 
-    /**
-     * The detached adaptation state of a wheel stack.
-     *
-     * <p>The counterpart of {@link #saveToStack}, and the mirror of {@link #loadFromItem}: that one
-     * reads the wheel a player is <em>wearing</em> into their attachment, which is the wrong wheel
-     * at a trading screen.</p>
-     */
     public static PlayerAdaption readFrom(ItemStack stack) {
         PlayerAdaption data = new PlayerAdaption();
         if (stack != null && !stack.isEmpty()) {
@@ -1724,13 +1453,6 @@ public class AdaptionEvents {
         return data;
     }
 
-    /**
-     * Mutates {@code data} and announces the result. Touches nothing else on the player.
-     *
-     * <p>Safe for a detached state, which is the whole point of splitting it out: every
-     * player-facing side effect of a grant lives in the two callers above, so a trade can grant
-     * without claiming that the player is wearing the wheel it just wrote to.</p>
-     */
     private static void applyGrant(ServerPlayer player, PlayerAdaption data, String concept,
                                    int targetLevel) {
         Style style = Style.EMPTY.withColor(TextColor.fromRgb(Concepts.color(concept)));
@@ -1767,7 +1489,6 @@ public class AdaptionEvents {
                 isLevelBased ? data.level(concept) : -1);
     }
 
-    /** Instantly max all adaptations. Requires the Mahoraga Wheel (All Adaption item). */
     public static void grantAllAdaptations(Player player) {
         if (!(player instanceof ServerPlayer serverPlayer)) {
             return;
@@ -1827,9 +1548,7 @@ public class AdaptionEvents {
         data.addHistory(Concepts.MUTATION_AQUATIC);
         data.adapted.add(Concepts.MUTATION_IMPACT);
         data.addHistory(Concepts.MUTATION_IMPACT);
-        // Fist Mastery and its five material tiers. Without the mutation the tiers are inert
-        // (FistMastery.currentTier returns -1), so granting the tiers alone would show a bar
-        // that never fills -- the report was "the fists are not granted after eating the item".
+
         data.adapted.add(Concepts.MUTATION_FIST);
         data.addHistory(Concepts.MUTATION_FIST);
         for (int tier = 0; tier < ru.adaptionwheel.category.FistTiers.TIER_COUNT; tier++) {
@@ -1894,7 +1613,6 @@ public class AdaptionEvents {
         sync(serverPlayer, data, true);
     }
 
-    /** Per-player throttle so stacked completions can't overlap into a wall of sound. */
     private static final Map<UUID, Long> LAST_VOICE_TICK = new HashMap<>();
     private static final int VOICE_COOLDOWN_TICKS = 15;
 
@@ -1902,14 +1620,6 @@ public class AdaptionEvents {
         playSoundThrottled(player, ModSounds.ADAPT_VOICE.get(), pitch, volume);
     }
 
-    /**
-     * Solemn completion voice for a genuinely completed adaptation.
-     *
-     * <p>This intentionally uses the same adaptation voice as an ordinary
-     * completion, only with a lower pitch. Keep one helper for level 8,
-     * existence, combo unlocks, and the All Adaptations consumable so all of
-     * those milestones use the same adaptation sound with a weightier tone.</p>
-     */
     private static void playMaxVoice(ServerPlayer player) {
         playSoundThrottled(player, ModSounds.ADAPT_VOICE.get(), 0.68f, 1.2f);
     }
@@ -1943,9 +1653,6 @@ public class AdaptionEvents {
         saveToItem(player, data);
     }
 
-    // ================= DEBUG SUPPORT (used by /adaptionwheel) =================
-
-    /** Grants a concept surgically (no heal/voice/event): leveled concepts take the given level. */
     public static void debugGrant(ServerPlayer player, String concept, int level) {
         PlayerAdaption d = data(player);
         if (Concepts.isOneTime(concept)) {
@@ -1960,14 +1667,6 @@ public class AdaptionEvents {
         sync(player, d, true);
     }
 
-    /**
-     * Drops a single adaptation: clears the one-time flag or zeroes the level, and tidies up
-     * anything that was counting on it. The counterpart to {@code debugGrant} — without it the
-     * only way to undo a grant was a full {@code reset}, which throws away every other
-     * adaptation too.
-     *
-     * @return {@code true} if something was actually removed.
-     */
     public static boolean debugUngrant(ServerPlayer player, String concept) {
         PlayerAdaption d = data(player);
         boolean had = d.adapted.remove(concept);
@@ -1977,12 +1676,9 @@ public class AdaptionEvents {
         }
         d.invalidateAdaptCount();
         applyStats(player, d);
-        // Recomputing stat modifiers needs the level gone first, and passive effects have to be
-        // re-evaluated or a removed adaptation keeps its night vision for the rest of the window.
+
         applyEnvEffects(player, d);
-        // The fist's stance and block counter are runtime-only state keyed off the mutation; if
-        // the mutation is what went away, they have to go with it or the next unlock starts with
-        // a stale tally.
+
         if (ru.adaptionwheel.category.Concepts.MUTATION_FIST.equals(concept)) {
             FistMastery.forget(player.getUUID());
         }
@@ -1991,16 +1687,6 @@ public class AdaptionEvents {
         return true;
     }
 
-    /** Full wipe of both player attachment and wheel item data. */
-    /**
-     * Clears the wheel's stored data, preferring the stack reference captured while worn.
-     *
-     * <p>{@code getWheelStack} searches the equipment slot, so on a player who is not wearing
-     * the wheel it is always empty and the reset would clear the attachment while leaving every
-     * adaptation sitting on the item -- which all comes back the moment it is re-equipped.
-     * {@code data.equippedStack} is the last stack seen worn, and unlike the slot lookup it is
-     * still valid off-equip.</p>
-     */
     private static void wipeWheelItem(ServerPlayer player, PlayerAdaption data) {
         ItemStack equipped = data.equippedStack;
         if (equipped != null) {
@@ -2019,8 +1705,6 @@ public class AdaptionEvents {
         sync(player, d, false);
     }
 
-    // ================= KNOCKBACK =================
-
     @SubscribeEvent
     public static void onKnockback(LivingKnockBackEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide()) {
@@ -2031,29 +1715,21 @@ public class AdaptionEvents {
         }
         PlayerAdaption data = data(player);
         if (data.isAdapted(Concepts.ENV_KNOCKBACK)) {
-            // Full adaptation: impacts cannot move the wearer at all.
+
             event.setCanceled(true);
         } else if (AdaptionConfig.ENABLE_ENVIRONMENT.get() && !data.adversityActive) {
-            // Being knocked around trains the adaptation (it was previously unobtainable).
+
             startOrAccelerate(player, data, Concepts.ENV_KNOCKBACK,
                     (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
         }
     }
 
-    // ================= DEBUFF IMMUNITY =================
-
-    /**
-     * Env_Liquid: while submerged, vanilla also divides dig speed by 5 when not on
-     * ground (swimming). Cancel that part so adapted players mine underwater at
-     * land parity (the base water penalty is already removed via attribute).
-     */
     @SubscribeEvent
     public static void onBreakSpeed(PlayerEvent.BreakSpeed event) {
         Player player = event.getEntity();
-        // Fist Mastery first: it replaces the bare-hand base speed with the equivalent tool's
-        // speed, so Mine_Labor's trained multiplier has to come after it to compose correctly.
+
         float speed = FistMastery.breakSpeed(player, event.getNewSpeed(), event.getState());
-        // Mine_Labor: trained mining speed bonus (any block, any conditions).
+
         int laborLevel = SurfaceAdaptations.conceptLevel(player, Concepts.MINE_LABOR);
         if (laborLevel > 0 && AdaptionConfig.ENABLE_MINING.get()) {
             speed *= (float) (1.0 + AdaptionConfig.miningSpeedBonus(laborLevel) / 100.0);
@@ -2065,7 +1741,7 @@ public class AdaptionEvents {
         if (SurfaceAdaptations.hasLiquidAdaptation(player) && !player.onGround()) {
             event.setNewSpeed(event.getNewSpeed() * 5f);
         }
-        // Mutation_Aquatic: underwater mining is markedly faster even when grounded.
+
         if (SurfaceAdaptations.hasAquaticMastery(player)) {
             event.setNewSpeed(event.getNewSpeed() * 1.5f);
         }
@@ -2086,16 +1762,6 @@ public class AdaptionEvents {
         }
     }
 
-    // ================= PASSIVE STATS =================
-
-    /**
-     * Announces a wheel awakening the moment it happens.
-     *
-     * <p>Reads the derived tier and compares it with the last announced one, so it fires on the
-     * tick the count crosses a threshold and never again until the next crossing. The threshold
-     * message names the family that just opened, because "you are now tier 3" tells the player
-     * nothing about what to do — "Contact defence is awake" does.</p>
-     */
     private static void announceWheelTier(ServerPlayer player, PlayerAdaption data) {
         if (!AdaptionConfig.WHEEL_TIERS_ENABLED.get() || !ru.adaptionwheel.SurfaceAdaptations.wearingWheel(player)) {
             return;
@@ -2104,8 +1770,7 @@ public class AdaptionEvents {
         if (tier == data.lastTierAnnounced) {
             return;
         }
-        // A wheel swap or a logout brings the marker back to -1 with the data intact, so the
-        // player is re-told their tier. That is wanted, not a repeat: they just put the wheel on.
+
         data.lastTierAnnounced = tier;
         if (tier <= 0) {
             return;
@@ -2128,29 +1793,25 @@ public class AdaptionEvents {
 
     private static void applyStats(ServerPlayer player, PlayerAdaption data) {
         int count = data.getAdaptCount();
-        // Wheel awakening stacks on top of the per-adaptation bonus. Separate rather than folded
-        // into `count` so that a tier is a legible step up in its own right: reaching Resonant
-        // should feel like something, not like quietly owning six more adaptations.
+
         int tier = AdaptionConfig.WHEEL_TIERS_ENABLED.get()
                 ? ru.adaptionwheel.category.WheelTier.forCount(count) : 0;
         double tierBonus = ru.adaptionwheel.category.WheelTier.statBonus(tier);
-        // Permanent (persisted) modifiers: transient ones vanish on logout, letting
-        // the game clamp saved health down to the vanilla max before we re-apply.
+
         applyStat(player.getAttribute(Attributes.MAX_HEALTH), HP_MODIFIER,
                 count * AdaptionConfig.BONUS_HP_PCT.get() / 100.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
         applyStat(player.getAttribute(Attributes.ARMOR), ARMOR_MODIFIER,
                 count * AdaptionConfig.BONUS_ARMOR_FLAT.get(), AttributeModifier.Operation.ADD_VALUE);
-        // Env_Liquid: comfortable swimming slightly BELOW land pace (tuned down per feedback;
-        // Aquatic Mastery on top restores full dolphin-grade speed).
+
         boolean liquid = data.isAdapted(Concepts.ENV_LIQUID);
         applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), SWIM_MODIFIER,
                 liquid ? 0.6 : 0.0, AttributeModifier.Operation.ADD_VALUE);
         applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), LIQUID_SPEED_MODIFIER,
                 liquid ? 1.0 : 0.0, AttributeModifier.Operation.ADD_VALUE);
-        // Env_Liquid: no underwater mining penalty (same mechanism as Aqua Affinity).
+
         applyStat(player.getAttribute(Attributes.SUBMERGED_MINING_SPEED), SUBMERGED_MINING_MODIFIER,
                 liquid ? 0.8 : 0.0, AttributeModifier.Operation.ADD_VALUE);
-        // Mutation_Aquatic: dolphin-grade swimming on top of the liquid baseline.
+
         boolean aquatic = AdaptionConfig.ENABLE_MUTATION_AQUATIC.get() && data.isAdapted(Concepts.MUTATION_AQUATIC);
         applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), AQUATIC_SWIM_SPEED_MODIFIER,
                 aquatic ? AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get() : 0.0, AttributeModifier.Operation.ADD_VALUE);
@@ -2170,8 +1831,6 @@ public class AdaptionEvents {
         }
     }
 
-    // ================= ANVIL =================
-
     @SubscribeEvent
     public static void onAnvilUpdate(AnvilUpdateEvent event) {
         ItemStack left = event.getLeft();
@@ -2186,13 +1845,8 @@ public class AdaptionEvents {
         event.setMaterialCost(1);
     }
 
-    // ================= SYNC =================
-
-    /** Public so progression fed by counters rather than an analysis timer (the fist tiers)
-     *  can reuse the full completion ceremony. */
     public static void sync(ServerPlayer player, PlayerAdaption data, boolean wearing) {
-        // Only send existence progress for bosses that are nearby and not yet adapted.
-        // Reuses the per-tick proximity scan instead of issuing its own entity query.
+
         Map<String, Integer> existenceProgress = null;
         if (AdaptionConfig.ENABLE_EXISTENCE.get() && !data.bossCombatTicks.isEmpty()) {
             Set<String> nearby = nearbyBossPaths(player, data);

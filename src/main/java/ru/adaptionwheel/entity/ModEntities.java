@@ -31,14 +31,6 @@ public class ModEntities {
                     .updateInterval(10)
                     .build(key("spatial_rift")));
 
-    /**
-     * The mod's only mob. Sized like a player so the humanoid model renders correctly, and
-     * deliberately a MONSTER category so it spawns in the dark like one and counts for a beacon.
-     *
-     * <p>Note the {@code key(...)}: 26.3's {@code EntityType.Builder.build} takes a
-     * {@code ResourceKey} rather than a name string, which is why the existing entries here already
-     * do this and a new one that passes a string does not compile.</p>
-     */
     public static final DeferredHolder<EntityType<?>, EntityType<DiscipleEntity>> DISCIPLE =
             ENTITIES.register("disciple", () -> EntityType.Builder.<DiscipleEntity>of(
                             DiscipleEntity::new, MobCategory.MONSTER)

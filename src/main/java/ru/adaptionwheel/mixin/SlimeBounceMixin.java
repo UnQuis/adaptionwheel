@@ -11,14 +11,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import ru.adaptionwheel.SurfaceAdaptations;
 
-/**
- * Env_Slime, bounce half: since 26.x the slime bounce is generic block
- * restitution resolved in {@code Entity.restituteMovementAfterCollisions}
- * through NeoForge's {@code getBlockBounciness(BlockPos, BlockState)}.
- * Adapted players get zero restitution from slime, so they land dead, exactly
- * like the old {@code updateEntityAfterFallOn} cancel; every other bouncy
- * block keeps its vanilla behaviour.
- */
 @Mixin(Entity.class)
 public abstract class SlimeBounceMixin {
 

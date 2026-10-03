@@ -9,7 +9,6 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.server.FistMastery;
 
-/** Client→server: the player flipped the Instabreak stance keybind. */
 public record FistInstabreakPayload(boolean active) implements CustomPacketPayload {
 
     public static final Type<FistInstabreakPayload> TYPE =
@@ -30,8 +29,7 @@ public record FistInstabreakPayload(boolean active) implements CustomPacketPaylo
     }
 
     public static void handle(FistInstabreakPayload payload, ServerPlayer player) {
-        // The server re-validates the unlock before accepting; a rejected toggle is answered
-        // with a fresh sync carrying the authoritative stance.
+
         FistMastery.setInstabreak(player, payload.active());
     }
 }

@@ -9,12 +9,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import ru.adaptionwheel.SurfaceAdaptations;
 
-/**
- * Adaptation to Discomfort — movement domain.
- * Soul sand and honey impose a 0.4x speed factor through the block's
- * {@code getSpeedFactor()}; adapted players walk over them at full pace.
- * The receiver block is captured so each discomfort maps to its own concept.
- */
 @Mixin(Entity.class)
 public abstract class SpeedFactorMixin {
 

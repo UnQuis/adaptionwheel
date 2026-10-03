@@ -5,13 +5,6 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import ru.adaptionwheel.AdaptionWheel;
 
-/**
- * Attribute registration.
- *
- * <p>Its own subscriber for one entry, because the first mob in the mod is not the same as every
- * future mob: the moment a second one appears this is a list again, and putting it in the mod class
- * would mean moving it then.</p>
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public final class ModMobAttributes {
 

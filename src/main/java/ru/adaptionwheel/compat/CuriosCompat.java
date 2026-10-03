@@ -16,30 +16,6 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Optional;
 
-/**
- * Soft Curios integration.
- *
- * <p>Curios has not shipped a Minecraft 26.3 build yet, so the mod must work without it and
- * cannot even compile against its API. This class is the only place that touches Curios, and it
- * does so purely reflectively (resolved once, lazily, only when the {@code curios} mod is
- * loaded). Every public method is a no-op / empty result when Curios is absent or the API
- * shape has changed. Once a 26.3 Curios API artifact exists, {@link Impl} can be replaced by
- * direct calls without touching anything else.</p>
- *
- * <p>API surface used, verified with {@code curios-neoforge-17.0.0-beta.2+26.3.jar} by
- * {@code javap} (Curios 26.x branch, {@code top.theillusivec4.curios.api}):</p>
- * <ul>
- *   <li>{@code CuriosApi.registerCurio(Item, ICurioItem)}</li>
- *   <li>{@code CuriosApi.getCuriosInventory(LivingEntity)} → {@code Optional<ICuriosItemHandler>}</li>
- *   <li>{@code ICuriosItemHandler.findFirstCurio(Item)} → {@code Optional<SlotResult>}</li>
- *   <li>{@code SlotResult.stack()} / {@code SlotContext.identifier()}</li>
- *   <li>{@code ICurioItem.canEquip / canEquipFromUse(SlotContext, ItemStack)} — each with a
- *       one-argument twin on the {@code ICurio} base interface that Curios also calls</li>
- *   <li>{@code ICurio.canUnequip(SlotContext)}, default {@code true}, reached from
- *       {@code CuriosStacksResourceHandler.extract} — i.e. this is the gate that lets a curio be
- *       taken off again, and answering {@code false} welds the item into the slot</li>
- * </ul>
- */
 public final class CuriosCompat {
 
     public static final String MOD_ID = "curios";
@@ -58,33 +34,24 @@ public final class CuriosCompat {
         return loaded;
     }
 
-    /** Registers the wheel as a curio item (call from common setup, on the main thread). */
     public static void registerWheel(Item item) {
         if (isLoaded() && Impl.available()) {
             Impl.register(item);
         }
     }
 
-    /**
-     * Whether Curios is loaded <i>and</i> its API could actually be bound. Callers must use this (not
-     * {@link #isLoaded()}) to decide whether the Curios code path is authoritative, so a drifted Curios
-     * API degrades into the off-hand/inventory fallback instead of making the wheel silently dead.
-     */
     public static boolean isUsable() {
         return isLoaded() && Impl.available();
     }
 
-    /** First stack of the given item found in the entity's Curios slots. */
     public static Optional<ItemStack> findFirst(LivingEntity entity, Item item) {
         return isUsable() ? Impl.findFirst(entity, item) : Optional.empty();
     }
 
-    /** Whether the wheel may be equipped in the given curio slot id. */
     public static boolean isWheelSlot(String slotId) {
         return MahoragaWheelItem.WHEEL_SLOT.equals(slotId);
     }
 
-    /** The value a {@code ICurioItem} method should answer with when we have no opinion about it. */
     private static Object defaultAnswer(Method method) {
         Class<?> type = method.getReturnType();
         if (type == boolean.class) {
@@ -108,14 +75,6 @@ public final class CuriosCompat {
         return type.isInstance(Optional.empty()) ? Optional.empty() : null;
     }
 
-    /**
-     * Whether the wheel may go into the curio slot a {@code SlotContext} names.
-     *
-     * <p>The context is asked for its id reflectively for the same reason as everything else here.
-     * If that call ever fails the answer is {@code false} — <em>no</em> slot — rather than
-     * {@code true}: an item that Curios cannot place is inert, while an item it can place anywhere
-     * quietly stops being a curio at all.
-     */
     private static boolean acceptsSlot(Object slotContext) {
         try {
             return isWheelSlot((String) Impl.slotContextId().invoke(slotContext));
@@ -126,7 +85,6 @@ public final class CuriosCompat {
         }
     }
 
-    /** Reflective binding to the Curios API; resolved on first use. */
     private static final class Impl {
 
         private static final String API = "top.theillusivec4.curios.api.";
@@ -136,13 +94,12 @@ public final class CuriosCompat {
 
         private static Class<?> curioItemInterface;
         private static Class<?> slotContextClass;
-        private static MethodHandle registerCurio;      // (Item, ICurioItem) -> void
-        private static MethodHandle getCuriosInventory; // (LivingEntity) -> Optional<ICuriosItemHandler>
-        private static MethodHandle findFirstCurio;     // (ICuriosItemHandler, Item) -> Optional<SlotResult>
-        private static MethodHandle slotResultStack;    // (SlotResult) -> ItemStack
-        private static MethodHandle slotContextId;      // (SlotContext) -> String
+        private static MethodHandle registerCurio;
+        private static MethodHandle getCuriosInventory;
+        private static MethodHandle findFirstCurio;
+        private static MethodHandle slotResultStack;
+        private static MethodHandle slotContextId;
 
-        /** Handles whose binding failed, and questions already logged, so one message per cause. */
         private static final java.util.Set<String> WARNED = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
         static MethodHandle slotContextId() {
@@ -202,15 +159,6 @@ public final class CuriosCompat {
             selfCheck(curio);
         }
 
-        /**
-         * Asks the freshly built proxy the three questions that decide whether the wheel works at
-         * all, and logs what it answered.
-         *
-         * <p>A reflective proxy that answers wrongly is invisible from the outside — that is how the
-         * wheel could sit in its slot looking perfectly equipped and refuse to come off. Curios
-         * never logs the answers it gets from an {@code ICurioItem}, so the only place the truth
-         * can be seen is here, at the moment the answers are written rather than guessed.
-         */
         private static void selfCheck(Object curio) {
             try {
                 Method canEquip = curioItemInterface.getMethod("canEquip", slotContextClass, ItemStack.class);
@@ -226,7 +174,6 @@ public final class CuriosCompat {
             }
         }
 
-        /** A {@code SlotContext} for a bare slot id — nothing in this class reads anything else off it. */
         private static Object slotContext(String slotId) throws ReflectiveOperationException {
             return slotContextClass.getConstructor(String.class, LivingEntity.class, int.class,
                             boolean.class, boolean.class)
@@ -245,34 +192,13 @@ public final class CuriosCompat {
                 }
                 return Optional.ofNullable((ItemStack) slotResultStack.invoke(result.get()));
             } catch (Throwable t) {
-                //Never swallow this silently: a drifted Curios API looks exactly like "the wheel is not equipped"
+
                 warnOnce("find", "Curios lookup of an equipped item failed, the wheel will fall back to the "
                         + "off-hand/inventory check. Not logged again.", t);
                 return Optional.empty();
             }
         }
 
-        /**
-         * The curio behaviour of the wheel: only the dedicated {@code wheel} slot accepts it, and it
-         * can always be taken back off.
-         *
-         * <p>Everything else is answered by the interface's <em>own</em> default, and that is the
-         * load-bearing part of this class. The override list used to carry {@code canUnequip} and
-         * answer it with {@link #defaultAnswer}, whose synthesized value for a {@code boolean} is
-         * {@code false} — the natural reading of "no opinion". Curios reads that as
-         * <em>this item may never be removed</em>: the removal path is
-         * {@code CuriosStacksResourceHandler.extract → ICurio.canUnequip(SlotContext)}, so the wheel
-         * was welded into its slot and could not be taken off by any means. It failed silently,
-         * because a proxy that answers {@code false} is indistinguishable from a proxy that answers
-         * correctly about a slot the item does not belong in.
-         *
-         * <p>Two rules come out of that, and they are the only rules: <b>a permission is answered
-         * with the permission's real default, never with a guess</b>, and <b>a method this class
-         * has no opinion about is asked of the interface rather than invented</b>. The names are
-         * matched without their arity on purpose — {@code ICurio.canEquip(SlotContext)} and
-         * {@code ICurioItem.canEquip(SlotContext, ItemStack)} are the same question asked twice, and
-         * the slot is the first argument of both.
-         */
         private static final class WheelCurioHandler implements InvocationHandler {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -281,8 +207,7 @@ public final class CuriosCompat {
                     case "canEquip", "canEquipFromUse" -> {
                         return a.length > 0 && acceptsSlot(a[0]);
                     }
-                    //Curios' own default, and the one answer that must never be guessed at: `false`
-                    //means "this can never come off". See the class comment.
+
                     case "canUnequip" -> {
                         return Boolean.TRUE;
                     }
@@ -299,9 +224,7 @@ public final class CuriosCompat {
                         if (method.isDefault()) {
                             return InvocationHandler.invokeDefault(proxy, method, args);
                         }
-                        //A method with no default in this Curios version is one this class cannot
-                        //have an opinion about, and a guess is exactly how canUnequip broke. Name it
-                        //in the log once instead of answering in silence.
+
                         warnOnce("method:" + method.getName(), "Curios asked the wheel's curio item for "
                                 + method.getName() + "(), which has no default in this Curios version and no "
                                 + "answer here; answering with the neutral value. Not logged again.", null);

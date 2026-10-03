@@ -9,7 +9,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.adaptionwheel.SurfaceAdaptations;
 
-/** Move_BerryBush: bushes neither snag (slowdown) nor cut (damage) adapted players. */
 @Mixin(SweetBerryBushBlock.class)
 public abstract class BerryBushMixin {
 

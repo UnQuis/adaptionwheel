@@ -33,31 +33,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * What the synergies in {@link Synergies} actually do.
- *
- * <p>Split by where each one has to act, because there is no single place a combination could
- * live: attacks read the set in the damage pipeline, defences in the incoming one, retargeting in
- * {@code LivingSetAttackTargetEvent}, and the two mining synergies at break and drop time.</p>
- *
- * <p>The active set is recomputed once per second from the wearer tick and cached, because it can
- * only change when an adaptation completes — which happens at most once a second — while the damage
- * pipeline asks about it on every single hit.</p>
- *
- * <p>Every one of these is additive. Nothing here can cost the wearer anything, in keeping with the
- * wheel being a promise of omnipotence rather than a ledger.</p>
- */
 public final class SynergyEffects {
 
     private SynergyEffects() {
     }
 
-    // ------------------------------------------------------------------ cache
-
     private static final Map<UUID, Set<String>> ACTIVE = new HashMap<>();
-    /** Guards Stormcall's recursion; the burst clears it on the next server tick. */
+
     private static final Set<UUID> CHAINED = new HashSet<>();
-    /** Per-attacker cooldown so a multi-pass damage pipeline does not re-apply short effects. */
+
     private static final Map<UUID, Long> LAST_ON_FIRE = new HashMap<>();
 
     public static void forget(UUID id) {
@@ -80,18 +64,9 @@ public final class SynergyEffects {
         return active == null ? Set.of() : active;
     }
 
-    // ------------------------------------------------------------------ passive
-
     private static final Identifier WALTZ_SWIM_SPEED =
             Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "synergy_waltz_swim");
 
-    /**
-     * Drowned Waltz: while actually submerged, the air meter stays full and the water gets faster.
-     *
-     * <p>Refilling on the wearer tick rather than cancelling {@code LivingBreatheEvent}: the cancel
-     * fights the vanilla bubble overlay, which then pops anyway, and this produces the same result
-     * with nothing visible at all.</p>
-     */
     public static void tickPassive(ServerPlayer player) {
         double swim = 0.0;
         if (isActive(player, Synergies.DROWNED_WALTZ) && player.isInWater()) {
@@ -101,7 +76,6 @@ public final class SynergyEffects {
         applyStat(player.getAttribute(NeoForgeMod.SWIM_SPEED), WALTZ_SWIM_SPEED, swim);
     }
 
-    /** Skybreaker: the landing shockwave doubles, and arms from half the fall distance. */
     public static double impactRadius(ServerPlayer player, double configured) {
         return isActive(player, Synergies.SKYBREAKER) ? configured * 2.0 : configured;
     }
@@ -110,15 +84,6 @@ public final class SynergyEffects {
         return isActive(player, Synergies.SKYBREAKER) ? configured * 0.5 : configured;
     }
 
-    // ------------------------------------------------------------------ attacking
-
-    /**
-     * Ashwalker, Glacierblood and Stormcall, applied together on a landed hit.
-     *
-     * <p>Rate-limited per attacker per second. The damage pipeline runs more than once per swing
-     * (armour, absorption, resistance each re-enter it), so applying a four-second effect on every
-     * pass would let a single hit light the target up several times over.</p>
-     */
     public static void onHit(ServerPlayer attacker, LivingEntity target, DamageSource source) {
         Set<String> active = ACTIVE.get(attacker.getUUID());
         if (active == null || active.isEmpty() || attacker.level().isClientSide()) {
@@ -130,8 +95,7 @@ public final class SynergyEffects {
             Long last = LAST_ON_FIRE.get(attacker.getUUID());
             if (last == null || now - last >= 20) {
                 LAST_ON_FIRE.put(attacker.getUUID(), now);
-                // setRemainingFireTicks rather than setSecondsOnFire: the latter is on Entity in
-                // some versions and not others, and this one is what the decompile actually has.
+
                 target.setRemainingFireTicks(80);
             }
         }
@@ -143,20 +107,11 @@ public final class SynergyEffects {
         }
     }
 
-    /**
-     * Stormcall: the hit arcs to up to two more mobs nearby.
-     *
-     * <p>Dealt as {@code indirectMagic} rather than {@code playerAttack}, which does two jobs at
-     * once. It is not a playerAttack, so the wearer's own Offense adaptation cannot multiply the
-     * chained hit — otherwise a single strike at full offence would delete everything nearby at
-     * that same multiplier. And it does not re-enter this method's caller, so there is no
-     * recursion to guard; the per-tick set is a second line of defence, not the primary one.</p>
-     */
     private static void chainLightning(ServerPlayer attacker, LivingEntity first, long now) {
         if (!CHAINED.add(attacker.getUUID())) {
             return;
         }
-        // ServerPlayer.server is a private field on 26.3; the level is the way to the same object.
+
         ((ServerLevel) attacker.level()).getServer()
                 .execute(() -> CHAINED.remove(attacker.getUUID()));
         try {
@@ -185,20 +140,6 @@ public final class SynergyEffects {
         }
     }
 
-    // ------------------------------------------------------------------ defending
-
-    /**
-     * Unmaker: void damage heals you instead of hurting you.
-     *
-     * <p>Cancelling the incoming event is deliberate, and is the only place the heal survives: the
-     * ordinary damage reduction runs after this point and would otherwise take it back out. It also
-     * skips every other reduction for that hit, which is what "the void does not touch you" has
-     * to mean if it is to be true rather than nearly true.</p>
-     *
-     * <p>Void is matched through {@link AdaptionCategory}, the mod's existing sixteen-way damage
-     * taxonomy, instead of naming a vanilla damage type — that way a modded void source counts
-     * too, for free.</p>
-     */
     public static boolean tryAbsorbVoid(ServerPlayer player, DamageSource source) {
         if (!isActive(player, Synergies.UNMAKER)) {
             return false;
@@ -210,7 +151,6 @@ public final class SynergyEffects {
         return true;
     }
 
-    /** Gravebloom: part of what a mob does to you goes back into it. */
     public static void onHurtTaken(ServerPlayer player, LivingEntity attacker, float amount) {
         if (amount <= 0 || player.level().isClientSide() || !isActive(player, Synergies.GRAVEBLOOM)) {
             return;
@@ -220,44 +160,16 @@ public final class SynergyEffects {
         }
     }
 
-    /**
-     * Unseen: a mob cannot decide that you are the thing it was looking for.
-     *
-     * <p>Cancelling {@code LivingChangeTargetEvent} is the entire implementation. It is the one
-     * point at which a mob acquires a player target, so cancelling there is both cheaper and more
-     * thorough than any per-tick forgetting distance. A mob that already had you keeps you, which
-     * is what makes this a reward for the pairing rather than an invisibility cloak.</p>
-     *
-     * <p>Only the mob-to-player direction is refused: the event also fires when a player retargets,
-     * and that must keep working.</p>
-     *
-     * @return true when the target acquisition was refused
-     */
     public static boolean refuseTarget(ServerPlayer player, LivingEntity candidate) {
         return isActive(player, Synergies.UNSEEN) && candidate == player;
     }
 
-    // ------------------------------------------------------------------ mining
-
-    /** Astral Mine: breaking a block pays a little back. */
     public static void onBlockBroken(ServerPlayer player, BlockState state) {
         if (isActive(player, Synergies.ASTRAL_MINE)) {
             player.heal(0.5F);
         }
     }
 
-    /**
-     * Goliath: the fist smelts what it breaks.
-     *
-     * <p>An explicit ore-to-ingot table rather than a smelting-recipe lookup. The fist already
-     * knows exactly which materials it works, a recipe lookup drags in
-     * {@code RecipeAccess}/{@code SingleRecipeInput} plumbing that differs between Minecraft
-     * versions, and a list of six ores is something a reader can check at a glance.</p>
-     *
-     * <p>Applied to the drop list, not by replacing the block, so it composes with Fist Luck
-     * instead of fighting it: the ore becomes an ingot and the tier's multiplier then applies to
-     * the ingots.</p>
-     */
     public static void smeltDrops(ServerPlayer player, List<ItemEntity> drops) {
         if (drops.isEmpty() || !isActive(player, Synergies.GOLIATH)) {
             return;
@@ -267,12 +179,12 @@ public final class SynergyEffects {
         for (ItemEntity drop : drops) {
             ItemStack smelted = smeltedResult(drop.getItem());
             if (smelted == null) {
-                return; // anything not in the table: leave the whole drop list alone
+                return;
             }
             if (result == null) {
                 result = smelted;
             } else if (!ItemStack.isSameItemSameComponents(result, smelted)) {
-                return; // mixed drops: smelting would destroy part of them
+                return;
             }
             total += smelted.getCount();
         }
@@ -301,14 +213,6 @@ public final class SynergyEffects {
         return result == null ? null : result.copy();
     }
 
-    // ------------------------------------------------------------------ attribute helper
-
-    /**
-     * Mirrors {@code AdaptionEvents.applyStat}, which is private there.
-     *
-     * <p>Permanent modifier plus a change guard, for the reason that class gives: a transient
-     * modifier vanishes on logout and lets the game clamp saved health back to the vanilla max.</p>
-     */
     private static void applyStat(AttributeInstance attribute, Identifier id, double amount) {
         if (attribute == null) {
             return;

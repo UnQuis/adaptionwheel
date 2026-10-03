@@ -15,12 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Client-side mirror of the server's adaptation state.
- *
- * <p>An event subscriber purely so it can wipe itself on disconnect. The mirror is all static
- * and nothing else resets it, which is the whole bug: see {@link #clear()}.</p>
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class ClientAdaption {
 
@@ -29,10 +23,9 @@ public final class ClientAdaption {
         clear();
     }
 
-    /** Broken-block tally for the fist, pushed immediately on each break by FistProgressPayload. */
     public static int fistProgressDone;
     public static int fistProgressTotal;
-    /** Instabreak stance; a local prediction the server validates. */
+
     public static boolean instabreakActive;
 
     public static boolean wearingWheel;
@@ -45,33 +38,18 @@ public final class ClientAdaption {
     public static final Map<String, Integer> LEVELS = new HashMap<>();
     public static final Set<String> ADAPTED = new HashSet<>();
     public static final List<String> HISTORY = new ArrayList<>();
-    /** Boss path -> accumulated ticks for existence adaptation progress. */
+
     public static final Map<String, Integer> EXISTENCE_PROGRESS = new HashMap<>();
-    /** The tick threshold for existence adaptation completion (from config). */
+
     public static int existenceThreshold;
 
-    /** Game time when the last server sync was received; used for smooth HUD progress. */
     private static long syncedAtGameTime;
-    /** Rising edge of adversityActive: when the current adversity run started (for the face-flash overlay). */
+
     public static long adversityTriggeredAtGameTime = Long.MIN_VALUE;
 
     private ClientAdaption() {
     }
 
-    /**
-     * Wipes the whole mirror back to "no world, no wheel, no adaptations".
-     *
-     * <p>Called on disconnect. Without it the mirror outlives the world it described, because
-     * nothing else ever resets it: the server only pushes a sync while the player is wearing the
-     * wheel, so a world where they are not wearing one sends nothing and the previous world's
-     * levels sit in these static collections indefinitely. The HUD gates on
-     * {@link #wearingWheel}, which was stale-true, so a freshly created world opened with the
-     * previous world's HUD — a fist progress bar for a material the new player has never touched.
-     * That is the report this exists to fix.</p>
-     *
-     * <p>Every mutable field is listed explicitly rather than looped, so a field added later
-     * cannot be quietly forgotten: an unlisted field is the same bug again, one field narrower.</p>
-     */
     public static void clear() {
         wearingWheel = false;
         adversityActive = false;
@@ -122,21 +100,18 @@ public final class ClientAdaption {
         return ADAPTED.contains(concept);
     }
 
-    /** Smooth task progress: advances locally between 1 Hz server syncs. */
     public static float taskProgress(AdaptionTask task) {
         int elapsed = progressElapsedTicks();
         int remaining = Math.max(0, task.timer - elapsed);
         return 1f - (float) remaining / Math.max(1, task.maxTimer);
     }
 
-    /** Smooth adversity countdown progress. */
     public static float adversityProgress() {
         int elapsed = elapsedTicksSinceSync();
         int remaining = Math.max(0, adversityTimer - elapsed);
         return 1f - (float) remaining / 480f;
     }
 
-    /** Adversity ticks remaining, advanced locally between 1 Hz server syncs. */
     public static int smoothedAdversityTimer() {
         return Math.max(0, adversityTimer - elapsedTicksSinceSync());
     }
@@ -145,7 +120,6 @@ public final class ClientAdaption {
         return currentGameTime();
     }
 
-    /** Smooth existence adaptation progress for a boss. */
     public static float existenceProgress(String bossPath) {
         Integer ticks = EXISTENCE_PROGRESS.get(bossPath);
         if (ticks == null || existenceThreshold <= 0) {
@@ -155,7 +129,6 @@ public final class ClientAdaption {
         return Math.min(1f, (float) current / existenceThreshold);
     }
 
-    /** Task and existence progress are both frozen while Adversity is active. */
     private static int progressElapsedTicks() {
         return adversityActive ? 0 : elapsedTicksSinceSync();
     }
@@ -170,11 +143,6 @@ public final class ClientAdaption {
         return mc.level != null ? mc.level.getGameTime() : syncedAtGameTime;
     }
 
-    /**
-     * Highest fist tier reachable, or {@code -1} when locked. Shares one implementation with the
-     * server so the two can never disagree — the client is what accumulates break progress, so a
-     * disagreement makes the player mine at the wrong speed for a whole tier.
-     */
     public static int fistTier() {
         if (!wearingWheel || !ADAPTED.contains(ru.adaptionwheel.category.Concepts.MUTATION_FIST)) {
             return -1;

@@ -10,21 +10,6 @@ import ru.adaptionwheel.SurfaceAdaptations;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
 
-/**
- * Combat_Cooldown — 1.7-style attack recovery.
- *
- * <p>Instead of patching the damage formula, the charge itself recovers faster:
- * right after vanilla's natural {@code attackStrengthTicker++} in
- * {@link Player#tick()}, adapted wearers close {@code cooldownRecoveryPct} of
- * the remaining gap to the weapon's full delay. At MAX the charge is restored
- * within one tick of any hit — no cooldown at all, exactly like pre-1.9 combat,
- * and the crosshair charge indicator shows it.</p>
- *
- * <p>Running inside {@code tick()} on BOTH sides keeps the visible indicator,
- * crit gating and damage math perfectly consistent without touching
- * {@code Player.attack}. The ticker field is declared in {@code LivingEntity},
- * so it is reached through {@link LivingEntityTickerAccessor}.</p>
- */
 @Mixin(Player.class)
 public abstract class AttackCooldownMixin {
 

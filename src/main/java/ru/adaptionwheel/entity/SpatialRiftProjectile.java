@@ -24,17 +24,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Dimension Destroy ("Spatial Rift" in the original mod): a screen-wide rending
- * tear fired by transcended wearers on Sword of Extermination swings.
- *
- * <p>Faithful port of SpatialRift.cs: flies through blocks in a straight line,
- * its collision is the full swept LINE of travel plus a wide visual blade, and
- * it erases at most {@code MAX_TARGETS=5} lives per rift. The kill itself is a
- * direct sever (health to zero + die + kill credit), bypassing armor,
- * resistances and damage caps — the same idiom Re-Avaritia's Infinity Sword
- * uses. Players are never targeted, matching the original NPC-only behavior.</p>
- */
 public class SpatialRiftProjectile extends Projectile {
 
     public static final int LIFETIME_TICKS = 240;
@@ -43,18 +32,17 @@ public class SpatialRiftProjectile extends Projectile {
     private static final EntityDataAccessor<Float> ROLL = SynchedEntityData.defineId(
             SpatialRiftProjectile.class, EntityDataSerializers.FLOAT);
 
-    /** Half-width of the rending blade around the flight line, in blocks. */
     private float bladeHalfWidth = 5f;
 
     private final Set<UUID> severed = new HashSet<>();
-    /** Client-side visual only: recent positions for the procedural tear (oldest first). */
+
     private final ArrayDeque<Vec3> trailPositions = new ArrayDeque<>();
     private Vec3 lastPosition;
     private boolean playedCutSound;
 
     public SpatialRiftProjectile(EntityType<? extends SpatialRiftProjectile> type, Level level) {
         super(type, level);
-        this.noPhysics = true; // tears straight through terrain, like the original
+        this.noPhysics = true;
     }
 
     public SpatialRiftProjectile(Level level, LivingEntity owner, Vec3 velocity, float roll) {
@@ -79,7 +67,6 @@ public class SpatialRiftProjectile extends Projectile {
         return bladeHalfWidth;
     }
 
-    /** Snapshot of the recorded trail positions, oldest first (renderer input). */
     public List<Vec3> getTrailSnapshot() {
         return new ArrayList<>(trailPositions);
     }
@@ -108,7 +95,6 @@ public class SpatialRiftProjectile extends Projectile {
         lastPosition = position();
         setPos(getX() + motion.x, getY() + motion.y, getZ() + motion.z);
 
-        // Sparse space-shred trail so the tear reads as a rip, not a bolt.
         ServerLevel serverLevel = (ServerLevel) level();
         if (random.nextInt(3) == 0) {
             serverLevel.sendParticles(ParticleTypes.ASH,
@@ -122,10 +108,6 @@ public class SpatialRiftProjectile extends Projectile {
         }
     }
 
-    /**
-     * Swept-segment check: everything whose body intersects the line from the
-     * previous position to the current one, inflated by the blade half-width.
-     */
     private void severAlongLine(Vec3 from, Vec3 to) {
         AABB sweep = new AABB(from, to).inflate(bladeHalfWidth);
         for (LivingEntity target : level().getEntitiesOfClass(LivingEntity.class, sweep, this::canSever)) {
@@ -139,7 +121,6 @@ public class SpatialRiftProjectile extends Projectile {
         }
     }
 
-    /** Direct life-sever: health to zero, die with player credit — bypasses every mitigation. */
     private void performSingularitySever(LivingEntity target) {
         if (!(level() instanceof ServerLevel serverLevel)) {
             return;
@@ -169,7 +150,7 @@ public class SpatialRiftProjectile extends Projectile {
 
     private boolean canSever(LivingEntity target) {
         return target.isAlive()
-                && !(target instanceof net.minecraft.world.entity.player.Player) // original severs NPCs only
+                && !(target instanceof net.minecraft.world.entity.player.Player)
                 && target != getOwner()
                 && !severed.contains(target.getUUID());
     }
@@ -178,9 +159,6 @@ public class SpatialRiftProjectile extends Projectile {
     public boolean isNoGravity() {
         return true;
     }
-
-    // Note: the inflated culling box (visual extends far beyond the hitbox) is now
-    // provided by the renderer's getBoundingBoxForCulling override (26.x moved it there).
 
     @Override
     public boolean isAttackable() {

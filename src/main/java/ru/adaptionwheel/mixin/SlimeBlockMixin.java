@@ -12,11 +12,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.adaptionwheel.SurfaceAdaptations;
 
-/**
- * Adapted players walk on slime without the step slowdown. The bounce itself is
- * no longer implemented in {@code SlimeBlock} since 26.x (it is generic block
- * restitution in {@code Entity}); see {@link SlimeBounceMixin} for that half.
- */
 @Mixin(SlimeBlock.class)
 public abstract class SlimeBlockMixin {
 

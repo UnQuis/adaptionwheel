@@ -12,12 +12,6 @@ import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.category.Concepts;
 
-/**
- * Lava swimming for ENV_LAVA: converts vanilla lava dynamics (accel 0.02,
- * horizontal decay x0.5, gravity -g/4) into water dynamics (accel
- * waterEff*swimSpeed-based, decay ~x0.7, gravity -g/16), so adapted players
- * swim in lava exactly as fast as in water. Ice/slime/cobweb are handled by mixins.
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class ClientSurfaceHandler {
 
@@ -37,7 +31,7 @@ public final class ClientSurfaceHandler {
     }
 
     private static void applyLavaSwim(Player player, Vec3 inputDir) {
-        // Water targets, mirroring the water branch of LivingEntity.travel.
+
         double waterEff = player.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY)
                 * (player.onGround() ? 1.0 : 0.5);
         double f4 = player.isSprinting() ? 0.9 : 0.8;
@@ -45,7 +39,6 @@ public final class ClientSurfaceHandler {
         double waterAccel = (0.02 + (player.getSpeed() - 0.02) * waterEff)
                 * player.getAttributeValue(NeoForgeMod.SWIM_SPEED);
 
-        // Convert lava dynamics to water dynamics.
         double decayRatio = waterDecay / 0.5;
         double boost = Math.max(0.0, (waterAccel - 0.02) * waterDecay);
         Vec3 v = player.getDeltaMovement();

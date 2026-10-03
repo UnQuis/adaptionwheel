@@ -30,16 +30,6 @@ public class AdaptionWheel {
 
     public static final String MODID = "adaptionwheel";
 
-    /**
-     * Whether an event is about the named vanilla tab.
-     *
-     * <p>Compared by <em>identifier</em> rather than by key object, and that is the whole point.
-     * {@code ResourceKey} overrides neither {@code equals} nor {@code hashCode}, so two keys for
-     * the same tab are different objects and {@code ==} is identity. A hand-built key is
-     * therefore never equal to the registry's, which is why the Combat branch below had been dead
-     * code for the entire life of the mod: it built its own key and compared it by reference.
-     * Matching on the identifier works regardless of which object the event hands back.</p>
-     */
     private static boolean isTab(ResourceKey<CreativeModeTab> key, String id) {
         return key != null
                 && key.identifier().equals(Identifier.withDefaultNamespace(id));
@@ -57,9 +47,7 @@ public class AdaptionWheel {
                         output.accept(ModItems.MAHORAGA_WHEEL.get());
                         output.accept(ModItems.ALL_ADAPTION.get());
                         output.accept(ModItems.SWORD_OF_EXTERMINATION.get());
-                        // The ritual set, then the mob. In the mod's own tab rather than only in
-                        // the vanilla ones, because this lambda is the one place that is
-                        // guaranteed to run -- see isTab() for why the event handler is not.
+
                         output.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
                         output.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
                         output.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());
@@ -67,27 +55,6 @@ public class AdaptionWheel {
                     })
                     .build());
 
-    /**
-     * Looks a {@link ModConfig.Type} up by name, trying each spelling in order.
-     *
-     * <p>NeoForge renamed {@code ModConfig.Type.SERVER} to {@code SYNCED} (the enum is now
-     * {@code LOCAL / CLIENT / SYNCED / STARTUP}), and a renamed enum constant is a
-     * <em>binary</em> break: {@code NoSuchFieldError} the moment the class is initialised,
-     * before any of the mod's own code runs. Naming the constant in source does not help,
-     * because the reference is compiled in and the launcher does not recompile anything.
-     *
-     * <p>Pinning {@code dependencies.neoforge} to a range that excludes the old spelling
-     * would not fix that either — it only moves the failure from the dependency check to the
-     * constructor, and it makes the mod refuse to load on a perfectly good NeoForge for the
-     * sake of an enum. So no constant is ever referenced directly: a mod that dies in its
-     * constructor over a config file takes the whole game down with it, which is a far worse
-     * outcome than registering the config under the older spelling.
-     *
-     * <p>{@code SERVER} and {@code SYNCED} mean the same thing — a config the server owns and
-     * syncs to clients — so answering with either one is correct. {@code CLIENT} is passed
-     * through the same path for the same reason: it has not been renamed, but it might be, and
-     * the cost of asking by name is one loop iteration.
-     */
     private static ModConfig.Type configType(String... preferredNames) {
         for (String name : preferredNames) {
             for (ModConfig.Type type : ModConfig.Type.values()) {
@@ -111,9 +78,7 @@ public class AdaptionWheel {
         ru.adaptionwheel.effect.ModEffects.EFFECTS.register(modEventBus);
         ru.adaptionwheel.block.ModBlocks.BLOCKS.register(modEventBus);
         ru.adaptionwheel.block.ModBlocks.BLOCK_ITEMS.register(modEventBus);
-        // The entity register must come before the spawn-egg register: 26.3's SpawnEggItem reads
-        // the mob out of the ENTITY_DATA component written at supplier time, so reversing these
-        // two lines makes the boot fail on a missing entity type.
+
         ru.adaptionwheel.entity.ModEntities.ENTITIES.register(modEventBus);
         ru.adaptionwheel.entity.ModSpawnEggs.EGGS.register(modEventBus);
         ru.adaptionwheel.advancement.AdaptationTrigger.TRIGGERS.register(modEventBus);
@@ -134,16 +99,14 @@ public class AdaptionWheel {
         @SubscribeEvent
         public static void onRegisterScreens(
                 net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
-            // One screen, one line. There were three registrations here once, one per block with a
-            // container, and two screen classes that differed in nothing but the title they printed.
+
             event.register(ru.adaptionwheel.menu.ModMenus.RESONANCE_ALTAR_TRADE.get(),
                     ru.adaptionwheel.TradeScreen::new);
         }
 
         @SubscribeEvent
         public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {
-            // Also mirrored into the mod's own tab, which is the reliable one; these are so the
-            // content also sits where a player would look for it.
+
             if (isTab(event.getTabKey(), "functional_blocks")) {
                 event.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
                 event.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());

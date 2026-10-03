@@ -24,17 +24,6 @@ import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.compat.WheelSlots;
 import ru.adaptionwheel.config.AdaptionConfig;
 
-/**
- * Renders the 3D Dharma Chakra above the player's head.
- * The wheel is fixed relative to the world: it only follows the player's position,
- * cancels the body yaw applied by the living renderer, spins around the world Y axis
- * and bobs up and down. No other movement.
- *
- * <p>26.x entity rendering is state-based: the entity is no longer available during
- * rendering, so the "wearing" flag and the world time are sampled into the player's
- * {@link AvatarRenderState} by a render-state modifier and read back in
- * {@link RenderLivingEvent.Post}.</p>
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID,
         value = net.neoforged.api.distmarker.Dist.CLIENT)
 public class WheelRenderer {
@@ -45,10 +34,9 @@ public class WheelRenderer {
     private static final float BOB_AMPLITUDE = 0.06f;
     private static final float BOB_SPEED = 0.08f;
 
-    /** Set on the player's render state when the wheel should be drawn. */
     private static final ContextKey<Boolean> WEARING_WHEEL =
             new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "wearing_wheel"));
-    /** Continuous world time (game time + partial tick) for the spin/bob phase. */
+
     private static final ContextKey<Float> WORLD_TIME =
             new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "world_time"));
 
@@ -63,7 +51,7 @@ public class WheelRenderer {
                 boolean wearing = AdaptionConfig.WHEEL_ABOVE_HEAD.get() && isWearingWheel(player);
                 state.setRenderData(WEARING_WHEEL, wearing ? Boolean.TRUE : null);
                 if (wearing) {
-                    // GameTime instead of tickCount: keeps the spin/bob phase continuous across respawn.
+
                     state.setRenderData(WORLD_TIME, player.level().getGameTime() + state.partialTick);
                 }
             }
@@ -73,7 +61,7 @@ public class WheelRenderer {
     @SubscribeEvent
     public static void render(RenderLivingEvent.Post<?, ?, ?> event) {
         LivingEntityRenderState state = event.getRenderState();
-        // Cheapest check first: this event fires for EVERY rendered living entity.
+
         if (!(state instanceof AvatarRenderState) || !Boolean.TRUE.equals(state.getRenderData(WEARING_WHEEL))) {
             return;
         }
@@ -91,20 +79,14 @@ public class WheelRenderer {
 
         poseStack.pushPose();
 
-        // 1. Position above the head, bobbing up and down
         poseStack.translate(0, height + bob, 0);
 
-        // 2. Cancel the body yaw set up by the living renderer so the wheel stays
-        //    fixed in world space regardless of how the player is turned
         poseStack.rotate(Axis.YP, (float) Math.toRadians(-state.bodyRot));
 
-        // 3. Continuous spin around the world Y axis
         poseStack.rotate(Axis.YP, time * SPIN_RADS_PER_TICK);
 
-        // 4. Scale to match configured wheel size
         poseStack.scale(scale, scale, scale);
 
-        // 5. Submit the 3D model with fullbright lighting
         collector.submitModelPart(rootPart, poseStack,
                 RenderTypes.entityCutout(DharmaChakraModel.TEXTURE),
                 LightCoordsUtil.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, null, 0xF3FFFFFF);
@@ -112,11 +94,6 @@ public class WheelRenderer {
         poseStack.popPose();
     }
 
-    /**
-     * Short-TTL memo for the slot scan of OTHER players: this runs once per
-     * rendered frame per player, so a 10-tick cache removes nearly all of the
-     * inventory walks without visibly lagging behind equipment changes.
-     */
     private static final java.util.Map<java.util.UUID, long[]> WEARING_CACHE = new java.util.HashMap<>();
     private static final long CACHE_TTL_TICKS = 10;
 

@@ -14,16 +14,6 @@ import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.PlayerAdaption;
 
-/**
- * Adaptation to Discomfort — movement-domain triggers.
- *
- * <p>Every 4 ticks (200 ms detection delay is invisible next to multi-second
- * analysis timers, matching the existing env-trigger cadence in
- * {@link AdaptionEvents}) the wearer's surroundings are sampled; sustained
- * exposure to a restriction starts the standard analysis task for its
- * {@code Move_*} concept. Completion removes the restriction via the
- * corresponding mixins.</p>
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public final class MovementTriggers {
 

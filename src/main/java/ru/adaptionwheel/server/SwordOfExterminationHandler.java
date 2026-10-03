@@ -27,19 +27,14 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Combat effects of the Sword of Extermination.
- * Positive Energy: melee hits gain bonus damage from the target's current HP plus white sparkles.
- * Cursed Energy: swings fire piercing cursed slashes empowered by the wearer's adaptation count.
- */
 @EventBusSubscriber(modid = ru.adaptionwheel.AdaptionWheel.MODID)
 public final class SwordOfExterminationHandler {
 
     private static final int SLASH_COOLDOWN_TICKS = 10;
-    /** Dimension Destroy swing cooldown (original mod's DimensionSlashTimer = 60). */
+
     private static final int RIFT_COOLDOWN_TICKS = 60;
     private static final float BASE_SLASH_DAMAGE = 20f;
-    /** GameTime-based so a respawn (new player instance, tickCount reset) can't stall the cooldown. */
+
     private static final Map<UUID, Long> LAST_SLASH_TIME = new HashMap<>();
     private static final Map<UUID, Long> LAST_RIFT_TIME = new HashMap<>();
 
@@ -94,11 +89,6 @@ public final class SwordOfExterminationHandler {
         tryFireSpatialRifts(serverPlayer);
     }
 
-    /**
-     * Dimension Destroy (original SpatialRift): transcended wearers emit three
-     * rifts in a ±5° fan on every swing (60-tick swing cooldown), mirroring the
-     * original's fan spread and timer.
-     */
     private static void tryFireSpatialRifts(ServerPlayer player) {
         if (!AdaptionConfig.DIMENSION_DESTROY_ENABLED.get()) {
             return;
@@ -123,13 +113,11 @@ public final class SwordOfExterminationHandler {
         }
         player.level().playSound(null, player.blockPosition(),
                 ModSounds.SWING.get(), SoundSource.PLAYERS, 1.2f, 0.6f);
-        // The original flashes "DESTROY THE DIMENSION" over each victim; the
-        // wearer gets the announcement once per volley instead.
+
         player.sendOverlayMessage(net.minecraft.network.chat.Component.literal("DESTROY THE DIMENSION")
                 .withStyle(net.minecraft.ChatFormatting.BLACK, net.minecraft.ChatFormatting.BOLD));
     }
 
-    /** Rotates a vector around the Y axis (fan spread). */
     private static Vec3 rotateY(Vec3 vec, double angle) {
         double cos = Math.cos(angle);
         double sin = Math.sin(angle);
@@ -145,7 +133,7 @@ public final class SwordOfExterminationHandler {
         if (!(held.getItem() instanceof SwordOfExterminationItem) || SwordOfExterminationItem.isCursed(held)) {
             return;
         }
-        // Positive Energy: bonus damage from the target's current HP.
+
         event.setNewDamage(event.getNewDamage() + target.getHealth() * 0.01f);
         if (player.level() instanceof ServerLevel serverLevel) {
             serverLevel.sendParticles(ParticleTypes.END_ROD,
