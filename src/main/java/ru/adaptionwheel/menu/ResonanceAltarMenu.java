@@ -82,6 +82,11 @@ public class ResonanceAltarMenu extends TradeMenu {
             pool.addAll(DomainExchange.candidates(fed, WheelTier.forCount(fed.getAdaptCount()), recipe));
         }
 
+        // No de-duplication against the price list's rows, because the two halves cannot collide:
+        // a price list names environments, damage types, movement discomforts and debuffs, and this
+        // half can only ever name Offense_NPC_<mob> or Drop_NPC_<mob>. A bone is both an offering and
+        // a mob's drop, and it gets both sets -- eleven rows -- rather than the same row twice.
+        //
         // 26.3's Entity has no getServer(); the level is what holds it, and this menu only ever
         // runs on the server (the player is a ServerPlayer to reach here at all).
         for (String mob : AltarOfferings.mobsFor(offering, serverOf(player))) {
