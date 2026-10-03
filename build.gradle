@@ -10,11 +10,28 @@ tasks.named('wrapper', Wrapper).configure {
     distributionType = Wrapper.DistributionType.BIN
 }
 
-version = mod_version
+// Имя jar'а несёт версию игры: adaptionwheel-0.1.4+mc1.21.1.jar. Один источник
+// правды — minecraft_version из gradle.properties, тот же, что уходит в
+// neoforge.mods.toml, так что подставить руками расхождение нельзя.
+version = "${mod_version}+mc${minecraft_version}"
 group = mod_group_id
 
 base {
     archivesName = mod_id
+}
+
+tasks.named('jar') {
+    // То же самое машинно-читаемо, без распаковки: unzip -p <jar> META-INF/MANIFEST.MF
+    manifest {
+        attributes([
+                'Implementation-Title'  : mod_name,
+                'Implementation-Version': project.version,
+                'Implementation-Vendor' : mod_authors,
+                'Minecraft-Version'     : minecraft_version,
+                'NeoForge-Version'      : neo_version,
+                'FMLLoader-Type'        : 'NEOFORGE',
+        ])
+    }
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
