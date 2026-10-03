@@ -147,9 +147,18 @@ for p in sorted(tag_paths):
         print(f'  {name}: MISSING on 26.3')
         problems += 1
         continue
+    # Only the list values may be sorted. A tag file also carries scalars -- "replace": false --
+    # and sorted(False) raises, which used to report every tag with a replace flag as
+    # "unparseable on one side" the moment the two sides stopped being byte-identical. A check that
+    # cannot read the file it is checking is worse than no check.
+    def normalise(text):
+        out = {}
+        for k, v in json.loads(text).items():
+            out[k] = sorted(v) if isinstance(v, list) else v
+        return out
+
     try:
-        ta = {k: sorted(v) for k, v in json.loads(a).items()}
-        tb = {k: sorted(v) for k, v in json.loads(b).items()}
+        ta, tb = normalise(a), normalise(b)
     except Exception:
         print(f'  {name}: unparseable on one side')
         problems += 1
