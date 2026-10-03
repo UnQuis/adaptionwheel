@@ -1,5 +1,6 @@
 package ru.adaptionwheel;
 
+import java.util.Arrays;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -66,9 +67,42 @@ public class AdaptionWheel {
                     })
                     .build());
 
+    /**
+     * Looks a {@link ModConfig.Type} up by name, trying each spelling in order.
+     *
+     * <p>NeoForge renamed {@code ModConfig.Type.SERVER} to {@code SYNCED} (the enum is now
+     * {@code LOCAL / CLIENT / SYNCED / STARTUP}), and a renamed enum constant is a
+     * <em>binary</em> break: {@code NoSuchFieldError} the moment the class is initialised,
+     * before any of the mod's own code runs. Naming the constant in source does not help,
+     * because the reference is compiled in and the launcher does not recompile anything.
+     *
+     * <p>Pinning {@code dependencies.neoforge} to a range that excludes the old spelling
+     * would not fix that either — it only moves the failure from the dependency check to the
+     * constructor, and it makes the mod refuse to load on a perfectly good NeoForge for the
+     * sake of an enum. So no constant is ever referenced directly: a mod that dies in its
+     * constructor over a config file takes the whole game down with it, which is a far worse
+     * outcome than registering the config under the older spelling.
+     *
+     * <p>{@code SERVER} and {@code SYNCED} mean the same thing — a config the server owns and
+     * syncs to clients — so answering with either one is correct. {@code CLIENT} is passed
+     * through the same path for the same reason: it has not been renamed, but it might be, and
+     * the cost of asking by name is one loop iteration.
+     */
+    private static ModConfig.Type configType(String... preferredNames) {
+        for (String name : preferredNames) {
+            for (ModConfig.Type type : ModConfig.Type.values()) {
+                if (type.name().equals(name)) {
+                    return type;
+                }
+            }
+        }
+        throw new IllegalStateException("ModConfig.Type has none of " + Arrays.toString(preferredNames)
+                + "; found " + Arrays.toString(ModConfig.Type.values()));
+    }
+
     public AdaptionWheel(IEventBus modEventBus, ModContainer modContainer) {
-        modContainer.registerConfig(ModConfig.Type.SYNCED, AdaptionConfig.SERVER_SPEC);
-        modContainer.registerConfig(ModConfig.Type.CLIENT, AdaptionConfig.CLIENT_SPEC);
+        modContainer.registerConfig(configType("SYNCED", "SERVER"), AdaptionConfig.SERVER_SPEC);
+        modContainer.registerConfig(configType("CLIENT"), AdaptionConfig.CLIENT_SPEC);
         AttachmentTypes.ATTACHMENTS.register(modEventBus);
         ModDataComponents.COMPONENTS.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);

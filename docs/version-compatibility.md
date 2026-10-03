@@ -75,6 +75,27 @@ but not honey/powder-snow/berry/bubble columns.
 
 ## 5. Deliberate single-version decision
 
+### 5.1 Loader-version tolerance (26.3 branch)
+
+Single-version does **not** mean single-loader-build. `gradle.properties` tracks one `neo_version`
+(26.3.0.43-beta) and the dependency range stays wide (`[26.3.0,)`), because between two
+pre-releases of the same Minecraft version NeoForge can break **binary** compatibility — the
+observed example is `ModConfig.Type.SERVER` renamed to `SYNCED` in 26.3.0.43-beta, which kills a
+jar built against 26.3.0.16-beta with `NoSuchFieldError` inside the mod constructor, before any
+mod code runs. Two rules follow, and they are the only version policy on this branch:
+
+- **A renamed or moved enum/constant gets resolved by name, not referenced directly.** See
+  `AdaptionWheel.configType("SYNCED", "SERVER")`, which asks `ModConfig.Type.values()` for a
+  constant by name and falls back to the older spelling, so one jar loads on both loader builds.
+  Every config type goes through it — the client one included — and `javap -c` on the compiled
+  class shows no `getstatic` left against `ModConfig$Type`, which is the part that actually
+  guarantees it.
+- **A dependency range must never be tightened to work around a binary break.** That only moves
+  the failure from the dependency check into the constructor, and it makes the mod refuse to load
+  on a good loader. Note the trap: a qualifier sorts *before* the release
+  (`26.3.0.43-beta` < `26.3.0.43`), so `[26.3.0.43,)` rejects the build it was written for;
+  `[26.3.0.43-beta,)` would be the correct tight form if one were ever needed.
+
 Maintaining true multiloader/multiversion builds requires separate platform modules (shared `api`/`core`
 sourcesets + per-version `platform` projects, MultiLoader-template style). For a content mod of this size the
 maintenance cost outweighs the benefit; instead the repo keeps strict package boundaries documented above so a
