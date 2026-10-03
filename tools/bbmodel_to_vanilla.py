@@ -59,8 +59,11 @@ def load_export(path: Path) -> dict:
 #
 # A pivot plus a bounding box pins the rotation down uniquely, and the result is verifiable:
 # after the rotation below each plate sits exactly on one face of the core and spans 0..16 in
-# the two remaining axes. So this restores what the source had rather than inventing a look.
-# `--no-repair` turns it off.
+# the two remaining axes. So it restores what the source had rather than inventing a look.
+#
+# It is **off by default** anyway: the exported file is what the author drew, it renders, and
+# whether the missing rotations are a Blockbench export bug or the author's own layout is not
+# something a converter should decide. `--repair` turns it on.
 MISSING_ROTATIONS = {
     (1.0, 8.0, 8.0): ("y", -90),
     (16.0, 8.0, 8.0): ("y", 90),
@@ -306,8 +309,8 @@ def main() -> int:
                         help="drop elements not fully inside this box")
     parser.add_argument("--origin", default="0,0,0", metavar="x,y,z", help="shift the model before writing")
     parser.add_argument("--preview", default=None, help="also render a crude isometric preview to this PNG")
-    parser.add_argument("--no-repair", action="store_true",
-                        help="keep the export's unrotated plates as they are (see MISSING_ROTATIONS)")
+    parser.add_argument("--repair", action="store_true",
+                        help="bake back the four plate rotations the export dropped (see MISSING_ROTATIONS)")
     parser.add_argument("--flip-y", action="store_true",
                         help="mirror vertically (Blockbench's Y grows downwards, vanilla's upwards)")
     args = parser.parse_args()
@@ -339,7 +342,7 @@ def main() -> int:
     if len(origin) != 3:
         raise SystemExit("--origin needs three comma-separated numbers")
 
-    model, sources, warnings = convert(data, names, clip, tuple(origin), flip_y=args.flip_y, repair=not args.no_repair)
+    model, sources, warnings = convert(data, names, clip, tuple(origin), flip_y=args.flip_y, repair=args.repair)
 
     out = REPO / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
