@@ -434,6 +434,10 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
         double my = event.y() - this.topPos;
         int x = 0;
         int y = 0;
+        org.slf4j.LoggerFactory.getLogger("adaptionwheel/dbg").info(
+                "TradeScreen click raw=({}, {}) rel=({}, {}) leftPos={} topPos={} listTop={} rows={} pool={}",
+                event.x(), event.y(), mx, my, this.leftPos, this.topPos, listTop(),
+                LIST_ROWS * ROW_H, menu.candidates().size());
         if (event.button() != 0) {
             return super.mouseClicked(event, doubleClick);
         }
