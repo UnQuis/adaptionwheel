@@ -860,12 +860,30 @@ against the hand-rolled helper 1.21.1 lacks, `Entity.hurt` against `hurtServer`,
 `SurfaceAdaptations.fistLevel` and `AdaptionConfig.fistTierSpeed` remain main-only by design: 26.3
 forked before the fist existed, so no 26.3 save can hold a `Fist_Copper` to migrate.
 
-### The altar model on 1.21.1 — open
+### The altar model on 1.21.1 — waiting on a re-export
 
-`models/block/resonance_altar.json` is the author's export, byte-for-byte, and it loads on 26.3. On
-1.21.1 it does not: **1.21.1's element rotation is single-axis** (`{"origin","axis","angle"}`), and
-216 of the 336 elements carry a two-axis Euler rotation (`x=90,z=90` and friends) that the newer
-loader accepts and this one cannot express at all. The client answers with
-`JsonSyntaxException: Missing axis, expected to find a string`. Either the rotations get baked into
-axis-aligned geometry (every angle here is a multiple of 90°, so the silhouette survives; the UVs do
-not) or the model is re-exported from Blockbench for a Java target.
+`models/block/resonance_altar.json` is the author's export and it loads on 26.3. On 1.21.1 it does
+not: **1.21.1's element rotation is single-axis** (`{"origin","axis","angle"}`), and 216 of the 336
+elements carry a two-axis Euler rotation (`x=90,z=90` and friends) that the newer loader accepts and
+this one cannot express at all. The client answers with
+`JsonSyntaxException: Missing axis, expected to find a string`, and the altar renders as the
+missing-model cube.
+
+**Chosen fix: re-export from Blockbench** rather than baking the rotations into geometry, because a
+bake is exact for the silhouette (every angle is a multiple of 90°) but has to re-derive the UVs, and
+a Java-target export is exact about both. What the export needs:
+
+1. Blockbench project format **Java Block/Item**, not Bedrock — that is what produced the `x/y/z`
+   Euler rotations in the first place (`"format_version": "26.3"` in the file is the giveaway).
+2. **Apply Rotation** on the six plates (`Ctrl+R`) so the two-axis rotations become geometry or a
+   single-axis rotation, then export.
+3. Leave the texture names as they are (`block1`, `block`): they cannot resolve through the block
+   atlas either way, so the textures are bound by a child model — `models/block/resonance_altar_bound.json`
+   with `"2": "adaptionwheel:block/resonance_altar"`, `"3": "adaptionwheel:block/resonance_altar_core"`,
+   `"particle": "adaptionwheel:block/resonance_altar"` — and the blockstate and item model point at
+   that child. **The child comes back with the export**, since the file it parents is unreadable
+   without it.
+
+Until then main keeps a `cube_all` placeholder so the block is a block rather than a missing model.
+Both textures (`textures/block/resonance_altar.png`, `resonance_altar_core.png`) are already in
+place and untouched.

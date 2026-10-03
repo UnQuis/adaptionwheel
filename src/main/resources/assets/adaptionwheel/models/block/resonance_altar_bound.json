@@ -1,8 +1,0 @@
-{
-  "parent": "adaptionwheel:block/resonance_altar",
-  "textures": {
-    "2": "adaptionwheel:block/resonance_altar",
-    "3": "adaptionwheel:block/resonance_altar_core",
-    "particle": "adaptionwheel:block/resonance_altar"
-  }
-}
