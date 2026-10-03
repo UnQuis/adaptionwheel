@@ -452,3 +452,62 @@ nothing" with no error anywhere — and `main`'s five `AltarOfferingTests` are w
 files themselves are the same files on both branches.
 
 Neither screen has been seen running.
+
+## Phase 23 — The Adaptation Temple
+
+The user built a 13x11x13 ruin in a test world (one Resonance Altar in it) and asked for it to
+**spawn in the world, with randomness** — stone bricks becoming mossy ones and so on, so two
+temples do not look alike. The saving is a vanilla `/structure save` output; the shipping problem is
+that a file in `run/client/saves/.../generated/` is a find, not content.
+
+It ships as content and generates itself: `data/adaptionwheel/structure/adaptation_temple.nbt`, a
+`minecraft:jigsaw` structure projected onto the heightmap, a one-element template pool, a
+`random_spread` structure set (32/16) and a land-biome tag. Jigsaw is not an arbitrary choice — it is
+the only vanilla placement that runs a **processor list** over a single template, and the processor
+list is where the variety lives.
+
+### The randomisation is data, and the data cannot carry properties
+
+`minecraft:rule` matches an input state and writes one **fixed** output state. Swapping by block
+name would therefore flatten every stair in the ruin into a default-state north-facing stair.
+Vanilla faces the same wall and solves it in Java: `BlackstoneReplaceProcessor` copies FACING, HALF
+and TYPE by hand. Data-only, the honest equivalent is one `minecraft:random_blockstate_match` rule
+per exact input state, properties repeated in the output — so the rule set is **generated from the
+template's own palette** by `tools/temple_variation.py` rather than written by hand, and `check`
+mode fails loudly when the two drift apart, when a rule names a block this Minecraft version does
+not have, or when a rule would cross into a family with different properties.
+
+54 rules over 16 blocks: stone bricks ↔ mossy/cracked/chiseled/infested, cobblestone ↔ mossy,
+`iron_chain` → the four copper-weathering stages, and a modest demossify in the other direction so a
+temple can be *less* mossy than the original. The altar, the soul lanterns and the lightning rod are
+never in the rule set — checked, not hoped for.
+
+### Two silent failures, both worth remembering
+
+**`size: 0` produces a structure that never generates.** `JigsawPlacement.addPieces` adds the centre
+piece to the builder only inside `if (maxDepth > 0)`, so `size: 0` yields a start with zero pieces,
+`isValid()` false, and `/place structure` answers "Failed to place structure" with **nothing in the
+log**. `size: 1` with no jigsaw blocks in the template never expands and still places.
+
+**A structure whose biome set is empty is dropped without a word.** `hasBiomesForStructureSet`
+filters the structure set out of the generator state, and `/locate structure` then reports "Could not
+find a structure of type ... nearby" — which is also what a too-distant structure looks like. The
+tell is that `/place structure` *works* (it bypasses the biome check), so "places by hand but never
+generates" is the shape of this bug.
+
+### Air in a template is not "nothing"
+
+The ruin occupies about 5x5 of its 13x13 footprint, and a `/structure save` of it records the
+surrounding space as 1587 air blocks. Placing air **carves** — every temple would sink a 13x13x11
+crater into whatever landscape it landed on. Converting the palette's air entry to
+`minecraft:structure_void` (skipped by placement) is a one-entry edit and the difference between a
+ruin and a bomb crater.
+
+Verified live on a fresh dedicated server: `/locate structure adaptionwheel:adaptation_temple`
+finds a temple 136 blocks from spawn, the altar is in the placed chunk, and three `/place structure`
+calls in one world produced three different rotations, three floor heights following the terrain,
+and three different block distributions (`infested_cobblestone` in one, none in another,
+`infested_cracked_stone_bricks` in the third).
+
+The `.nbt` carries a 26.3 `DataVersion`, so this content is branch-specific: `main` would need its
+own save and the older pool/processor JSON shapes.
