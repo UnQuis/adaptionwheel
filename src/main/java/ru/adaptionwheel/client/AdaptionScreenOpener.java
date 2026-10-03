@@ -9,8 +9,6 @@ import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.SurfaceAdaptations;
 import ru.adaptionwheel.network.FistInstabreakPayload;
 
-/** Opens the adaptation browser screen when the keybind is pressed in-game, and handles the
- *  Instabreak stance keybind. */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class AdaptionScreenOpener {
 
@@ -36,8 +34,7 @@ public final class AdaptionScreenOpener {
             if (!SurfaceAdaptations.instabreakUnlocked(mc.player)) {
                 return;
             }
-            // Optimistic local flip so the mining speed reacts on the same tick; the next
-            // server sync corrects it if the server rejected the request.
+
             boolean next = !ClientAdaption.instabreakActive;
             ClientAdaption.instabreakActive = next;
             FistInstabreakPayload.send(next);

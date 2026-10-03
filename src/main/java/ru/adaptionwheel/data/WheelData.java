@@ -8,11 +8,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Persistent adaptation data stored on the Mahoraga Wheel item via Data Component.
- * When the item is given to another player, they inherit these adaptations.
- * Includes running analysis tasks so progress survives death/unequip cycles.
- */
 public record WheelData(
         Map<String, Integer> levels,
         List<String> adapted,
@@ -43,7 +38,6 @@ public record WheelData(
         return adapted.size() + (int) levels.values().stream().filter(l -> l > 0).count();
     }
 
-    /** Copy persistent data FROM PlayerAdaption into a new WheelData. */
     public static WheelData fromPlayer(PlayerAdaption data) {
         return new WheelData(
                 new HashMap<>(data.levels),
@@ -55,7 +49,6 @@ public record WheelData(
         );
     }
 
-    /** Load persistent data FROM this WheelData INTO a PlayerAdaption (runtime). */
     public void loadInto(PlayerAdaption data) {
         data.levels.clear();
         data.levels.putAll(levels);
@@ -73,10 +66,6 @@ public record WheelData(
         migrateLegacyConcepts(data);
     }
 
-    /**
-     * Folds the removed copper fist tier into iron, so a wheel that was played on the six-tier
-     * layout keeps its progress instead of silently losing it. A no-op on any current save.
-     */
     private static void migrateLegacyConcepts(PlayerAdaption data) {
         Integer copper = data.levels.remove("Fist_Copper");
         if (copper == null) {

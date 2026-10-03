@@ -13,10 +13,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.adaptionwheel.SurfaceAdaptations;
 
-/**
- * Adapted players still stick to cobwebs, but half as much as vanilla:
- * motion multiplier (0.5, 0.1, 0.5) instead of (0.25, 0.05, 0.25).
- */
 @Mixin(WebBlock.class)
 public abstract class WebBlockMixin {
 

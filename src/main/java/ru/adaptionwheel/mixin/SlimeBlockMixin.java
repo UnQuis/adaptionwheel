@@ -13,7 +13,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.adaptionwheel.SurfaceAdaptations;
 
-/** Adapted players walk on slime without the step slowdown and without bouncing. */
 @Mixin(SlimeBlock.class)
 public abstract class SlimeBlockMixin {
 

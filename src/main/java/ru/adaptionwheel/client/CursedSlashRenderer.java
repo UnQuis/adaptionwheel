@@ -9,7 +9,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import ru.adaptionwheel.entity.CursedSlashProjectile;
 
-/** Textured cursed-energy flying slash fired by the normal sword mode. */
 public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile> {
 
     private static final int[] BLADE_CYAN = {185, 245, 255};
@@ -28,8 +27,7 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile> {
     public void render(CursedSlashProjectile entity, float entityYaw, float partialTick,
                        PoseStack poseStack, MultiBufferSource buffers, int light) {
         float age = entity.tickCount + partialTick;
-        // Keep the visual alive for the full block-to-block flight, with only a
-        // short fade at the end rather than turning invisible after 30 ticks.
+
         float fade = age < 24f ? 1f : Mth.clamp(1f - (age - 24f) / 12f, 0f, 1f);
 
         poseStack.pushPose();

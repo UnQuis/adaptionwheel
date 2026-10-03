@@ -62,7 +62,7 @@ public record AdaptionSyncPayload(
                 for (String entry : p.history) {
                     buf.writeUtf(entry);
                 }
-                // Existence progress map: boss path -> accumulated ticks
+
                 buf.writeVarInt(p.existenceProgress.size());
                 p.existenceProgress.forEach((key, value) -> {
                     buf.writeUtf(key);

@@ -20,21 +20,6 @@ import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.FistTiers;
 import ru.adaptionwheel.config.AdaptionConfig;
 
-/**
- * Regression tests for Fist Mastery's data-driven parts: the six material tags, the harvest
- * gate built on them, the per-tier cost curve, and the registry wiring.
- *
- * <p>These deliberately avoid creating a {@code ServerPlayer}. NeoForge's
- * {@code GameTestHelper#makeMockServerPlayerInLevel()} logs the mock player in, which makes
- * Curios fire its {@code curios:sync_data} payload at a client that does not exist and throw
- * {@code UnsupportedOperationException: Payload curios:sync_data may not be sent to the client}
- * before the test body ever runs. The player-dependent half of the fist (unlock, levelling,
- * instabreak stance) therefore still needs an in-game test; see DEVELOPMENT_PLAN.md.</p>
- *
- * <p>The tag contents are the part most easily broken by accident — a block id that does not
- * exist in this Minecraft version, or a block listed under two tiers, silently disables part
- * of the progression — so they are pinned here.</p>
- */
 @GameTestHolder(ru.adaptionwheel.AdaptionWheel.MODID)
 @PrefixGameTestTemplate(false)
 public final class FistGameTests {
@@ -42,34 +27,25 @@ public final class FistGameTests {
     private FistGameTests() {
     }
 
-    // ================= material tags =================
-
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void everyTierTagCoversItsOwnMaterial(GameTestHelper helper) {
         assertTier(helper, 0, Blocks.DIRT, Blocks.SAND, Blocks.OAK_PLANKS, Blocks.OAK_LOG, Blocks.WHITE_WOOL);
-        // Stone tier owns the whole stone family plus every ore a stone pickaxe gets.
+
         assertTier(helper, 1, Blocks.STONE, Blocks.DEEPSLATE, Blocks.COBBLESTONE, Blocks.SANDSTONE,
                 Blocks.QUARTZ_BLOCK, Blocks.IRON_ORE, Blocks.COPPER_ORE, Blocks.COAL_ORE,
                 Blocks.DEEPSLATE_IRON_ORE, Blocks.LAPIS_ORE, Blocks.IRON_BLOCK, Blocks.COPPER_BLOCK);
-        // Iron tier is the old copper tier folded in: the Nether band plus everything an iron
-        // pickaxe mines. It is one eight-level climb rather than two thin ones.
+
         assertTier(helper, 2, Blocks.NETHERRACK, Blocks.BASALT, Blocks.BLACKSTONE, Blocks.GLOWSTONE,
                 Blocks.MAGMA_BLOCK, Blocks.CRIMSON_NYLIUM, Blocks.SOUL_SOIL, Blocks.BONE_BLOCK,
                 Blocks.REDSTONE_ORE, Blocks.GOLD_ORE, Blocks.DEEPSLATE_REDSTONE_ORE,
                 Blocks.DIAMOND_ORE, Blocks.EMERALD_ORE, Blocks.GOLD_BLOCK, Blocks.RAW_GOLD_BLOCK);
-        // Vanilla gates ancient debris and netherite blocks behind a DIAMOND pickaxe, so the
-        // final band is what no pickaxe can harvest at all.
+
         assertTier(helper, 3, Blocks.OBSIDIAN, Blocks.CRYING_OBSIDIAN, Blocks.ANCIENT_DEBRIS,
                 Blocks.NETHERITE_BLOCK, Blocks.RESPAWN_ANCHOR, Blocks.LODESTONE);
         assertTier(helper, 4, Blocks.DRAGON_EGG, Blocks.SPAWNER);
         helper.succeed();
     }
 
-    /**
-     * A tier must mine exactly as fast as the vanilla tool it stands in for. Where that tool is
-     * absent from the registry the tier is documented to inherit the one below it instead, so
-     * that is what gets checked — the ladder must never develop a hole.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void tierSpeedMatchesItsVanillaTool(GameTestHelper helper) {
         BlockState reference = Blocks.STONE.defaultBlockState();
@@ -79,9 +55,7 @@ public final class FistGameTests {
                     .orElse(null);
             float actual = FistTiers.vanillaMiningSpeed(tier);
             if (tool != null) {
-                // The real per-tool speed lives in the matching Tool.Rule, so it has to be read
-                // through Item.getDestroySpeed. DataComponents.TOOL.defaultMiningSpeed is the
-                // fallback for uncovered blocks and reads 1.0 for every vanilla tool.
+
                 float toolSpeed = tool.getDestroySpeed(tool.getDefaultInstance(), reference);
                 helper.assertTrue(toolSpeed == actual,
                         "tier " + tier + " should mine at " + FistTiers.toolId(tier) + "'s speed ("
@@ -96,7 +70,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /** The ladder must never go backwards, whatever the tools turn out to be. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void tierSpeedNeverDecreases(GameTestHelper helper) {
         float previous = 0f;
@@ -111,7 +84,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /** A block must resolve to exactly one tier — the lowest — or the ladder breaks. */
     private static void assertTier(GameTestHelper helper, int tier, Block... blocks) {
         for (Block block : blocks) {
             BlockState state = block.defaultBlockState();
@@ -127,8 +99,7 @@ public final class FistGameTests {
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void blocksOutsideEveryTierAreAlwaysHarvestable(GameTestHelper helper) {
-        // An oak sign belongs to no tier, so vanilla already lets a bare hand take it and the
-        // fist must not get in the way.
+
         BlockState sign = Blocks.OAK_SIGN.defaultBlockState();
         helper.assertTrue(FistTiers.tierOf(sign) < 0, "oak sign should be in no fist tier");
         for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
@@ -137,16 +108,14 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    // ================= harvest gate =================
-
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void harvestGateIsCumulativeAndStrict(GameTestHelper helper) {
         BlockState[] ladder = {
-                Blocks.DIRT.defaultBlockState(),            // 0 wood
-                Blocks.IRON_ORE.defaultBlockState(),       // 1 stone   (needs a stone pickaxe)
-                Blocks.REDSTONE_ORE.defaultBlockState(),   // 2 iron    (needs an iron pickaxe, or is Nether stone)
-                Blocks.OBSIDIAN.defaultBlockState(),        // 3 diamond (needs a diamond pickaxe)
-                Blocks.DRAGON_EGG.defaultBlockState(),     // 4 netherite (no pickaxe at all)
+                Blocks.DIRT.defaultBlockState(),
+                Blocks.IRON_ORE.defaultBlockState(),
+                Blocks.REDSTONE_ORE.defaultBlockState(),
+                Blocks.OBSIDIAN.defaultBlockState(),
+                Blocks.DRAGON_EGG.defaultBlockState(),
         };
         for (int required = 0; required < ladder.length; required++) {
             for (int held = 0; held < FistTiers.TIER_COUNT; held++) {
@@ -158,8 +127,6 @@ public final class FistGameTests {
         }
         helper.succeed();
     }
-
-    // ================= cost curve =================
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void costGrowsWithinATier(GameTestHelper helper) {
@@ -191,15 +158,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /**
-     * The player-facing number, not just the speed value: how many ticks a Stone Fist needs to
-     * break one stone block must equal what an actual stone pickaxe needs.
-     *
-     * <p>This is the assertion that would have caught the real bug. The speed value was already
-     * correct on the server, but the client never granted the harvest check, so it divided by
-     * 100 instead of 30 and the player spent 3.3x longer holding the button than the server
-     * thought. Comparing speeds alone cannot see that; comparing durations can.</p>
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void stoneFistBreaksStoneAsFastAsAStonePickaxe(GameTestHelper helper) {
         BlockPos pos = new BlockPos(1, 1, 1);
@@ -218,7 +176,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /** Same check for the tier that matters most, where the old speed really did feel like a joke. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void netheriteFistMatchesANetheritePickaxe(GameTestHelper helper) {
         BlockPos pos = new BlockPos(1, 1, 1);
@@ -233,41 +190,27 @@ public final class FistGameTests {
                 "a Netherite Fist should break obsidian as fast as a netherite pickaxe ("
                         + withPickaxe + " vs " + withFist + " ticks)");
 
-        // And the fist must never be slower than a bare hand.
         int bareHand = ticksToBreak(1.0f, hardness);
         helper.assertTrue(withFist < bareHand, "the fist must beat a bare hand (" + withFist + " vs " + bareHand + ")");
         helper.succeed();
     }
 
-    /**
-     * Same, for a block state, reading its hardness from the block itself. Every block used here
-     * has a constant hardness, so an empty level view is enough to read it.
-     */
     private static int ticksToBreak(float speed, BlockState state) {
         return ticksToBreak(speed, state.getDestroySpeed(
                 net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
     }
 
-    /** Ticks to break a block, reproducing vanilla's progress formula for a correct tool. */
     private static int ticksToBreak(float speed, float hardness) {
-        float progressPerTick = speed / hardness / 30f; // 30 = correct-tool divisor from the harvest check
+        float progressPerTick = speed / hardness / 30f;
         if (progressPerTick <= 0f) {
             return Integer.MAX_VALUE;
         }
         return (int) Math.ceil(1.0f / progressPerTick);
     }
 
-    /**
-     * Pin the actual ladder to vanilla's numbers. The tier speed is looked up rather than
-     * hardcoded, so this is the test that notices if the lookup silently starts returning
-     * fallbacks again — which is exactly what happened once, when reading
-     * {@code DataComponents.TOOL.defaultMiningSpeed} instead of {@code Item.getDestroySpeed}
-     * quietly reduced every tier to bare-hand speed while the "speed equals tool" test still
-     * passed, because it was comparing against the same wrong field.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void tierSpeedIsTheVanillaLadder(GameTestHelper helper) {
-        // Five tiers, mirroring the vanilla pickaxe ladder 1.21.1 uses.
+
         float[] expected = {2.0f, 4.0f, 6.0f, 8.0f, 9.0f};
         helper.assertTrue(FistTiers.TIER_COUNT == expected.length,
                 "the tier table and this expectation must stay in step");
@@ -279,14 +222,13 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /** The copper tier is gone; its blocks must have landed in iron rather than vanished. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void copperTierIsFullyFoldedIntoIron(GameTestHelper helper) {
         for (int i = 0; i < FistTiers.TIER_COUNT; i++) {
             helper.assertTrue(!FistTiers.concept(i).equals("Fist_Copper"),
                     "no tier may be called Fist_Copper any more (index " + i + ")");
         }
-        // The blocks the copper tier used to own are all iron-tier now.
+
         for (Block block : new Block[]{
                 Blocks.NETHERRACK, Blocks.BASALT, Blocks.BLACKSTONE, Blocks.GLOWSTONE,
                 Blocks.MAGMA_BLOCK, Blocks.SOUL_SOIL, Blocks.CRIMSON_NYLIUM}) {
@@ -295,34 +237,25 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /**
-     * A wheel played on the six-tier layout must not silently lose the copper investment when
-     * the tier it belonged to is merged away. The levels fold into iron, clamped so a wheel
-     * that was deep into both tiers does not end up past the cap.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void removedCopperProgressMigratesIntoIron(GameTestHelper helper) {
         int max = ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
 
-        // Part-way into copper, nothing in iron: the levels should move over intact.
         var loaded = loadLegacyWheel(java.util.Map.of("Fist_Copper", 3));
         helper.assertTrue(loaded.level("Fist_Iron") == 3,
                 "3 copper levels should arrive as 3 iron levels, got " + loaded.level("Fist_Iron"));
         helper.assertTrue(loaded.level("Fist_Copper") == 0,
                 "the dead concept must not linger, or it shows up as a broken row in the screen");
 
-        // Progress in both tiers adds up.
         loaded = loadLegacyWheel(java.util.Map.of("Fist_Copper", 2, "Fist_Iron", 5));
         helper.assertTrue(loaded.level("Fist_Iron") == 7,
                 "2 copper + 5 iron should merge to 7 iron, got " + loaded.level("Fist_Iron"));
 
-        // And it must not exceed the cap, which would let a level-up skip a tier-up.
         loaded = loadLegacyWheel(java.util.Map.of("Fist_Copper", max, "Fist_Iron", max));
         helper.assertTrue(loaded.level("Fist_Iron") == max,
                 "a merged level above " + max + " would break the tier ladder, got "
                         + loaded.level("Fist_Iron"));
 
-        // A save with no copper at all is untouched by the migration.
         loaded = loadLegacyWheel(java.util.Map.of("Fist_Iron", 4));
         helper.assertTrue(loaded.level("Fist_Iron") == 4,
                 "a current save must pass through unchanged, got " + loaded.level("Fist_Iron"));
@@ -342,12 +275,6 @@ public final class FistGameTests {
         return data;
     }
 
-    /**
-     * The cost table must have one entry per material. A config carried over from the six-tier
-     * layout still holds six multipliers after the copper merge, and reading the surviving prefix
-     * would silently hand Iron the old copper-era cost — so a wrong-length list is rejected
-     * wholesale in favour of the defaults.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void tierCostHasOneEntryPerMaterial(GameTestHelper helper) {
         double[] defaults = {1.0, 1.5, 2.5, 4.0, 5.0};
@@ -358,8 +285,7 @@ public final class FistGameTests {
             helper.assertTrue(cost > 0,
                     "tier " + tier + " must have a positive cost multiplier, got " + cost);
         }
-        // Monotone: each material must be strictly harder to level than the one before it, which
-        // is the whole reason the table exists.
+
         double previous = 0;
         for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
             double cost = ru.adaptionwheel.config.AdaptionConfig.fistTierCost(tier);
@@ -371,25 +297,13 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    // ================= the four tool classes =================
-
-    /**
-     * A fist has to be as fast as whichever vanilla tool owns the block: shovel for soil, axe for
-     * logs, hoe for foliage, pickaxe for stone and ore.
-     *
-     * <p>This is the test for the "my diamond fist should break dirt instantly" report. The
-     * measurement was being taken with a pickaxe, and 1.21.1 keeps dirt out of
-     * {@code #minecraft:mineable/pickaxe} entirely — it is shovel-only — so a pickaxe reports
-     * {@code 1.0} there, which is bare-hand speed. The fist duly took 15 ticks on dirt where a
-     * diamond shovel takes 2.</p>
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void everyToolClassGetsItsOwnTiersSpeed(GameTestHelper helper) {
         for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
             float expected = FistTiers.vanillaMiningSpeed(tier);
             helper.assertTrue(expected > 1.0f,
                     "tier " + tier + " must out-mine a bare hand, got " + expected);
-            // One representative block per vanilla tool class.
+
             for (String[] pair : new String[][]{
                     {"shovel", "dirt"}, {"shovel", "sand"}, {"axe", "oak_log"},
                     {"axe", "oak_planks"}, {"hoe", "wheat"}, {"pickaxe", "stone"},
@@ -409,11 +323,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /**
-     * The player's own arithmetic, pinned: a diamond fist breaks dirt in about two ticks, against
-     * fifteen for a bare hand. Stated as a duration because that is the number a player feels, and
-     * a wrong speed still produces a plausible-looking figure.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void diamondFistBreaksDirtEssentiallyInstantly(GameTestHelper helper) {
         BlockState dirt = Blocks.DIRT.defaultBlockState();
@@ -430,11 +339,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /**
-     * Same expectation for the other classes, at the top tier. Wheat is deliberately absent: it
-     * has zero hardness, so a bare hand already breaks it in zero ticks and there is nothing to
-     * compare — its speed parity is covered by {@link #everyToolClassGetsItsOwnTiersSpeed}.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void netheriteFistCutsLogsAndSoilLikeItsTools(GameTestHelper helper) {
         int top = FistTiers.TIER_COUNT - 1;
@@ -450,9 +354,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    // ================= luck =================
-
-    /** The published ladder: 1/2/3/5/10 by tier, and nothing above 10. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void luckScalesToTenAtTheFinalTier(GameTestHelper helper) {
         int[] expected = {1, 2, 3, 5, 10};
@@ -473,10 +374,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /**
-     * Luck is scoped to ores on purpose. The whole point of the tier ladder is that stone and
-     * wood stay meaningful, so a x10 multiplier must not touch them.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void luckCoversOresAndNothingElse(GameTestHelper helper) {
         for (Block block : new Block[]{Blocks.COAL_ORE, Blocks.DEEPSLATE_COAL_ORE, Blocks.IRON_ORE,
@@ -496,16 +393,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /**
-     * A lucky block must be harvestable at the tier that owns it, or the multiplier would apply to
-     * something the player cannot mine.
-     *
-     * <p>Two things this deliberately does not assume. Not every ore needs a pickaxe: vanilla lets
-     * a bare hand take nether gold ore, so {@code tierOf} answers {@code -1} and that is the
-     * correct result, not a gap. And vanilla bands ore further than "one band for all of it" —
-     * gold, redstone, diamond and emerald ore only need an <em>iron</em> pickaxe, so they sit in
-     * the iron band, not the stone one.</p>
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void everyLuckyOreIsHarvestableAtItsOwnTier(GameTestHelper helper) {
         for (Block block : new Block[]{Blocks.COAL_ORE, Blocks.DEEPSLATE_COAL_ORE, Blocks.IRON_ORE,
@@ -520,7 +407,7 @@ public final class FistGameTests {
                     blockName(block) + " resolved to an impossible tier " + required);
             helper.assertTrue(FistTiers.canHarvest(state, Math.max(required, 0)),
                     blockName(block) + " must be harvestable by the fist that owns it");
-            // Sanity: the fist at that tier really is the one that trains on it.
+
             if (required > 0) {
                 helper.assertTrue(state.is(FistTiers.tag(required)),
                         blockName(block) + " is owned by tier " + required + " but is not in that tag");
@@ -529,18 +416,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    // ================= the deep family as diamond training =================
-
-    /**
-     * The diamond tier had almost nothing to mine — obsidian, ancient debris, a netherite block —
-     * which made it the hardest rung by a wide margin. The whole deepslate family now trains it.
-     *
-     * <p>Those blocks are also stone-band, so {@code tierOf} still reports them as stone. That
-     * overlap is the mechanism, not an accident: it keeps them harvestable from the stone tier on,
-     * while the levelling check asks whether the block belongs to the <em>current</em> tier's tag.
-     * A single-tier reading would either make deepslate unminable until diamond or make it
-     * untrainable there.</p>
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theDeepFamilyTrainsTheDiamondTier(GameTestHelper helper) {
         int diamond = 3;
@@ -558,14 +433,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    /**
-     * The diamond tier's original, very thin material list must still be there.
-     *
-     * <p>No diamond or emerald ore in the {@code assertTier} call: vanilla only asks for an
-     * <em>iron</em> pickaxe for those, so they belong to the iron band and {@code tierOf} reports
-     * them as tier 2. They are in the diamond tag too, so they train whichever tier the player is
-     * actually on — the same overlap the deepslate family relies on.</p>
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void diamondTierKeepsItsOriginalBand(GameTestHelper helper) {
         assertTier(helper, 3, Blocks.OBSIDIAN, Blocks.CRYING_OBSIDIAN, Blocks.ANCIENT_DEBRIS,
@@ -578,14 +445,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    // ================= tier reach =================
-
-    /**
-     * The reach rule, pinned as data. This is the logic the client and the server both call, and
-     * the bug it caused was a silent disagreement between two hand-written copies of it — the
-     * client kept answering "Wood" after the server had already unlocked Stone, and since the
-     * client accumulates break progress, every block took twice as long as it should.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void reachOpensTheNextTierTheMomentThePreviousOneIsMaxed(GameTestHelper helper) {
         int max = ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
@@ -599,7 +458,6 @@ public final class FistGameTests {
         levels[0] = max - 1;
         helper.assertTrue(FistTiers.reachTier(levelOf) == 0, "Wood 7 is still Wood");
 
-        // The whole point: Stone must be reachable at Wood 8 even though Fist_Stone is still 0.
         levels[0] = max;
         helper.assertTrue(FistTiers.reachTier(levelOf) == 1,
                 "maxing Wood must open Stone immediately, not after levelling Stone first");
@@ -615,7 +473,7 @@ public final class FistGameTests {
     public static void reachHonoursTiersGrantedOutOfOrder(GameTestHelper helper) {
         int[] levels = new int[FistTiers.TIER_COUNT];
         java.util.function.IntUnaryOperator levelOf = t -> levels[t];
-        levels[4] = 3; // /adaptionwheel grant Fist_Diamond 3, with nothing before it
+        levels[4] = 3;
         helper.assertTrue(FistTiers.reachTier(levelOf) == 4,
                 "a directly granted tier must count, otherwise the command is useless for testing");
         helper.succeed();
@@ -631,8 +489,6 @@ public final class FistGameTests {
         helper.succeed();
     }
 
-    // ================= what counts as a bare hand =================
-
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void anEmptyHandAlwaysUsesTheFist(GameTestHelper helper) {
         helper.assertTrue(FistTiers.usableWith(ItemStack.EMPTY, Blocks.STONE.defaultBlockState()),
@@ -642,8 +498,7 @@ public final class FistGameTests {
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void nonToolItemsStillUseTheFist(GameTestHelper helper) {
-        // Holding a block, food or a random item must not disable the fist - only real tools
-        // and weapons do.
+
         for (Item item : new Item[]{
                 Blocks.STONE.asItem(), Blocks.DIRT.asItem(), Items.APPLE, Items.BREAD,
                 Items.STICK, Items.FLINT, Items.COBBLESTONE.asItem(), Items.OAK_LOG.asItem()}) {
@@ -668,15 +523,11 @@ public final class FistGameTests {
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void aToolOnlyCountsWhenItOutminesAFist(GameTestHelper helper) {
-        // A hoe cannot mine stone, so its mining speed on that block is a bare hand's — but the
-        // TOOL component still takes the fist out of play, because the fist is about tools in
-        // general rather than this one block.
+
         helper.assertTrue(!FistTiers.usableWith(new ItemStack(Items.IRON_HOE), Blocks.STONE.defaultBlockState()),
                 "a hoe still counts as a tool even on a block it cannot mine");
         helper.succeed();
     }
-
-    // ================= registry wiring =================
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void fistConceptsAreRegisteredAsLeveledMiningConcepts(GameTestHelper helper) {

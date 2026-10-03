@@ -9,7 +9,6 @@ import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.level.Level;
 import ru.adaptionwheel.server.AdaptionEvents;
 
-/** Instantly grants all adaptations when eaten. Requires the Mahoraga Wheel to be equipped. */
 public class AllAdaptionItem extends Item {
 
     public AllAdaptionItem(Properties properties) {

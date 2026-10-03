@@ -18,12 +18,6 @@ import ru.adaptionwheel.sound.ModSounds;
 
 import java.util.List;
 
-/**
- * Sword of Extermination. Two energy modes, switched with right click:
- * Positive Energy — melee hits deal bonus damage based on the target's current HP.
- * Cursed Energy — swings fire piercing cursed slashes empowered by adaptation count.
- * Port of the original mod's SwordOfExtermination.cs.
- */
 public class SwordOfExterminationItem extends SwordItem {
 
     public SwordOfExterminationItem(Tier tier, Properties properties) {

@@ -11,11 +11,6 @@ import net.minecraft.world.entity.projectile.Projectile;
 import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.entity.PartEntity;
 
-/**
- * Resolves boss entities from damage sources, projectiles and multi-part bodies.
- * Covers vanilla (EnderDragonPart), NeoForge generic parts (used by Draconic
- * Evolution's Chaos Guardian) and projectile owners.
- */
 public final class BossHelper {
 
     private BossHelper() {
@@ -31,12 +26,6 @@ public final class BossHelper {
         return entity.getType().is(Tags.EntityTypes.BOSSES);
     }
 
-    /**
-     * Unwraps multi-part bodies and projectiles down to the underlying LivingEntity.
-     * Handles the vanilla EnderDragonPart, any NeoForge {@link PartEntity} subclass
-     * (e.g. DraconicGuardianPartEntity) and projectile owners. Returns null when
-     * no living root can be found.
-     */
     public static LivingEntity resolveLiving(Entity entity) {
         if (entity == null) {
             return null;
@@ -53,7 +42,6 @@ public final class BossHelper {
         return entity instanceof LivingEntity living ? living : null;
     }
 
-    /** Like {@link #resolveLiving} but only returns entities recognized as bosses. */
     public static LivingEntity resolveBoss(Entity entity) {
         LivingEntity living = resolveLiving(entity);
         return living != null && isBoss(living) ? living : null;

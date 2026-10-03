@@ -55,15 +55,9 @@ public enum AdaptionCategory {
         return TagKey.create(Registries.DAMAGE_TYPE, ResourceLocation.fromNamespaceAndPath("minecraft", name));
     }
 
-    /**
-     * Damage type ids are a small finite set, so every resolved id is memoized.
-     * This turns repeated hits into a single hash lookup instead of re-evaluating
-     * the whole tag/substring chain on each damage event.
-     */
     private static final java.util.concurrent.ConcurrentHashMap<String, AdaptionCategory> MATCH_CACHE =
             new java.util.concurrent.ConcurrentHashMap<>();
 
-    /** Maps a damage source to an adaptation category. First match wins. */
     public static AdaptionCategory match(DamageSource source) {
         String registered = source.typeHolder().getRegisteredName();
         AdaptionCategory cached = MATCH_CACHE.get(registered);

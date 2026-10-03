@@ -4,10 +4,6 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 
 import java.util.List;
 
-/**
- * Wheel of Adaptation — configuration.
- * All values are tuned for Minecraft's combat balance (not Terraria's).
- */
 public final class AdaptionConfig {
 
     private static final double[] DEFENSE_REDUCTION = {5, 10, 15, 20, 25, 30, 45, 60};
@@ -18,16 +14,14 @@ public final class AdaptionConfig {
     private static final double[] OFFENSE_ARMOR_PEN = {12, 25, 37, 50, 62, 75, 87, 100};
     private static final double[] DROP_RATE_INCREASE = {100, 300, 500, 1000, 1500, 3000, 5000, 10000};
     private static final double[] DROP_RATE_KILLS = {1, 5, 10, 30, 100, 300, 500, 1000};
-    /** One entry per fist material: Wood, Stone, Iron, Diamond, Netherite. */
+
     private static final double[] DEFAULT_FIST_TIER_COST = {1.0, 1.5, 2.5, 4.0, 5.0};
 
-    // ---- General ----
     public static final ModConfigSpec.ConfigValue<Integer> MAX_SIMULTANEOUS_ADAPTATIONS;
     public static final ModConfigSpec.ConfigValue<Integer> ADAPTATION_HEAL_AMOUNT;
     public static final ModConfigSpec.ConfigValue<Boolean> RESET_ADAPTATIONS_ON_DEATH;
     public static final ModConfigSpec.ConfigValue<Boolean> KEEP_DATA_ON_UNEQUIP;
 
-    // ---- Analysis durations (ticks → seconds) ----
     public static final ModConfigSpec.ConfigValue<Double> ENV_ANALYSIS_SECONDS;
     public static final ModConfigSpec.ConfigValue<Double> DEBUFF_ANALYSIS_SECONDS;
     public static final ModConfigSpec.ConfigValue<Double> DEFENSE_ANALYSIS_SECONDS;
@@ -39,7 +33,6 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Double> EXISTENCE_PROXIMITY_BLOCKS;
     public static final ModConfigSpec.ConfigValue<Double> FALL_ANALYSIS_SECONDS;
 
-    // ---- Module switches ----
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DEFENSE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_OFFENSE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_ENVIRONMENT;
@@ -55,10 +48,8 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_AQUATIC;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_IMPACT;
 
-    // ---- Wheel awakening (tiers) ----
     public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_TIERS_ENABLED;
 
-    // ---- Ritual blocks ----
     public static final ModConfigSpec.ConfigValue<Boolean> BRAZIER_HEAL_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> BRAZIER_HEAL_PER_SECOND;
     public static final ModConfigSpec.ConfigValue<Boolean> TOTEM_ENABLED;
@@ -69,22 +60,18 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> TRADE_MAX_ITEMS;
     public static final ModConfigSpec.ConfigValue<Integer> TRADE_MAX_XP;
 
-    // ---- Adaptation transfer ----
     public static final ModConfigSpec.ConfigValue<Boolean> TRANSFER_ENABLED;
 
-    // ---- Resonance ----
     public static final ModConfigSpec.ConfigValue<Boolean> RESONANCE_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> RESONANCE_BLOCKS;
     public static final ModConfigSpec.ConfigValue<Boolean> RESONANCE_PARTICLES;
 
-    // ---- Shedding (voluntarily paying an adaptation away) ----
     public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_ENABLED;
     public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_BASE_TICKS;
     public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_TICKS_PER_LEVEL;
     public static final ModConfigSpec.ConfigValue<Double> SHEDDING_REATTACH_TIMER_FACTOR;
     public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_PROTECT_TIER;
 
-    // ---- Fist Mastery (adaptation to breaking) ----
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_ENABLED;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_HARVEST_WITHOUT_TOOL;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> FIST_TIER_COST_MULTIPLIER;
@@ -96,74 +83,58 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_INSTABREAK_DEFAULT_ON;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_LUCK_ENABLED;
 
-    // ---- Client-side visuals ----
     public static final ModConfigSpec.ConfigValue<Boolean> DARKNESS_LIGHTMAP_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> DARKNESS_LIGHTMAP_FLOOR;
 
-    // ---- Mining scaling ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
 
-    // ---- Combat scaling ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> COOLDOWN_RECOVERY_LEVELS;
 
-    // ---- Impact Mastery stomp ----
     public static final ModConfigSpec.ConfigValue<Double> IMPACT_STOMP_MIN_FALL;
     public static final ModConfigSpec.ConfigValue<Double> IMPACT_STOMP_DAMAGE_PER_BLOCK;
     public static final ModConfigSpec.ConfigValue<Double> IMPACT_STOMP_RADIUS;
 
-    // ---- Aquatic Mastery ----
     public static final ModConfigSpec.ConfigValue<Double> AQUATIC_SWIM_SPEED_BONUS;
 
-    // ---- Skill Issue (ranged homing) ----
     public static final ModConfigSpec.ConfigValue<Boolean> SKILL_ISSUE_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_RADIUS;
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_STRENGTH;
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_MAX_DISTANCE;
 
-    // ---- Dimension Destroy (transcendence ultimate) ----
     public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_DESTROY_ENABLED;
     public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_DESTROY_REQUIRED;
 
-    // ---- Contact immunity ----
     public static final ModConfigSpec.ConfigValue<Integer> CONTACT_IMMUNITY_LEVEL;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> CONTACT_PROTECTION_LEVELS;
 
-    // ---- Shortcuts ----
     public static final ModConfigSpec.ConfigValue<Boolean> INSTANT_STARVE;
     public static final ModConfigSpec.ConfigValue<Boolean> RAPID_FALL_ANALYSIS;
     public static final ModConfigSpec.ConfigValue<Integer> VOICE_VOLUME;
 
-    // ---- Defense scaling tables ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_REDUCTION_LEVELS;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_HEAL_RATIO_LEVELS;
 
-    // ---- Regeneration ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> REGEN_SPEED_LEVELS;
     public static final ModConfigSpec.ConfigValue<Double> REGEN_HP_THRESHOLD;
     public static final ModConfigSpec.ConfigValue<Boolean> THERMAL_REGEN_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> THERMAL_REGEN_HP_PER_SECOND;
 
-    // ---- Offense scaling tables ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> OFFENSE_DAMAGE_LEVELS;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> OFFENSE_CRIT_LEVELS;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> OFFENSE_ARMOR_PEN_LEVELS;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_SLASH_HP_PERCENT;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_SLASH_CHANCE;
 
-    // ---- Loot scaling tables ----
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> LOOT_BONUS_LEVELS;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> LOOT_KILL_THRESHOLDS;
 
-    // ---- Cumulative bonuses per completed adaptation ----
     public static final ModConfigSpec.ConfigValue<Double> BONUS_DAMAGE_PCT;
     public static final ModConfigSpec.ConfigValue<Double> BONUS_CRIT_PCT;
     public static final ModConfigSpec.ConfigValue<Double> BONUS_HP_PCT;
     public static final ModConfigSpec.ConfigValue<Double> BONUS_ARMOR_FLAT;
 
-    // ---- Existence reflection ----
     public static final ModConfigSpec.ConfigValue<Double> EXISTENCE_REFLECT_MULTIPLIER;
 
-    // ---- Client-side ----
     public static final ModConfigSpec.ConfigValue<Boolean> HUD_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> HUD_SCALE;
     public static final ModConfigSpec.ConfigValue<Integer> HUD_OFFSET_X;
@@ -623,26 +594,14 @@ public final class AdaptionConfig {
         return table(CONTACT_PROTECTION_LEVELS, level, DEFENSE_REDUCTION);
     }
 
-    /** Mining speed bonus % for Mine_Labor level (0 at level 0). */
     public static double miningSpeedBonus(int level) {
         return table(MINING_SPEED_LEVELS, level, new double[]{15, 30, 50, 75, 105, 140, 185, 240});
     }
 
-    /** Attack-cooldown penalty removal % for Combat_Cooldown level (0 at level 0). */
     public static double cooldownRecovery(int level) {
         return table(COOLDOWN_RECOVERY_LEVELS, level, new double[]{25, 42, 56, 70, 82, 91, 97, 100});
     }
 
-    /**
-     * Per-tier Fist Mastery cost multiplier (index 0 = Wood).
-     *
-     * <p>A list whose length does not match the number of materials is ignored wholesale rather
-     * than read entry by entry. {@code defineList} only validates individual elements, so a
-     * config left over from the six-tier layout kept its six multipliers after the copper tier
-     * was merged away — and reading the surviving prefix silently gave Iron the old copper-era
-     * cost. Reverting the whole table to the defaults is the honest outcome for a table that no
-     * longer has the right shape, and the log line says so.</p>
-     */
     public static double fistTierCost(int tier) {
         java.util.List<? extends Double> configured = FIST_TIER_COST_MULTIPLIER.get();
         if (configured == null || configured.size() != ru.adaptionwheel.category.FistTiers.TIER_COUNT) {
@@ -652,11 +611,6 @@ public final class AdaptionConfig {
         return listValue(FIST_TIER_COST_MULTIPLIER, tier, DEFAULT_FIST_TIER_COST);
     }
 
-    /**
-     * Rewrites a table of the wrong length to the current defaults, so the mismatch is fixed once
-     * and does not sit there being reinterpreted on every read. {@code set} marks the config
-     * dirty, so the corrected list is written to disk on the next save.
-     */
     private static void repairTierCostTable(int actualLength) {
         if (tierCostRepaired) {
             return;
@@ -672,15 +626,10 @@ public final class AdaptionConfig {
 
     private static boolean tierCostRepaired;
 
-    /** Per-tier bare-hand mining speed is read from the vanilla tool; see {@link FistTiers}. */
     public static double fistTierSpeed(int tier) {
         return ru.adaptionwheel.category.FistTiers.vanillaMiningSpeed(tier);
     }
 
-    /**
-     * Blocks of the tier's own material needed to go from {@code currentLevel} to the next
-     * one. Doubles as the progress cap for the tier's analysis bar.
-     */
     public static int fistBlocksForNextLevel(int tier, int currentLevel) {
         double base = Math.max(1, FIST_FIRST_LEVEL_BLOCKS.get());
         double growth = Math.max(1.0, FIST_LEVEL_COST_GROWTH.get());
@@ -716,7 +665,6 @@ public final class AdaptionConfig {
         return table(LOOT_KILL_THRESHOLDS, level, DROP_RATE_KILLS);
     }
 
-    /** Drop level (0-8) for a given kill count using the configured thresholds. */
     public static int dropLevelFromKills(int kills) {
         int level = 0;
         for (int lv = 1; lv <= 8; lv++) {
@@ -727,7 +675,6 @@ public final class AdaptionConfig {
         return level;
     }
 
-    /** Level is 1-based; clamps to the 8-entry table. */
     private static double table(ModConfigSpec.ConfigValue<List<? extends Double>> config, int level, double[] fallback) {
         if (level < 1) {
             return 0;
@@ -735,14 +682,6 @@ public final class AdaptionConfig {
         return listValue(config, level - 1, fallback);
     }
 
-    /**
-     * Reads a configured double list by index, clamping to whatever the user actually wrote.
-     *
-     * <p>A short list used to be silently discarded in favour of {@code fallback}, so a pack that
-     * trimmed {@code reductionPct} down to four entries saw no change and no warning. The
-     * fallback array is now only consulted when the list is missing or empty; otherwise the
-     * user's entries are honoured and the last one repeats past the end of the list.</p>
-     */
     private static double listValue(ModConfigSpec.ConfigValue<List<? extends Double>> config, int index, double[] fallback) {
         if (index < 0) {
             return 0;

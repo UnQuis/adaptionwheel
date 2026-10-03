@@ -9,7 +9,6 @@ import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;import ru.
 import ru.adaptionwheel.item.SwordOfExterminationItem;
 import ru.adaptionwheel.network.FireSlashPayload;
 
-/** Sends empty-air sword swings to the server so cursed slashes fire on every click. */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class ClientSwingHandler {
 

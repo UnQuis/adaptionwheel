@@ -6,7 +6,6 @@ import net.minecraft.resources.ResourceLocation;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.entity.DiscipleEntity;
 
-/** Renders a Disciple. */
 public class DiscipleRenderer extends MobRenderer<DiscipleEntity, DiscipleModel> {
 
     private static final ResourceLocation TEXTURE =

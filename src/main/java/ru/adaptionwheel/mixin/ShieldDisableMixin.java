@@ -7,11 +7,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.adaptionwheel.SurfaceAdaptations;
 
-/**
- * Combat_ShieldLock: {@code Player.disableShield()} is the single choke point
- * vanilla uses for every shield disable (axe hits included) — adapted players
- * simply never enter it, on both sides.
- */
 @Mixin(Player.class)
 public abstract class ShieldDisableMixin {
 

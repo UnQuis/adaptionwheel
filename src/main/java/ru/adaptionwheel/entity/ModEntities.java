@@ -20,10 +20,6 @@ public class ModEntities {
                     .updateInterval(20)
                     .build("cursed_slash"));
 
-    /**
-     * The mod's only mob. Sized like a player so the humanoid model renders correctly, and
-     * deliberately a MONSTER category so it spawns in the dark like one and counts for a beacon.
-     */
     public static final DeferredHolder<EntityType<?>, EntityType<DiscipleEntity>> DISCIPLE =
             ENTITIES.register("disciple", () -> EntityType.Builder.<DiscipleEntity>of(
                             DiscipleEntity::new, MobCategory.MONSTER)

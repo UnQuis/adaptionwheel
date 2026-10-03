@@ -8,7 +8,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import ru.adaptionwheel.entity.SpatialRiftProjectile;
 
-/** Textured flying slash used for the Dimension Destroy instant-kill rift. */
 public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile> {
 
     private static final int[] BLADE_VIOLET = {242, 218, 255};

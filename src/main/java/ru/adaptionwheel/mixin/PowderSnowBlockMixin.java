@@ -10,12 +10,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import ru.adaptionwheel.SurfaceAdaptations;
 
-/**
- * Move_PowderSnow: adapted players stand ON powder snow like leather-boots
- * wearers ({@code canEntityWalkOnPowderSnow}) and sinking into it no longer
- * drags them down or accumulates freezing (entityInside is skipped entirely,
- * which also prevents {@code setIsInPowderSnow(true)} from ever applying).
- */
 @Mixin(PowderSnowBlock.class)
 public abstract class PowderSnowBlockMixin {
 

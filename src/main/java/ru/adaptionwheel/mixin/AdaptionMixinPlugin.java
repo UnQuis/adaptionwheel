@@ -7,12 +7,6 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Gates optional integration mixins on mod presence.
- * {@link GuardianLaserMixin} targets a Draconic Evolution class; applying it
- * without that mod would produce missing-target errors, so it is skipped unless
- * {@code draconicevolution} is on the mod list.
- */
 public class AdaptionMixinPlugin implements IMixinConfigPlugin {
 
     private static final String CHAOS_MIXIN = "GuardianLaserMixin";

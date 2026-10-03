@@ -8,12 +8,6 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import ru.adaptionwheel.AdaptionWheel;
 
-/**
- * Custom Data Components for the mod.
- * WHEEL_DATA stores persistent adaptation data on the Mahoraga Wheel item.
- * SWORD_MODE stores the energy mode of the Sword of Extermination
- * (false = positive energy, true = cursed/negative energy).
- */
 public class ModDataComponents {
 
     public static final DeferredRegister<DataComponentType<?>> COMPONENTS =

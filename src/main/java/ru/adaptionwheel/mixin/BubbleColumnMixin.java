@@ -9,11 +9,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.adaptionwheel.SurfaceAdaptations;
 
-/**
- * Move_BubbleColumn: vanilla applies drag/launch via {@code onAboveBubbleCol} /
- * {@code onInsideBubbleCol} from entityInside; adapted players keep full
- * control of their vertical motion inside columns.
- */
 @Mixin(BubbleColumnBlock.class)
 public abstract class BubbleColumnMixin {
 

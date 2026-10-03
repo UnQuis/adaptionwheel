@@ -14,15 +14,6 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import ru.adaptionwheel.AdaptionWheel;
 
-/**
- * Shared textured renderer for the two Sword of Extermination projectiles.
- *
- * <p>The caller puts the pose stack into camera orientation before entering
- * this class. The slash is therefore deliberately drawn in the local XY plane
- * as a camera-facing billboard. The old implementation built planes around
- * the projectile's world-space flight axis; that made the texture turn edge-on
- * whenever the player looked across the flight direction.</p>
- */
 public final class FlyingSlashRenderer {
 
     public static final ResourceLocation BLADE_TEXTURE =
@@ -33,21 +24,6 @@ public final class FlyingSlashRenderer {
     private FlyingSlashRenderer() {
     }
 
-    /**
-     * Draws a layered flying slash at the entity origin. The pose stack must
-     * already have the entity-renderer camera rotation applied. Local X/Y are
-     * then screen-right/screen-up, so turning the camera can never expose the
-     * slash as a paper-thin edge.
-     *
-     * @param motion projectile velocity; used only to avoid drawing invalid zero-motion entities
-     * @param roll projectile-specific screen rotation, so simultaneous slashes do not stack
-     * @param age projectile age including the current partial tick
-     * @param width horizontal size of the imported slash shape
-     * @param height vertical size of the imported slash shape
-     * @param color RGB tint for the solid blade
-     * @param glowColor RGB tint for its soft halo
-     * @param opacity overall opacity, normally a lifetime fade value
-     */
     public static void render(PoseStack poseStack, MultiBufferSource buffers, Vec3 motion, float roll,
                               float age, float width, float height,
                               int[] color, int[] glowColor, float opacity) {
@@ -59,15 +35,10 @@ public final class FlyingSlashRenderer {
         float pulse = 0.88f + 0.12f * Mth.sin(age * 1.8f);
         float growth = Mth.clamp(age / 4f, 0.18f, 1f);
 
-        // Rotate inside the billboard, not around the projectile's world-space
-        // axis. This preserves the weapon's per-projectile variation without
-        // sacrificing camera-facing visibility.
         Quaternionf screenRotation = new Quaternionf().rotationZ(roll);
         Vec3 side = rotate(screenRotation, new Vec3(1, 0, 0));
         Vec3 up = rotate(screenRotation, new Vec3(0, 1, 0));
 
-        // The imported soft shape is deliberately drawn first. The sharp white
-        // alpha shape on top gives the slash a hot core without procedural noise.
         drawSprite(buffers, matrix, side, up, Vec3.ZERO,
                 width * 1.12f * growth, height * 1.12f * growth,
                 SOFT_TEXTURE, glowColor, (int) (82f * pulse * opacity));
@@ -75,8 +46,6 @@ public final class FlyingSlashRenderer {
                 width * growth, height * growth,
                 BLADE_TEXTURE, color, (int) (226f * pulse * opacity));
 
-        // A dim, slightly rotated after-image adds motion without introducing
-        // another world-oriented plane that could become edge-on.
         Quaternionf echoRotation = new Quaternionf().rotationZ(roll + 0.08f);
         drawSprite(buffers, matrix, rotate(echoRotation, new Vec3(1, 0, 0)),
                 rotate(echoRotation, new Vec3(0, 1, 0)), new Vec3(0, 0, -0.04),

@@ -20,38 +20,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Which mobs drop what — the index the Resonance Altar trades against.
- *
- * <p>The altar is fed a mob's own loot and offers that mob's adaptations, so the whole mechanic
- * rests on one lookup: given an item, which mobs drop it. Vanilla does not answer that anywhere, so
- * this reads it from data.</p>
- *
- * <h2>Why the mapping is shipped rather than scraped</h2>
- *
- * <p>It could be read out of the loot tables at runtime — {@code EntityType.getDefaultLootTable()},
- * then {@code reloadableRegistries().getLootTable(key)}, then walk each pool's entries. That is
- * exactly the obvious implementation and it was rejected for three reasons: {@code LootPool}'s entry
- * list is a private field behind {@link net.minecraft.world.level.storage.loot.entries.LootPoolEntryContainer}
- * on 1.21.1, so reaching the items means an unwrap that differs between branches; the loot table
- * <em>shape</em> changed on 26.3 ({@code functions} → {@code modifier}, {@code item} → {@code name}),
- * so the same walk is two different parsers; and a mob's loot is static data, so scraping it at
- * runtime re-derives a constant fifty-eight times.</p>
- *
- * <p>So the mapping is generated once from the vanilla data files and shipped as
- * {@code data/adaptionwheel/domain_altar/<mob_path>.json}, one per mob that actually drops
- * anything. Fifty-eight mobs qualify; the twenty-six that drop nothing — allay, bat, fox, ocelot,
- * wolf, villager, the player — are simply absent, which is the correct answer rather than an empty
- * entry. A mod that changes what its mobs drop ships its own file and is covered without a code
- * change.</p>
- *
- * <p><b>The Warden is here because vanilla already put it here.</b> The player expects the sculk
- * catalyst to come from it, and it does: {@code loot_tables/entities/warden.json} lists it, so the
- * generation found it without a special case.</p>
- *
- * <p>Built once, on first use, and cleared on server stop so a {@code /reload} that swaps datapacks
- * is not answered from a stale index.</p>
- */
 @net.neoforged.fml.common.EventBusSubscriber(modid = ru.adaptionwheel.AdaptionWheel.MODID)
 public final class AltarOfferings {
 
@@ -60,33 +28,14 @@ public final class AltarOfferings {
     private AltarOfferings() {
     }
 
-    /** Item → the mobs whose loot includes it. Both sides are insertion-ordered for a stable UI. */
     private static Map<Item, List<String>> index;
 
-    /** What one mob can be paid with, for a tooltip or a test. */
     private static final Map<String, List<String>> BY_MOB = new LinkedHashMap<>();
 
-    /**
-     * Forgets the index, so a stale answer cannot outlive the world that produced it.
-     *
-     * <p>Wired to the server stopping by {@link #onServerStopped} below. It used to be documented as
-     * "called when the server stops" and was called by nothing at all — harmless while there was one
-     * process per world, and wrong the moment two of them shared a JVM, which is exactly what a
-     * dedicated server and an integrated one do not do and a test harness does.</p>
-     */
     public static void forget() {
         index = null;
     }
 
-    /**
-     * Warms the index at server start rather than at the first menu open.
-     *
-     * <p>Two reasons, and the second is the one that matters. The first is that building it is a
-     * directory walk and a JSON parse per file, and doing that inside the first player's first click
-     * is a latency nobody asked for. The second is that {@link #ensureLoaded} logs what it loaded,
-     * and an index that only announces itself on demand cannot be checked without reproducing the
-     * demand.</p>
-     */
     @net.neoforged.bus.api.SubscribeEvent
     public static void onServerStarted(net.neoforged.neoforge.event.server.ServerStartedEvent event) {
         allMobs(event.getServer());
@@ -97,12 +46,6 @@ public final class AltarOfferings {
         forget();
     }
 
-    /**
-     * The mobs whose loot contains {@code stack}, empty if it is not a mob drop at all.
-     *
-     * <p>Never throws on an unknown item: the altar accepts any stack in the slot and the recipe
-     * lookup is what decides what it buys, so a question with no answer is an empty list.</p>
-     */
     public static List<String> mobsFor(ItemStack stack, MinecraftServer server) {
         if (stack == null || stack.isEmpty()) {
             return List.of();
@@ -119,12 +62,10 @@ public final class AltarOfferings {
         return mobs == null ? List.of() : mobs;
     }
 
-    /** Whether the altar will take this item at all. */
     public static boolean isOffering(ItemStack stack, MinecraftServer server) {
         return !mobsFor(stack, server).isEmpty();
     }
 
-    /** Every mob with loot, for a test or a debug command. */
     public static Map<String, List<String>> allMobs(MinecraftServer server) {
         ensureLoaded(server);
         return Collections.unmodifiableMap(BY_MOB);
@@ -135,8 +76,7 @@ public final class AltarOfferings {
             return;
         }
         Map<Item, List<String>> built = new LinkedHashMap<>();
-        // 26.3's listResources takes a ResourceManager.Selector, not a Predicate<ResourceLocation>;
-        // 1.21.1 takes the Predicate. Same shape of answer, different name.
+
         for (var resource : server.getResourceManager()
                 .listResources("domain_altar",
                         id -> id.getPath().endsWith(".json"))
@@ -144,18 +84,7 @@ public final class AltarOfferings {
             readOne(server, resource.getKey(), resource.getValue(), built);
         }
         index = built;
-        // Say what was loaded, once, at INFO.
-        //
-        // <p>This index is data-driven and its failure is silent in the worst way: a data file
-        // naming an item this build does not have is skipped, a file that fails to parse is logged
-        // and skipped, and a mob with no file at all is simply absent — so "the altar opens and
-        // offers me nothing" looks identical to "this item is not an offering" and to "my wheel
-        // already knows everything it opens". One line naming the count turns the first of those
-        // three into something checkable, and it is the difference between debugging this with the
-        // game in front of you and without.</p>
-        //
-        // <p>Also counts the items nothing maps to in the other direction, because that is the
-        // other silent half: an offering item that resolves to a real item but to no mobs.</p>
+
         LOGGER.info("Domain altar offerings: {} mobs, {} offering items",
                 BY_MOB.size(), built.size());
     }
@@ -173,8 +102,7 @@ public final class AltarOfferings {
                 items.add(array.get(i).getAsString());
             }
         } catch (IOException | RuntimeException e) {
-            // A malformed file must not take the whole altar down. One mob losing its offerings
-            // is a much smaller failure than every mob losing them.
+
             LOGGER.warn("Domain altar offerings for {} could not be read ({})",
                     location, e.toString());
             return;
@@ -184,20 +112,13 @@ public final class AltarOfferings {
         }
         BY_MOB.put(mob, List.copyOf(items));
         for (String itemId : items) {
-            // An item named by the data and absent from the game is skipped rather than fatal: the
-            // loot tables and the item registry come from the same game version, but a pack may trim
-            // an item out, and one mob losing its offerings is a much smaller failure than every mob
-            // losing them. 26.3 reads this as
-            // `BuiltInRegistries.ITEM.get(id).map(Holder.Reference::value).orElse(null)`, because
-            // there `get` returns an Optional of a Holder; in 1.21.1 it returns the item, and an
-            // unknown key comes back as air, which is the answer wanted here.
+
             ResourceLocation key = ResourceLocation.parse(itemId);
             Item item = BuiltInRegistries.ITEM.containsKey(key) ? BuiltInRegistries.ITEM.get(key) : null;
             if (item != null) {
                 built.computeIfAbsent(item, k -> new ArrayList<>()).add(mob);
             } else {
-                // Named by the data and absent from the game: worth a line each, because the player
-                // will otherwise be told an offering opens nothing, for an item they can hold.
+
                 LOGGER.warn("{} offers {}, which this build has no item for", mob, itemId);
             }
         }

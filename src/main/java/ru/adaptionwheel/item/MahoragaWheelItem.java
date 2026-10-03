@@ -12,19 +12,10 @@ import top.theillusivec4.curios.api.type.capability.ICurioItem;
 
 import java.util.List;
 
-/** The Mahoraga Wheel — the source of all adaptation. Equips only in the dedicated Curios wheel slot. */
 public class MahoragaWheelItem extends Item implements ICurioItem {
 
     public static final String WHEEL_SLOT = "wheel";
 
-    /**
-     * Whether this stack is one of the wheels, wooden or not.
-     *
-     * <p>Exists because two places now need the answer from an arbitrary stack rather than from
-     * the registry: adaptation transfer keys off what is in the hand, and asking by item identity
-     * would silently exclude the wooden wheel, which carries the same data component and is the
-     * very first thing a player makes.</p>
-     */
     public static boolean isWheel(net.minecraft.world.item.ItemStack stack) {
         return stack != null && (stack.is(ModItems.MAHORAGA_WHEEL.get())
                 || stack.is(ModItems.MAHORAGA_WHEEL_WOOD.get()));
@@ -58,7 +49,7 @@ public class MahoragaWheelItem extends Item implements ICurioItem {
                         .withStyle(ChatFormatting.LIGHT_PURPLE));
             }
         }
-        // Hint for the adaptation browser screen (client-only key name).
+
         if (net.neoforged.fml.loading.FMLEnvironment.dist.isClient()) {
             net.minecraft.client.KeyMapping key = ru.adaptionwheel.client.AdaptionKeybinds.OPEN_SCREEN_KEY;
             if (key != null && !key.isUnbound()) {

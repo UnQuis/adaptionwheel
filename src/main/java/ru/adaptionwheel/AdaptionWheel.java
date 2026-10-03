@@ -42,9 +42,7 @@ public class AdaptionWheel {
                         output.accept(ModItems.MAHORAGA_WHEEL.get());
                         output.accept(ModItems.ALL_ADAPTION.get());
                         output.accept(ModItems.SWORD_OF_EXTERMINATION.get());
-                        // The ritual set and the mob, in the mod's own tab as well as the vanilla
-                        // ones. This lambda is the one place that is guaranteed to run, so it is
-                        // where content has to be listed for it to be findable at all.
+
                         output.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
                         output.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
                         output.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());
@@ -74,7 +72,7 @@ public class AdaptionWheel {
         event.enqueueWork(() -> {
             Item item = ModItems.MAHORAGA_WHEEL.get();
             CuriosApi.registerCurio(item, (ICurioItem) item);
-            // The stone's price list, resolved now that both item registries are populated.
+
             ru.adaptionwheel.server.DomainExchange.bootstrap();
         });
     }
@@ -82,16 +80,6 @@ public class AdaptionWheel {
     @EventBusSubscriber(modid = MODID)
     public static class ModBusEvents {
 
-        /**
-         * Whether an event is about the named vanilla tab.
-         *
-         * <p>Compared by location rather than by key object. {@code ResourceKey} overrides neither
-         * {@code equals} nor {@code hashCode} in 1.21.1 either, so {@code ==} is identity and a
-         * hand-built key is never the registry's object — which is why the 26.3 branch's Combat
-         * branch had been dead code from the day it was written. Matching on the location works no
-         * matter which object the event hands back, and is the only form of this check that is
-         * correct by construction rather than by which field happens to be public.</p>
-         */
         private static boolean isTab(ResourceKey<CreativeModeTab> key, String id) {
             return key != null && key.location().equals(ResourceLocation.withDefaultNamespace(id));
         }
@@ -99,8 +87,7 @@ public class AdaptionWheel {
         @SubscribeEvent
         public static void onRegisterScreens(
                 net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
-            // One screen, one line. There were three registrations here once, one per block with a
-            // container, and two screen classes that differed in nothing but the title they printed.
+
             event.register(ru.adaptionwheel.menu.ModMenus.RESONANCE_ALTAR_TRADE.get(),
                     ru.adaptionwheel.TradeScreen::new);
         }
@@ -108,8 +95,7 @@ public class AdaptionWheel {
         @SubscribeEvent
         public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {
             if (isTab(event.getTabKey(), "functional_blocks")) {
-                // The ritual set, in the order it becomes useful rather than alphabetically:
-                // light it, speed an analysis, raise the buff, then the one that gives.
+
                 event.accept(ru.adaptionwheel.block.ModBlocks.ADAPTATION_BRAZIER_ITEM.get());
                 event.accept(ru.adaptionwheel.block.ModBlocks.WHEEL_TOTEM_ITEM.get());
                 event.accept(ru.adaptionwheel.block.ModBlocks.RESONANCE_ALTAR_ITEM.get());

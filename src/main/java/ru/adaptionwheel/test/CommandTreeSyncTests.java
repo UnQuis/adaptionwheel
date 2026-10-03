@@ -20,21 +20,6 @@ import ru.adaptionwheel.server.AdaptionCommand;
 import java.util.List;
 import java.util.Set;
 
-/**
- * The command tree must be serializable to the client, or nobody can log in.
- *
- * <p>Registering a custom {@link ArgumentType} parses correctly and then breaks the game at
- * login. The command tree is mirrored to the client, and the client rebuilds each node from a
- * serializer looked up by the argument type's class in {@code ArgumentTypeInfos}' private static
- * map, which is filled from a hardcoded bootstrap list. There is no NeoForge registration hook.
- * So the server happily builds the tree, {@code ClientboundCommandsPacket} throws
- * {@code Unrecognized argument type}, and the client drops the connection with
- * {@code Invalid player data} — a total failure to join, not a broken command.</p>
- *
- * <p>That is exactly what happened once already, and no unit test or dedicated-server boot
- * caught it, because both are server-side. These tests walk the real tree this mod registers and
- * assert every argument type in it is one the client can deserialize.</p>
- */
 @GameTestHolder(ru.adaptionwheel.AdaptionWheel.MODID)
 @PrefixGameTestTemplate(false)
 public final class CommandTreeSyncTests {
@@ -42,7 +27,6 @@ public final class CommandTreeSyncTests {
     private CommandTreeSyncTests() {
     }
 
-    /** The dispatcher this mod's command handler builds into, in isolation. */
     private static CommandDispatcher<CommandSourceStack> modDispatcher() {
         CommandBuildContext context = Commands.createValidationContext(VanillaRegistries.createLookup());
         CommandDispatcher<CommandSourceStack> dispatcher =
@@ -52,11 +36,6 @@ public final class CommandTreeSyncTests {
         return dispatcher;
     }
 
-    /**
-     * The direct reproduction: every argument type in the tree must be recognized by the
-     * serializer registry. This is the same predicate {@code ClientboundCommandsPacket} uses when
-     * it throws, so a failure here is a failure to log in.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void everyArgumentTypeCanBeSentToTheClient(GameTestHelper helper) {
         Set<ArgumentType<?>> used = ArgumentUtils.findUsedArgumentTypes(modDispatcher().getRoot());
@@ -70,7 +49,6 @@ public final class CommandTreeSyncTests {
         helper.succeed();
     }
 
-    /** The tree must contain the subcommands the docs promise, not just survive serialization. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theTreeExposesEverySubcommand(GameTestHelper helper) {
         var root = modDispatcher().getRoot();
@@ -83,7 +61,6 @@ public final class CommandTreeSyncTests {
         helper.succeed();
     }
 
-    /** {@code grant} must offer the bulk form, and it must be reachable with no extra argument. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void grantOffersABulkForm(GameTestHelper helper) {
         var grant = modDispatcher().getRoot().getChild("adaptionwheel").getChild("grant");
@@ -93,19 +70,6 @@ public final class CommandTreeSyncTests {
         helper.succeed();
     }
 
-    /**
-     * Every form of {@code grant} has to be reachable, and {@code <concept> <player>} in
-     * particular: without it the only way to name another player was to invent a level as well,
-     * so the command answered "Expected integer" while pointing at the player's name.
-     *
-     * <p>Purely structural — no player is needed to check that a branch exists, which is the whole
-     * point, since the player-dependent path cannot be exercised here.</p>
-     *
-     * <p>Written against the child <em>names</em> rather than by dereferencing each node in turn:
-     * a missing node threw a NullPointerException out of the test body, and a gametest that dies
-     * that way never reaches a terminal state — the whole 38-test batch hangs instead of reporting
-     * one failure.</p>
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void grantAcceptsATargetWithoutALevel(GameTestHelper helper) {
         var concept = modDispatcher().getRoot().getChild("adaptionwheel")
@@ -127,7 +91,6 @@ private static List<String> childNames(com.mojang.brigadier.tree.CommandNode<?> 
                 .sorted().toList();
     }
 
-    /** {@code ungrant} takes a concept and an optional target, like {@code info}. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void ungrantAcceptsAConceptAndTarget(GameTestHelper helper) {
         var ungrant = modDispatcher().getRoot().getChild("adaptionwheel").getChild("ungrant");
@@ -138,11 +101,6 @@ private static List<String> childNames(com.mojang.brigadier.tree.CommandNode<?> 
         helper.succeed();
     }
 
-    /**
-     * A custom argument type is the mistake this file exists to catch, so assert the constraint
-     * itself rather than only the absence of one: a locally declared type is rejected by the
-     * registry, which is why the concept argument has to be a vanilla one.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void aLocallyDeclaredArgumentTypeWouldBeRejected(GameTestHelper helper) {
         ArgumentType<String> homemade = new ArgumentType<>() {
@@ -157,11 +115,6 @@ private static List<String> childNames(com.mojang.brigadier.tree.CommandNode<?> 
         helper.succeed();
     }
 
-    /**
-     * Grants route through the registry, and the bulk form iterates it — so an unregistered or
-     * unencodable concept key would make {@code grant all} produce garbage. Keep the registry
-     * enumerable and non-empty so that path is meaningful.
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theRegistryIsEnumerableForBulkGrants(GameTestHelper helper) {
         var all = AdaptationRegistry.allDefinitions();

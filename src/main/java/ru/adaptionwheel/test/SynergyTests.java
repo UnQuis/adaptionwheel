@@ -10,25 +10,10 @@ import ru.adaptionwheel.category.FistTiers;
 import ru.adaptionwheel.category.Synergies;
 import ru.adaptionwheel.data.PlayerAdaption;
 
-/**
- * Synergies: the named combinations that make the adaptation pool interact.
- *
- * <p>These are almost entirely pure logic, which is the right place for them — an effect that only
- * fires inside a damage event cannot be reached here (mock players are broken while Curios is
- * installed), so what can be pinned is the matching, and matching is where a typo in a concept key
- * silently disables a synergy forever.</p>
- */
 @GameTestHolder(ru.adaptionwheel.AdaptionWheel.MODID)
 @PrefixGameTestTemplate(false)
 public class SynergyTests {
 
-    /**
-     * A fresh attachment with nothing adapted.
-     *
-     * <p>Built through the canonical record constructor rather than the package-private no-arg
-     * one, which is the same shape {@code FistGameTests} uses — and the only way to make one from
-     * outside {@code ru.adaptionwheel.data}.</p>
-     */
     private static PlayerAdaption empty() {
         return new PlayerAdaption(
                 new java.util.HashMap<>(), java.util.List.of(), java.util.List.of(),
@@ -49,9 +34,7 @@ public class SynergyTests {
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void everyRosterEntrySatisfiesItself(GameTestHelper helper) {
-        // The one that catches a mistyped concept key: grant exactly what each synergy asks for and
-        // it must light up. Without this, a synergy whose requirement names a key nothing ever
-        // grants is dead content that still shows in the browser.
+
         for (Synergies.Synergy synergy : Synergies.ALL) {
             PlayerAdaption data = empty();
             for (String[] requirement : synergy.requires()) {
@@ -60,10 +43,10 @@ public class SynergyTests {
                         .equals(requirement[1])) {
                     data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
                 } else {
-                    // Satisfy a family requirement by granting one member of the family.
+
                     String concrete = concreteMember(concept);
                     if (data.isAdapted(concrete) || data.level(concrete) > 0) {
-                        // two requirements in the same family
+
                         continue;
                     }
                     data.levels.put(concrete, 1);
@@ -76,13 +59,6 @@ public class SynergyTests {
         helper.succeed();
     }
 
-    /**
-     * A prefix requirement has to be satisfiable by something that can actually be granted.
-     *
-     * <p>Prefix requirements are how a boss-agnostic synergy exists at all — the concept keys are
-     * generated per boss — so a family whose members nothing grants would make those synergies
-     * permanently inert.</p>
-     */
     private static String concreteMember(String requirement) {
         if (requirement.equals(Concepts.EXISTENCE_PREFIX)) {
             return Concepts.existence("minecraft:ender_dragon");
@@ -101,28 +77,24 @@ public class SynergyTests {
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void aFamilyRequirementMatchesAnyMember(GameTestHelper helper) {
-        // Both of Unmaker's requirements, so the assertion is about the family match and not
-        // about a missing half.
+
         PlayerAdaption data = empty();
         data.levels.put(Concepts.ENV_VOID, 1);
         data.levels.put(Concepts.existence("minecraft:wither"), 1);
         helper.assertTrue(Synergies.satisfied(data, Synergies.UNMAKER),
                 "Env_Void plus one boss must light Unmaker");
 
-        // A boss-agnostic requirement is satisfied by ANY boss, not only one specific id.
         PlayerAdaption other = empty();
         other.levels.put(Concepts.ENV_VOID, 1);
         other.levels.put(Concepts.existence("someothermod:the_final_boss"), 1);
         helper.assertTrue(Synergies.satisfied(other, Synergies.UNMAKER),
                 "a modded boss must satisfy an Existence requirement just as a vanilla one does");
 
-        // And Env_Void with no boss at all must not.
         PlayerAdaption alone = empty();
         alone.levels.put(Concepts.ENV_VOID, 1);
         helper.assertTrue(!Synergies.satisfied(alone, Synergies.UNMAKER),
                 "Env_Void alone must not satisfy Unmaker");
 
-        // An unrelated concept must not be mistaken for a family member.
         PlayerAdaption unrelated = empty();
         unrelated.levels.put(Concepts.ENV_VOID, 1);
         unrelated.levels.put(Concepts.type(AdaptionCategory.FIRE), PlayerAdaption.MAX_LEVEL);

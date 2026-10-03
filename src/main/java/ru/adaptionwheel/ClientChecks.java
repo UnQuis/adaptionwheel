@@ -3,7 +3,6 @@ package ru.adaptionwheel;
 import ru.adaptionwheel.client.ClientAdaption;
 import ru.adaptionwheel.category.Concepts;
 
-/** Client-only half of {@link SurfaceAdaptations}; never referenced on the server. */
 final class ClientChecks {
 
     private ClientChecks() {

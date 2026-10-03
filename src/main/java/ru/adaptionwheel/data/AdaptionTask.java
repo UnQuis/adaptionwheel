@@ -3,7 +3,6 @@ package ru.adaptionwheel.data;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
-/** An active analysis task, mirroring the original mod's task system. */
 public class AdaptionTask {
 
     public static final Codec<AdaptionTask> CODEC = RecordCodecBuilder.create(inst -> inst.group(

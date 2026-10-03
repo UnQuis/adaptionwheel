@@ -13,15 +13,6 @@ import ru.adaptionwheel.server.AltarOfferings;
 import java.util.HashMap;
 import java.util.List;
 
-/**
- * The Resonance Altar's index: which mobs drop what.
- *
- * <p>This is the one place in the mechanic that can fail silently. A data file that names an item
- * this build does not have is skipped, a mob whose file is unreadable is skipped, and an item no
- * file mentions is simply not an offering — so "the altar opens and shows nothing" is the natural
- * failure and there is no error anywhere. These tests are the only thing standing between that and
- * a block that quietly does nothing.</p>
- */
 @GameTestHolder(AdaptionWheel.MODID)
 @PrefixGameTestTemplate(false)
 public class AltarOfferingTests {
@@ -30,33 +21,27 @@ public class AltarOfferingTests {
         return AltarOfferings.allMobs(helper.getLevel().getServer());
     }
 
-    /** The load-bearing one: the index is not empty, and the obvious cases are in it. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theIndexLoadsAndCoversTheObviousCases(GameTestHelper helper) {
         var all = mobs(helper);
         helper.assertTrue(all.size() >= 50,
                 "expected at least the fifty-odd vanilla mobs that drop anything, got " + all.size());
 
-        // The case the feature was asked for by name.
         helper.assertTrue(all.containsKey("minecraft:warden"),
                 "the Warden must be in the index; the sculk catalyst is its loot");
         helper.assertTrue(all.get("minecraft:warden").contains("minecraft:sculk_catalyst"),
                 "the Warden must offer the catalyst, got " + all.get("minecraft:warden"));
 
-        // A mob whose drop is the plainest example of "meat".
         helper.assertTrue(all.containsKey("minecraft:chicken"), "a chicken must be in the index");
         helper.assertTrue(all.get("minecraft:chicken").contains("minecraft:feather"),
                 "a chicken must offer a feather, got " + all.get("minecraft:chicken"));
 
-        // And the shared cases, where one item belongs to several mobs -- this is why the altar
-        // offers a choice rather than one answer.
         helper.assertTrue(all.containsKey("minecraft:skeleton"), "a skeleton must be in the index");
         helper.assertTrue(all.get("minecraft:skeleton").contains("minecraft:bone"),
                 "a skeleton must offer a bone");
         helper.succeed();
     }
 
-    /** Mobs that drop nothing are absent rather than present-and-empty. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void mobsThatDropNothingAreAbsent(GameTestHelper helper) {
         var all = mobs(helper);
@@ -71,7 +56,6 @@ public class AltarOfferingTests {
         helper.succeed();
     }
 
-    /** The index is the reverse of the data files, and it must survive a bad answer. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void itemsThatAreNoMobLootAreNotOfferings(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
@@ -90,12 +74,6 @@ public class AltarOfferingTests {
         helper.succeed();
     }
 
-    /**
-     * One offering, two adaptations per mob -- and the pairing is what the mechanic is.
-     *
-     * <p>Split into "hurt it" and "take more from it" because a player who wants a mob's drops is
-     * not asking for the ability to fight it.</p>
-     */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void aDropOffersBothItsAdaptationsPerMob(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
@@ -120,7 +98,6 @@ public class AltarOfferingTests {
         helper.succeed();
     }
 
-    /** The Warden is not special-cased anywhere, which is the point. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theWardenNeedsNoSpecialCase(GameTestHelper helper) {
         var server = helper.getLevel().getServer();

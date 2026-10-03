@@ -18,17 +18,6 @@ import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import org.joml.Matrix4f;
 import ru.adaptionwheel.AdaptionWheel;
 
-/**
- * Adversity overlay, ported from the original mod's DrawAdversityTimer +
- * giant-wheel layer:
- * - fullscreen dark-red vignette with a heartbeat pulse
- * - black cinematic bars top/bottom
- * - "ADAPTING TO ADVERSITY" title + [ SS : CS ] countdown
- * - progress bar that shrinks symmetrically toward zero as the run completes
- * - cooldown note after the run ends
- * - on trigger the wheel sprite flies at the player's face (totem-style flash),
- *   then stays as a faint gray heartbeat wheel while adversity is active.
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = net.neoforged.api.distmarker.Dist.CLIENT)
 public final class AdversityOverlay {
 
@@ -58,11 +47,10 @@ public final class AdversityOverlay {
         int screenH = graphics.guiHeight();
         PoseStack pose = graphics.pose();
 
-        // Totem-style face flash right after the trigger, then faint gray heartbeat wheel.
         drawWheel(graphics, time, screenW, screenH);
 
         if (!active) {
-            // Cooldown note only.
+
             String cdText = Component.translatable("adaptionwheel.hud.adversity_cooldown",
                     ClientAdaption.adversityCooldownTimer / 20).getString();
             int w = font.width(cdText);
@@ -70,11 +58,9 @@ public final class AdversityOverlay {
             return;
         }
 
-        // Fullscreen dark red vignette.
         graphics.fill(0, 0, screenW, screenH,
                 ((int) ((0.15f + pulse * 0.10f) * 255f) << 24) | 0x8B0000);
 
-        // Cinematic black bars.
         int barH = Math.max(20, screenH / 12);
         graphics.fill(0, 0, screenW, barH, ((int) (0.7f * 255f) << 24));
         graphics.fill(0, screenH - barH, screenW, screenH, ((int) (0.7f * 255f) << 24));
@@ -85,7 +71,6 @@ public final class AdversityOverlay {
         int themeColor = lerpColor(0xFF0000, 0xFFFFFF, themeLerp);
         float titleScale = 1.5f + pulse * 0.1f;
 
-        // Title.
         pose.pushPose();
         pose.translate(cx, cy - 14, 0);
         pose.scale(titleScale, titleScale, 1f);
@@ -93,7 +78,6 @@ public final class AdversityOverlay {
         graphics.drawString(font, title, -font.width(title) / 2, -font.lineHeight / 2, 0xFFFF0000, true);
         pose.popPose();
 
-        // Countdown [ SS : CS ].
         int remainingTicks = ClientAdaption.smoothedAdversityTimer();
         int seconds = remainingTicks / 20;
         int centis = (int) (remainingTicks % 20 / 20f * 100f);
@@ -104,7 +88,6 @@ public final class AdversityOverlay {
         graphics.drawString(font, timeStr, -font.width(timeStr) / 2, -font.lineHeight / 2, themeColor, true);
         pose.popPose();
 
-        // Progress bar shrinking symmetrically toward zero.
         float progress = Mth.clamp(remainingTicks / (float) ADVERSITY_TOTAL_TICKS, 0f, 1f);
         int barW = Math.min(240, screenW / 3);
         int barH2 = 4;
@@ -116,11 +99,6 @@ public final class AdversityOverlay {
         }
     }
 
-    /**
-     * The wheel flying at the player's face on the trigger tick window (white, growing,
-     * fading out over 60 ticks like the original AdversitySpinTimer), then a subtle
-     * gray heartbeat wheel for the rest of the active run.
-     */
     private static void drawWheel(GuiGraphics graphics, float time, int screenW, int screenH) {
         long triggeredAt = ClientAdaption.adversityTriggeredAtGameTime;
         long now = ClientAdaption.gameTime();

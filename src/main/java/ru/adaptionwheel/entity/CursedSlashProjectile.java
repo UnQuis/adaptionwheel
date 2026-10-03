@@ -28,13 +28,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Cursed energy slash fired by the Sword of Extermination (negative energy mode).
- * Flies in a straight line until it hits a block, pierces up to {@code maxHits}
- * targets (each only once). Visual: additive Slash texture billboard rotated to
- * the flight direction plus a random roll offset, with a cyan glow trail.
- * Port of CursedSlashProj.cs.
- */
 public class CursedSlashProjectile extends Projectile {
 
     private static final EntityDataAccessor<Float> ROLL = SynchedEntityData.defineId(
@@ -45,9 +38,8 @@ public class CursedSlashProjectile extends Projectile {
     private static final int TRAIL_LENGTH = 14;
     private final Set<UUID> alreadyHit = new HashSet<>();
 
-    /** Client-side visual only: recent positions for the procedural trail (oldest first). */
     private final ArrayDeque<Vec3> trailPositions = new ArrayDeque<>();
-    /** Total distance traveled in blocks; used by the renderer for the far-fade. Visual only. */
+
     private float traveled;
 
     public CursedSlashProjectile(EntityType<? extends CursedSlashProjectile> type, Level level) {
@@ -87,8 +79,6 @@ public class CursedSlashProjectile extends Projectile {
         }
         traveled += (float) motion.length();
 
-        // Block/entity hit detection along the movement vector; blocks stop the slash,
-        // entities are pierced (up to maxHits).
         HitResult hitResult = ProjectileUtil.getHitResultOnMoveVector(this, this::canHitEntity);
         if (hitResult.getType() != HitResult.Type.MISS) {
             onHit(hitResult);
@@ -102,7 +92,6 @@ public class CursedSlashProjectile extends Projectile {
         hitTargets();
     }
 
-    /** Snapshot of the recorded trail positions, oldest first. */
     public List<Vec3> getTrailSnapshot() {
         return new ArrayList<>(trailPositions);
     }
@@ -144,7 +133,7 @@ public class CursedSlashProjectile extends Projectile {
 
     @Override
     protected void onHitEntity(EntityHitResult result) {
-        // Hit handling is done in tick() so the slash can pierce several targets.
+
     }
 
     @Override
@@ -152,11 +141,6 @@ public class CursedSlashProjectile extends Projectile {
         return true;
     }
 
-    /**
-     * The visual blade/tear extends far beyond the 0.5-block entity hitbox;
-     * without an inflated culling box the frustum test drops the entity while
-     * its glow is still on screen.
-     */
     @Override
     public AABB getBoundingBoxForCulling() {
         return super.getBoundingBoxForCulling().inflate(8.0);

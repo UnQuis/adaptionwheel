@@ -11,18 +11,6 @@ import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
 
-/**
- * Adaptation to Discomfort — mining/combat/perception-domain triggers.
- *
- * <ul>
- *   <li>{@code Mine_Labor}: breaking blocks trains a permanent mining-speed bonus.</li>
- *   <li>{@code Combat_Cooldown}: landing melee hits trains away the 1.9 attack-cooldown penalty.</li>
- *   <li>{@code Combat_ShieldLock}: blocking an axe wielder trains shield-disable immunity.</li>
- * </ul>
- *
- * Perception ({@code Percep_SteadyGaze}) is triggered from the damage pipeline in
- * {@link AdaptionEvents} since it already owns every hit on the wearer.
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public final class DomainTriggers {
 
@@ -38,7 +26,7 @@ public final class DomainTriggers {
         if (!AdaptionConfig.ENABLE_MINING.get() || !AdaptionEvents.isWearingWheel(player)) {
             return;
         }
-        // Creative and spectator players generate no adaptation progress from mining.
+
         if (player.isCreative() || player.isSpectator()) {
             return;
         }
@@ -46,16 +34,11 @@ public final class DomainTriggers {
                 Concepts.MINE_LABOR,
                 (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
 
-        // Fist Mastery: a hand-held break is the whole unlock ritual and the tier's
-        // training signal, so it is handled separately from the Labor analysis. Holding a
-        // non-tool item (a block, food) still counts; only tools and weapons take the fist out.
         if (AdaptionConfig.FIST_ENABLED.get()
                 && ru.adaptionwheel.category.FistTiers.usableWith(player.getMainHandItem(), event.getState())) {
             FistMastery.onHandBreak(player, AdaptionEvents.dataOf(player), event.getState());
         }
 
-        // Astral Mine: a broken block pays a little back, for any break -- not just the
-        // bare-handed ones the fist cares about, since a synergy is not a fist variant.
         if (!player.isCreative() && !player.isSpectator()) {
             ru.adaptionwheel.server.SynergyEffects.onBlockBroken(player, event.getState());
         }
@@ -84,7 +67,7 @@ public final class DomainTriggers {
         if (!AdaptionConfig.ENABLE_COMBAT.get() || !AdaptionEvents.isWearingWheel(player)) {
             return;
         }
-        // Only an axe-wielding attacker teaches shield-lock adaptation.
+
         if (!(event.getDamageSource().getDirectEntity() instanceof LivingEntity attacker)
                 || !attacker.getWeaponItem().is(ItemTags.AXES)) {
             return;

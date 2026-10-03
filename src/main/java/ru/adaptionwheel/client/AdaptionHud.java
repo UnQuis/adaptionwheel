@@ -18,11 +18,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Analysis HUD: anchored at the LEFT side of the screen, gold header,
- * per-concept colored task rows with tags, percentage text and progress bars.
- * Existence adaptation rows have a rainbow-shifting progress bar.
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = net.neoforged.api.distmarker.Dist.CLIENT)
 public class AdaptionHud {
 
@@ -58,8 +53,6 @@ public class AdaptionHud {
                 0f);
         graphics.pose().scale(scale, scale, 1f);
 
-        // Header. Carries the wheel tier, because the tier is the spine of the whole progression
-        // and there is no other place it appears outside the 3D model.
         int wheelTier = ru.adaptionwheel.category.WheelTier.forCount(ClientAdaption.adaptedCount);
         int nextTier = ru.adaptionwheel.category.WheelTier.nextThreshold(wheelTier);
         String header = ">>> " + Component.translatable(
@@ -74,7 +67,6 @@ public class AdaptionHud {
         graphics.drawString(font, Component.literal("ADAPTATION_ANALYSIS"), 0, font.lineHeight,
                 withAlpha(HEADER_COLOR, Math.min(100, opacity * 150 / 100)), true);
 
-        // Build row list: tasks + existence progress + adversity
         List<Row> rows = new ArrayList<>();
         if (ClientAdaption.adversityActive) {
             rows.add(Row.of(Concepts.ADVERSITY, ClientAdaption.adversityProgress()));
@@ -82,7 +74,7 @@ public class AdaptionHud {
         for (AdaptionTask task : ClientAdaption.TASKS) {
             rows.add(Row.of(task.concept, ClientAdaption.taskProgress(task)));
         }
-        // Existence progress bars (separate from tasks)
+
         for (Map.Entry<String, Integer> entry : ClientAdaption.EXISTENCE_PROGRESS.entrySet()) {
             String bossPath = entry.getKey();
             float progress = ClientAdaption.existenceProgress(bossPath);
@@ -90,11 +82,11 @@ public class AdaptionHud {
                 rows.add(Row.of(Concepts.existence(bossPath), progress, true));
             }
         }
-        // Fist Mastery: counted in blocks rather than seconds, so it gets its own row shape.
+
         if (hasFistRow()) {
             int tier = ClientAdaption.fistTier();
             int luck = ru.adaptionwheel.category.FistTiers.luckMultiplier(tier);
-            // Stated on the row because an invisible multiplier is indistinguishable from a bug.
+
             String suffix = luck > 1 ? " - LUCK x" + luck : null;
             rows.add(new Row(ru.adaptionwheel.category.FistTiers.concept(tier),
                     fistProgress(), false, ClientAdaption.fistProgressDone,
@@ -121,10 +113,8 @@ public class AdaptionHud {
         int color = row.rainbow ? rainbowColor() : Concepts.color(row.concept);
         int barW = Math.min(BAR_WIDTH, Math.max(0, (int) (BAR_WIDTH * row.progress)));
 
-        // Tinted row background
         graphics.fill(9, y - 2, 9 + ROW_WIDTH, y - 2 + ROW_HEIGHT, withAlpha(color, opacity * 15 / 100));
 
-        // "NAME [tag] : NN.N%"  — block-counted rows show "done/total" instead of a percentage.
         String name = Concepts.chatName(row.concept).getString();
         String tag;
         if (row.rainbow) {
@@ -141,11 +131,10 @@ public class AdaptionHud {
         String suffix = row.suffix == null ? "" : " " + row.suffix;
         graphics.drawString(font, name + tag + " : " + meter + suffix, 15, y, withAlpha(color, opacity), true);
 
-        // Progress bar: black background + colored fill
         graphics.fill(15, y + 24, 15 + BAR_WIDTH, y + 24 + BAR_HEIGHT, withAlpha(0x000000, opacity * 60 / 100));
 
         if (row.rainbow) {
-            // Rainbow bar: draw segment by segment with shifting hue
+
             int segCount = Math.max(1, barW);
             for (int x = 0; x < segCount; x++) {
                 int segColor = rainbowColor((int) (x + System.currentTimeMillis() / 10));
@@ -157,7 +146,6 @@ public class AdaptionHud {
         }
     }
 
-    /** Precomputed hue palette: avoids per-pixel HSB conversions every frame. */
     private static final int[] HUE_PALETTE = new int[256];
     static {
         for (int i = 0; i < HUE_PALETTE.length; i++) {
@@ -166,7 +154,6 @@ public class AdaptionHud {
         }
     }
 
-    /** Rainbow hue cycling based on a time/position offset. Returns ARGB. */
     private static int rainbowColor() {
         return rainbowColor((int) (System.currentTimeMillis() / 5) & 0xFFFF);
     }
@@ -177,7 +164,7 @@ public class AdaptionHud {
 
     private static int priority(String concept) {
         if (concept.equals(Concepts.ADVERSITY)) return -1;
-        if (concept.startsWith("Existence_")) return 0; // Existence at the top
+        if (concept.startsWith("Existence_")) return 0;
         if (concept.startsWith("Mutation_")) return 2;
         if (concept.contains("Regen") || concept.contains("IMMORTALITY") || concept.equals(Concepts.SELF_DAMAGE)) return 1;
         if (concept.startsWith("Env_")) return 10;
@@ -211,7 +198,6 @@ public class AdaptionHud {
         }
     }
 
-    /** True while the wearer's fist is working toward its next level. */
     private static boolean hasFistRow() {
         return ClientAdaption.fistProgressTotal > 0 && ClientAdaption.fistTier() >= 0;
     }

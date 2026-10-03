@@ -15,20 +15,6 @@ import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
 
-/**
- * Combat_SkillIssue ("Skill Issue") — ranged-weapon adaptation.
- *
- * <p><b>Acquisition:</b> every bow/crossbow shot accelerates the standard
- * analysis task; completion is one-time.</p>
- *
- * <p><b>Effect:</b> arrows/tridents fired by the adapted wearer gently home in
- * on a living entity ONLY when that entity's body lies close to the projectile's
- * flight path (perpendicular distance minus half the entity width, within a
- * forward corridor). Shots fired into empty space find no candidate near the
- * path and therefore fly exactly as vanilla — the assist cannot invent hits.
- * Steering never turns a projectile backwards: entities already passed are not
- * candidates, so wild shots stay wild.</p>
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public final class SkillIssueHandler {
 
@@ -73,7 +59,7 @@ public final class SkillIssueHandler {
 
         LivingEntity target = findPathCandidate(arrow, shooter, level, dir);
         if (target == null) {
-            return; // nothing near the path: the shot stays honest vanilla ballistics
+            return;
         }
 
         Vec3 aim = target.position().add(0, target.getBbHeight() * 0.5, 0).subtract(arrow.position()).normalize();
@@ -86,11 +72,6 @@ public final class SkillIssueHandler {
         arrow.hasImpulse = true;
     }
 
-    /**
-     * Nearest living entity whose body intersects the flight corridor:
-     * ahead of the arrow, within {@code maxDistance}, and within {@code radius}
-     * of the center line after subtracting its own half-width.
-     */
     private static LivingEntity findPathCandidate(AbstractArrow arrow, ServerPlayer shooter,
                                                   ServerLevel level, Vec3 dir) {
         double radius = AdaptionConfig.SKILL_ISSUE_RADIUS.get();
@@ -103,7 +84,7 @@ public final class SkillIssueHandler {
             Vec3 rel = entity.position().add(0, entity.getBbHeight() * 0.5, 0).subtract(arrow.position());
             double along = rel.dot(dir);
             if (along < -0.5 || along > maxDistance) {
-                continue; // behind us or too far ahead: no assist
+                continue;
             }
             double perp = rel.subtract(dir.scale(along)).length()
                     - Math.max(0.35, entity.getBbWidth() * 0.5);
@@ -123,7 +104,7 @@ public final class SkillIssueHandler {
                 || living.isAlliedTo(shooter)) {
             return false;
         }
-        // Never steal the wearer's own pets/summons.
+
         if (living instanceof OwnableEntity owned && owned.getOwner() == shooter) {
             return false;
         }

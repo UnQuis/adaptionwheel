@@ -10,11 +10,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.client.ClientAdaption;
 
-/**
- * Percep_SteadyGaze: cancels the hurt-camera tilt for adapted wearers.
- * Client-only — lives in the "client" section of the mixin config so dedicated
- * servers never load GameRenderer.
- */
 @Mixin(GameRenderer.class)
 public abstract class HurtCamMixin {
 

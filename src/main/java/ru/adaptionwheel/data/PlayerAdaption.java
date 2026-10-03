@@ -10,11 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * World-persisted adaptation state of a player (stored as a NeoForge attachment).
- * Holds permanent levels, one-time adaptations, active analysis tasks,
- * adversity state, existence adaptation progress, and the wheel's rotation.
- */
 public class PlayerAdaption {
 
     public static final int MAX_LEVEL = 8;
@@ -45,9 +40,9 @@ public class PlayerAdaption {
     public final List<AdaptionTask> tasks = new ArrayList<>();
     public final List<String> history = new ArrayList<>();
     public final Set<String> existenceAdapted = new HashSet<>();
-    /** Kills per Drop_NPC_ concept, driving drop-rate levels. */
+
     public final Map<String, Integer> killCounts = new HashMap<>();
-    /** Accumulated combat ticks per boss entity type for existence adaptation. */
+
     public final Map<String, Integer> bossCombatTicks = new HashMap<>();
 
     public int healingTimer;
@@ -57,58 +52,24 @@ public class PlayerAdaption {
     public float targetRotation;
     public float wheelRotation;
 
-    /** Tracks whether the player was wearing the wheel last tick (for item-bound load/save). */
     public boolean wasWearing;
 
-    /** Runtime identity of the currently equipped wheel stack — detects wheel swaps. Not serialized. */
     public transient net.minecraft.world.item.ItemStack equippedStack;
 
-    /** Tick accumulator for the Thermal Mastery heat-scaled regeneration. Not serialized. */
     public transient int thermalHealingTimer;
 
-    /**
-     * The last wheel tier this player was told about, so the awakening message fires once instead
-     * of every tick. Transient on purpose: the tier itself is derived from the adaptation count,
-     * so a fresh login must re-announce (that is correct -- you are being told what you woke up to),
-     * while a tick where nothing changed must not.
-     */
-    /**
-     * How many times this player has shed an adaptation, for their whole career.
-     *
-     * <p>Persisted on the player rather than the wheel, unlike everything else here: a shed is an
-     * act by a person, not a property of an object, and a wheel handed to a new owner should not
-     * arrive with the previous one's history already claimed.</p>
-     */
     public int shedCount;
 
-    /**
-     * Concepts whose adaptation was shed this session, and which therefore re-adapt faster.
-     *
-     * <p>Transient, and that is the design rather than an omission: shedding is meant to read as
-     * the wheel remembering what it already worked out, so the shortened re-analysis is a reward
-     * for having held the adaptation, not permanent state a player accumulates. Forgetting it on
-     * relog is also honest — the wheel forgets too.</p>
-     */
     public transient final java.util.Set<String> recentlyShed = new java.util.HashSet<>();
 
     public transient int lastTierAnnounced = -1;
 
-    /** Previous-tick fall distance for Impact Mastery stomp detection. Not serialized. */
     public transient float impactLastFallDistance;
-    /** Whether the player was grounded last tick (Impact Mastery landing edge). Not serialized. */
+
     public transient boolean impactWasOnGround = true;
 
     private int cachedAdaptCount = -1;
 
-    /**
-     * An empty state, detached from any player.
-     *
-     * <p>Public because the trading menus need one: a wheel being <em>fed</em> to an altar is not
-     * the wheel a player is wearing, so its adaptations cannot live in the player's attachment —
-     * that store belongs to the worn wheel and is emptied the moment it comes off. A standalone
-     * instance, filled from the fed stack's own {@code wheel_data}, is what a purchase writes to;
-     * see {@code AdaptionEvents.readFrom}.</p>
-     */
     public PlayerAdaption() {
     }
 

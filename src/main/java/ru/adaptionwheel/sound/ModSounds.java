@@ -7,10 +7,6 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import ru.adaptionwheel.AdaptionWheel;
 
-/**
- * Sound events mirroring the original mod's audio assets
- * (Assets/Sounds/AdaptVoice.wav, Assets/Sounds/DimensionCut.wav).
- */
 public final class ModSounds {
 
     public static final DeferredRegister<SoundEvent> SOUNDS =

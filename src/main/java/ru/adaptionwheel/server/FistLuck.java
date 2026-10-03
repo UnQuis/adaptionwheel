@@ -15,25 +15,6 @@ import ru.adaptionwheel.data.PlayerAdaption;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * The fist's "luck": a tier-scaled multiplier on what a broken ore drops and what it pays in
- * experience, topping out at x10.
- *
- * <p>Hooked on {@link BlockDropsEvent} rather than by rolling the loot table again. That event
- * sits after the loot table has produced its list but before anything enters the world, and it
- * carries both the items and the experience in one object — so drops and XP stay in lockstep, and
- * fortune, silk touch and every loot modifier already baked their own results in before this
- * multiplies them.</p>
- *
- * <p>Reached through {@code Block.playerDestroy -> Block.dropResources -> CommonHooks
- * .handleBlockDrops}, i.e. the ordinary path for a player breaking a block. It is gated on
- * {@code PlayerEvent.HarvestCheck} upstream, so a block the fist cannot harvest never gets here
- * at all.</p>
- *
- * <p>Applies during Adversity, unlike levelling. Luck is a property of how strong the fist
- * currently is, in the same family as the harvest gate and the speed, and all three of those stay
- * live through a challenge; only progress freezes.</p>
- */
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public final class FistLuck {
 
@@ -58,15 +39,10 @@ public final class FistLuck {
             return;
         }
         multiplyDrops(event, multiplier);
-        // Matched to the drops on purpose: x10 ore and x1 ore XP would read as a bug.
+
         event.setDroppedExperience(event.getDroppedExperience() * multiplier);
     }
 
-    /**
-     * Multiplies the already-rolled drop list, merging each stack up to its limit before adding
-     * more entities. Ten separate entities for one piece of raw iron would work, but a single
-     * stack of ten is what the player expects from "x10" and it is far cheaper to handle.
-     */
     private static void multiplyDrops(BlockDropsEvent event, int multiplier) {
         List<ItemEntity> drops = event.getDrops();
         List<ItemEntity> originals = new ArrayList<>(drops);
@@ -85,8 +61,7 @@ public final class FistLuck {
                 total -= count;
                 ItemStack part = stack.copyWithCount(count);
                 if (first) {
-                    // Reuse the entity vanilla already built, so the loot's own pickup delay and
-                    // any other mod's positioning survives on the first stack.
+
                     drop.setItem(part);
                     result.add(drop);
                     first = false;
