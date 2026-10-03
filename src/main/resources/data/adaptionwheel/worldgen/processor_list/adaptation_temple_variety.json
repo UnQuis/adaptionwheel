@@ -6,6 +6,61 @@
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
+            "block_state": "minecraft:stone_bricks",
+            "probability": 0.45
+          },
+          "location_predicate": {
+            "predicate_type": "minecraft:always_true"
+          },
+          "output_state": "minecraft:mossy_stone_bricks"
+        },
+        {
+          "input_predicate": {
+            "predicate_type": "minecraft:random_blockstate_match",
+            "block_state": "minecraft:stone_bricks",
+            "probability": 0.3
+          },
+          "location_predicate": {
+            "predicate_type": "minecraft:always_true"
+          },
+          "output_state": "minecraft:cracked_stone_bricks"
+        },
+        {
+          "input_predicate": {
+            "predicate_type": "minecraft:random_blockstate_match",
+            "block_state": "minecraft:stone_bricks",
+            "probability": 0.08
+          },
+          "location_predicate": {
+            "predicate_type": "minecraft:always_true"
+          },
+          "output_state": "minecraft:chiseled_stone_bricks"
+        },
+        {
+          "input_predicate": {
+            "predicate_type": "minecraft:random_blockstate_match",
+            "block_state": "minecraft:stone_bricks",
+            "probability": 0.08
+          },
+          "location_predicate": {
+            "predicate_type": "minecraft:always_true"
+          },
+          "output_state": "minecraft:infested_stone_bricks"
+        },
+        {
+          "input_predicate": {
+            "predicate_type": "minecraft:random_blockstate_match",
+            "block_state": "minecraft:mossy_cobblestone",
+            "probability": 0.22
+          },
+          "location_predicate": {
+            "predicate_type": "minecraft:always_true"
+          },
+          "output_state": "minecraft:cobblestone"
+        },
+        {
+          "input_predicate": {
+            "predicate_type": "minecraft:random_blockstate_match",
             "block_state": "minecraft:mossy_stone_bricks",
             "probability": 0.2
           },
@@ -61,6 +116,52 @@
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
+            "block_state": {
+              "id": "minecraft:stone_brick_slab",
+              "properties": {
+                "type": "double",
+                "waterlogged": "false"
+              }
+            },
+            "probability": 0.5
+          },
+          "location_predicate": {
+            "predicate_type": "minecraft:always_true"
+          },
+          "output_state": {
+            "id": "minecraft:mossy_stone_brick_slab",
+            "properties": {
+              "type": "double",
+              "waterlogged": "false"
+            }
+          }
+        },
+        {
+          "input_predicate": {
+            "predicate_type": "minecraft:random_blockstate_match",
+            "block_state": {
+              "id": "minecraft:mossy_cobblestone_slab",
+              "properties": {
+                "type": "double",
+                "waterlogged": "false"
+              }
+            },
+            "probability": 0.22
+          },
+          "location_predicate": {
+            "predicate_type": "minecraft:always_true"
+          },
+          "output_state": {
+            "id": "minecraft:cobblestone_slab",
+            "properties": {
+              "type": "double",
+              "waterlogged": "false"
+            }
+          }
+        },
+        {
+          "input_predicate": {
+            "predicate_type": "minecraft:random_blockstate_match",
             "block_state": "minecraft:chiseled_stone_bricks",
             "probability": 0.25
           },
@@ -83,61 +184,6 @@
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:mossy_cobblestone",
-            "probability": 0.22
-          },
-          "location_predicate": {
-            "predicate_type": "minecraft:always_true"
-          },
-          "output_state": "minecraft:cobblestone"
-        },
-        {
-          "input_predicate": {
-            "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:stone_bricks",
-            "probability": 0.45
-          },
-          "location_predicate": {
-            "predicate_type": "minecraft:always_true"
-          },
-          "output_state": "minecraft:mossy_stone_bricks"
-        },
-        {
-          "input_predicate": {
-            "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:stone_bricks",
-            "probability": 0.3
-          },
-          "location_predicate": {
-            "predicate_type": "minecraft:always_true"
-          },
-          "output_state": "minecraft:cracked_stone_bricks"
-        },
-        {
-          "input_predicate": {
-            "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:stone_bricks",
-            "probability": 0.08
-          },
-          "location_predicate": {
-            "predicate_type": "minecraft:always_true"
-          },
-          "output_state": "minecraft:chiseled_stone_bricks"
-        },
-        {
-          "input_predicate": {
-            "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:stone_bricks",
-            "probability": 0.08
-          },
-          "location_predicate": {
-            "predicate_type": "minecraft:always_true"
-          },
-          "output_state": "minecraft:infested_stone_bricks"
-        },
-        {
-          "input_predicate": {
-            "predicate_type": "minecraft:random_blockstate_match",
             "block_state": "minecraft:cobblestone",
             "probability": 0.5
           },
@@ -156,6 +202,75 @@
             "predicate_type": "minecraft:always_true"
           },
           "output_state": "minecraft:infested_cobblestone"
+        },
+        {
+          "input_predicate": {
+            "predicate_type": "minecraft:random_blockstate_match",
+            "block_state": {
+              "id": "minecraft:mossy_stone_brick_slab",
+              "properties": {
+                "type": "bottom",
+                "waterlogged": "false"
+              }
+            },
+            "probability": 0.22
+          },
+          "location_predicate": {
+            "predicate_type": "minecraft:always_true"
+          },
+          "output_state": {
+            "id": "minecraft:stone_brick_slab",
+            "properties": {
+              "type": "bottom",
+              "waterlogged": "false"
+            }
+          }
+        },
+        {
+          "input_predicate": {
+            "predicate_type": "minecraft:random_blockstate_match",
+            "block_state": {
+              "id": "minecraft:mossy_cobblestone_slab",
+              "properties": {
+                "type": "bottom",
+                "waterlogged": "false"
+              }
+            },
+            "probability": 0.22
+          },
+          "location_predicate": {
+            "predicate_type": "minecraft:always_true"
+          },
+          "output_state": {
+            "id": "minecraft:cobblestone_slab",
+            "properties": {
+              "type": "bottom",
+              "waterlogged": "false"
+            }
+          }
+        },
+        {
+          "input_predicate": {
+            "predicate_type": "minecraft:random_blockstate_match",
+            "block_state": {
+              "id": "minecraft:stone_brick_slab",
+              "properties": {
+                "type": "bottom",
+                "waterlogged": "false"
+              }
+            },
+            "probability": 0.5
+          },
+          "location_predicate": {
+            "predicate_type": "minecraft:always_true"
+          },
+          "output_state": {
+            "id": "minecraft:mossy_stone_brick_slab",
+            "properties": {
+              "type": "bottom",
+              "waterlogged": "false"
+            }
+          }
         },
         {
           "input_predicate": {
@@ -697,52 +812,6 @@
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
             "block_state": {
-              "id": "minecraft:mossy_cobblestone_slab",
-              "properties": {
-                "type": "bottom",
-                "waterlogged": "false"
-              }
-            },
-            "probability": 0.22
-          },
-          "location_predicate": {
-            "predicate_type": "minecraft:always_true"
-          },
-          "output_state": {
-            "id": "minecraft:cobblestone_slab",
-            "properties": {
-              "type": "bottom",
-              "waterlogged": "false"
-            }
-          }
-        },
-        {
-          "input_predicate": {
-            "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": {
-              "id": "minecraft:mossy_stone_brick_slab",
-              "properties": {
-                "type": "bottom",
-                "waterlogged": "false"
-              }
-            },
-            "probability": 0.22
-          },
-          "location_predicate": {
-            "predicate_type": "minecraft:always_true"
-          },
-          "output_state": {
-            "id": "minecraft:stone_brick_slab",
-            "properties": {
-              "type": "bottom",
-              "waterlogged": "false"
-            }
-          }
-        },
-        {
-          "input_predicate": {
-            "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": {
               "id": "minecraft:mossy_stone_brick_stairs",
               "properties": {
                 "facing": "south",
@@ -789,29 +858,6 @@
               "facing": "east",
               "half": "bottom",
               "shape": "outer_left",
-              "waterlogged": "false"
-            }
-          }
-        },
-        {
-          "input_predicate": {
-            "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": {
-              "id": "minecraft:stone_brick_slab",
-              "properties": {
-                "type": "bottom",
-                "waterlogged": "false"
-              }
-            },
-            "probability": 0.5
-          },
-          "location_predicate": {
-            "predicate_type": "minecraft:always_true"
-          },
-          "output_state": {
-            "id": "minecraft:mossy_stone_brick_slab",
-            "properties": {
-              "type": "bottom",
               "waterlogged": "false"
             }
           }

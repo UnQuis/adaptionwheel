@@ -160,13 +160,18 @@ SWAPS: dict[str, list[tuple[str, float]]] = {
 
 # Blocks that are deliberately never randomised. The altar is the one mod block in
 # the template: swapping it would turn a Resonance Altar into scenery, and the whole
-# point of the structure is that it holds one.
+# point of the structure is that it holds one. The ground layer the ruin now carries
+# with it (grass and dirt) and the stone-button floor inlay are part of that decision:
+# they are the seam, not the weathering.
 KEEP_UNCHANGED = {
     AIR,
     STRUCTURE_VOID,
     "minecraft:soul_lantern",
     "minecraft:oxidized_lightning_rod",
     "minecraft:oxidized_copper_chain",
+    "minecraft:grass_block",
+    "minecraft:dirt",
+    "minecraft:stone_button",
     "adaptionwheel:resonance_altar",
 }
 
@@ -409,7 +414,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     print(f"template : {len(states)} states, {len(nbt['blocks'])} blocks, size {[int(v) for v in nbt['size']]}")
     print(f"processor: {PROCESSOR_ID} -> {len(rules)} rules")
     print(f"swapped  : {len({read_state(r['input_predicate']['block_state'])['id'] for r in rules})} distinct blocks")
-    print(f"untouched: {', '.join(sorted(s['id'] for s in states if s['id'] in KEEP_UNCHANGED))}")
+    print(f"untouched: {', '.join(sorted({s['id'] for s in states if s['id'] in KEEP_UNCHANGED}))}")
     return report(problems)
 
 

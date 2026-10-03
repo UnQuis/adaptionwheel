@@ -455,7 +455,7 @@ Neither screen has been seen running.
 
 ## Phase 23 — The Adaptation Temple
 
-The user built a 13x11x13 ruin in a test world (one Resonance Altar in it) and asked for it to
+The user built a ruin in a test world (one Resonance Altar in it) and asked for it to
 **spawn in the world, with randomness** — stone bricks becoming mossy ones and so on, so two
 temples do not look alike. The saving is a vanilla `/structure save` output; the shipping problem is
 that a file in `run/client/saves/.../generated/` is a find, not content.
@@ -497,9 +497,10 @@ generates" is the shape of this bug.
 
 ### Air in a template is not "nothing", and structure_void is not "nothing" either
 
-The ruin occupies about 11x11 of the 13x13 window the structure block was saved from, and a
-`/structure save` records the surrounding space as 1587 air blocks. Placing air **carves**: every
-temple would sink a 13x13x11 crater into whatever landscape it landed on.
+A `/structure save` records the whole window the structure block was given, so most of what it
+holds is air: 1587 of 1859 blocks in the first version, 4749 of 5544 in the current 21x12x22 one.
+Placing air **carves**, so every temple would sink its whole box into whatever landscape it landed
+on.
 
 The obvious dodge is to turn that air into `minecraft:structure_void`, which reads like "the don't-care
 block". It is not, and this is worth stating as a rule rather than a story: **`StructureTemplate.placeInWorld`
@@ -529,10 +530,22 @@ why `/locate structure` can report nothing after a fix and something after a res
 start that is already saved.
 
 Verified live on a fresh dedicated server: `/locate structure adaptionwheel:adaptation_temple` finds a
-temple 136 blocks from spawn, the altar is in the placed chunk, three `/place structure` calls in one world
-produced three different rotations, three floor heights following the terrain, and three different block
-distributions (`infested_cobblestone` in one, none in another, `infested_cracked_stone_bricks` in the third),
-and the ring outside the ruin was terrain in every case.
+temple, the altar is in the placed chunk, four `/place structure` calls in one world produced four
+different rotations, four ground heights following the terrain, and four different block distributions,
+and the ring outside the ruin was terrain in every case — never `structure_void`, never a temple block.
+
+### Later: the ruin carries its own ground
+
+The user rebuilt the temple at 21x12x22 and filled template `y = 0` completely — 462 blocks of grass,
+dirt and floor bricks, plus a `stone_button` inlay in the floor above it. That is the other half of
+seamless: the piece is seated so that this sheet *is* the terrain's top block layer, so the ruin arrives
+with its own ground and cannot float, and the seam is a change of blocks rather than a hole.
+
+It also moves a decision across a file boundary. The ground layer is grass and dirt, so the biome tag
+decides where that grass may land: in a desert or badlands a temple is now a green rectangle on sand.
+Template and biome list are one art decision split in two, and whichever way it goes, both files have to
+change together. The three ground blocks and the inlay joined `KEEP_UNCHANGED` rather than the swap
+table — they are the seam, not the weathering, and a randomised lawn would be worse than either.
 
 The `.nbt` carries a 26.3 `DataVersion`, so this content is branch-specific: `main` would need its own save
 and the older pool/processor JSON shapes.
