@@ -59,6 +59,21 @@ PROCESSOR_ID = "adaptionwheel:adaptation_temple_variety"
 AIR = "minecraft:air"
 STRUCTURE_VOID = "minecraft:structure_void"
 
+# Blocks removed from a `/structure save` output before it becomes mod content.
+#
+# **Placement writes every block in the palette, air and structure_void included.**
+# `StructureTemplate.placeInWorld` iterates the whole block list and calls `setBlock` on
+# each; the only skip is the chunk bounding box. `structure_void` is stripped when a
+# template is *saved* (StructureBlockEntity adds it to ignoreBlocks), which is why a
+# vanilla template never contains one and why converting air to it looks like the fix.
+# It is not: it is an invisible real block, so every temple would bury a 13x13 ring of
+# grass, flowers and terrain in nothing-at-all blocks.
+#
+# So the air is *dropped*. A position that is not in the template is not written at all,
+# and the ruin touches nothing outside itself. Pass --keep-air for a sealed building
+# whose interior should be carved out of the hillside (an open ruin should not).
+DROPPED_BLOCKS = (AIR, STRUCTURE_VOID)
+
 # Property sets of the block families the temple is built from, as declared by the
 # vanilla block classes (StairBlock / SlabBlock / WallBlock / ChainBlock). A swap may
 # only carry properties across inside one family, and a family's set is complete --
@@ -226,21 +241,59 @@ def cmd_template(args: argparse.Namespace) -> int:
     import nbtlib
 
     source = Path(args.source)
+
     nbt = load_nbt(source)
+    drop = set(DROPPED_BLOCKS if not args.keep_air else ())
     palette = nbt["palette"]
-    seen = 0
-    for entry in palette:
-        if str(entry["id"]) == AIR:
-            entry["id"] = nbtlib.String(STRUCTURE_VOID)
-            seen += 1
-    if seen == 0:
-        print(f"error: no {AIR} entry in {source} palette -- is this a structure template?", file=sys.stderr)
+
+    # Which palette entries are we throwing away, and what index does each kept block
+    # end up at afterwards?
+    kept_entries = []
+    remap = {}
+    for index, entry in enumerate(palette):
+        if str(entry["id"]) in drop:
+            continue
+        remap[index] = len(kept_entries)
+        kept_entries.append(entry)
+
+    if not kept_entries:
+        print(f"error: every block in {source} is air or structure_void -- nothing to ship", file=sys.stderr)
         return 1
+
+    dropped = collections.Counter()
+    blocks = nbtlib.List[nbtlib.Compound]()
+    for entry in nbt["blocks"]:
+        index = int(entry["state"])
+        if index in remap:
+            kept = nbtlib.Compound({"pos": nbtlib.List[nbtlib.Int]([int(v) for v in entry["pos"]]), "state": nbtlib.Int(remap[index])})
+            if "nbt" in entry:
+                kept["nbt"] = entry["nbt"]
+            blocks.append(kept)
+        else:
+            dropped[str(palette[index]["id"])] += 1
+
+    nbt["blocks"] = blocks
+    nbt["palette"] = nbtlib.List[nbtlib.Compound](kept_entries)
+
+    # The saved volume is the window the structure block was given, which is usually far
+    # bigger than the ruin. Report it, because a template that straddles a slope is the
+    # other half of "does not look like it belongs here".
+    size = [int(v) for v in nbt["size"]]
+    xs = [int(b["pos"][0]) for b in blocks]
+    ys = [int(b["pos"][1]) for b in blocks]
+    zs = [int(b["pos"][2]) for b in blocks]
+    extent = (max(xs) - min(xs) + 1, max(ys) - min(ys) + 1, max(zs) - min(zs) + 1)
+    if extent != tuple(size):
+        print(f"  note: the saved window is {tuple(size)} but the ruin only fills {extent} from "
+              f"({min(xs)},{min(ys)},{min(zs)}); crop the structure block's size to shrink the footprint")
+
     save_nbt(nbt, TEMPLATE)
-    blocks = len(nbt["blocks"])
     print(f"wrote {TEMPLATE.relative_to(REPO)}")
-    print(f"  {blocks} blocks, {len(palette)} states, {seen} air palette entr(y/ies) -> {STRUCTURE_VOID}")
-    print("  air becomes structure_void so placement never carves a crater out of the terrain")
+    print(f"  {len(blocks)} blocks, {len(kept_entries)} states")
+    if dropped:
+        print("  dropped: " + ", ".join(f"{block} x{n}" for block, n in dropped.most_common()) + " (placement writes every palette block)")
+    else:
+        print("  nothing dropped -- the source had no air or structure_void")
     return 0
 
 
@@ -287,9 +340,14 @@ def cmd_check(args: argparse.Namespace) -> int:
 
     if not nbt.get("palette"):
         problems.append("template has no palette")
-    air_left = [s for s in states if s["id"] == AIR]
-    if air_left:
-        problems.append(f"{len(air_left)} palette entries are still {AIR} -- they will carve terrain when placed")
+    # A template that still carries air or structure_void digs a hole when placed, and
+    # structure_void is invisible, so the damage is invisible too.
+    for block in DROPPED_BLOCKS:
+        carried = [s for s in states if s["id"] == block]
+        if carried and not args.allow_air:
+            blocks = sum(1 for b in nbt["blocks"] if str(nbt["palette"][int(b["state"])]["id"]) == block)
+            problems.append(f"template still carries {blocks} {block} blocks -- placement writes every one of them "
+                            f"(re-run 'template', or pass --allow-air if the interior really should be carved)")
 
     rules_doc = json.loads(PROCESSORS.read_text(encoding="utf-8"))
     processors = rules_doc["processors"]
@@ -371,12 +429,16 @@ def main() -> int:
 
     p_template = sub.add_parser("template", help="convert a /structure save output into the mod's template")
     p_template.add_argument("source")
+    p_template.add_argument("--keep-air", action="store_true",
+                            help="keep air/structure_void instead of dropping them (only for a sealed building whose interior should be carved)")
     p_template.set_defaults(func=cmd_template)
 
     sub.add_parser("rules", help="regenerate the processor list from the template").set_defaults(func=cmd_rules)
 
     p_check = sub.add_parser("check", help="verify template and processor list against each other")
     p_check.add_argument("--jar", help="decompiled Minecraft jar, to verify block ids exist")
+    p_check.add_argument("--allow-air", action="store_true",
+                         help="tolerate air/structure_void in the template (see 'template --keep-air')")
     p_check.set_defaults(func=cmd_check)
 
     args = parser.parse_args()

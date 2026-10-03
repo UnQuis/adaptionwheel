@@ -3,7 +3,7 @@
   "biomes": "#adaptionwheel:has_structure/adaptation_temple",
   "spawn_overrides": {},
   "step": "surface_structures",
-  "terrain_adaptation": "none",
+  "terrain_adaptation": "beard_thin",
   "size": 1,
   "use_expansion_hack": false,
   "start_height": {

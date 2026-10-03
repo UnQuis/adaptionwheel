@@ -495,19 +495,44 @@ find a structure of type ... nearby" — which is also what a too-distant struct
 tell is that `/place structure` *works* (it bypasses the biome check), so "places by hand but never
 generates" is the shape of this bug.
 
-### Air in a template is not "nothing"
+### Air in a template is not "nothing", and structure_void is not "nothing" either
 
-The ruin occupies about 5x5 of its 13x13 footprint, and a `/structure save` of it records the
-surrounding space as 1587 air blocks. Placing air **carves** — every temple would sink a 13x13x11
-crater into whatever landscape it landed on. Converting the palette's air entry to
-`minecraft:structure_void` (skipped by placement) is a one-entry edit and the difference between a
-ruin and a bomb crater.
+The ruin occupies about 11x11 of the 13x13 window the structure block was saved from, and a
+`/structure save` records the surrounding space as 1587 air blocks. Placing air **carves**: every
+temple would sink a 13x13x11 crater into whatever landscape it landed on.
 
-Verified live on a fresh dedicated server: `/locate structure adaptionwheel:adaptation_temple`
-finds a temple 136 blocks from spawn, the altar is in the placed chunk, and three `/place structure`
-calls in one world produced three different rotations, three floor heights following the terrain,
-and three different block distributions (`infested_cobblestone` in one, none in another,
-`infested_cracked_stone_bricks` in the third).
+The obvious dodge is to turn that air into `minecraft:structure_void`, which reads like "the don't-care
+block". It is not, and this is worth stating as a rule rather than a story: **`StructureTemplate.placeInWorld`
+writes every block in the palette** — air included, `structure_void` included; the only thing it skips is
+the chunk bounding box. `structure_void` is stripped when a template is *saved* (`StructureBlockEntity`
+puts it in `ignoreBlocks`), which is exactly why the dodge looks safe and why no vanilla template ever
+contains one. As a block it is real and merely invisible (`StructureVoidBlock`, `replaceable`, no
+collision, no loot), so the conversion buried a ring of grass, flowers and terrain in nothing at all —
+invisible damage, which is what the user reported as "spawns together with the structure void, and the
+blocks around it are cut off".
 
-The `.nbt` carries a 26.3 `DataVersion`, so this content is branch-specific: `main` would need its
-own save and the older pool/processor JSON shapes.
+The fix is to **drop** the air: a position that is not in the template is not written at all, so the ruin
+touches nothing outside itself. Verified by probing the dropped positions around five placements — all
+terrain, zero `structure_void`, zero temple blocks. `tools/temple_variation.py check` now fails if air or
+`structure_void` reappears, and `template --keep-air` exists for a sealed building whose interior really
+should be cut into a hillside.
+
+The other half of "seamless" is `terrain_adaptation: beard_thin` (villages use it): a terrain-*density*
+bump centred on the piece's ground level, so a floor landing on a slope gets the gap under it filled
+instead of hovering, and the joint is bedded in rather than butted against. `none` is one line away.
+
+### Structures never change in generated chunks
+
+An already-generated chunk keeps whatever it generated, so a fixed template only shows up in new terrain.
+Testing anything about placement has to go through `/place structure` or a fresh world — which is also
+why `/locate structure` can report nothing after a fix and something after a restart: it answers from a
+start that is already saved.
+
+Verified live on a fresh dedicated server: `/locate structure adaptionwheel:adaptation_temple` finds a
+temple 136 blocks from spawn, the altar is in the placed chunk, three `/place structure` calls in one world
+produced three different rotations, three floor heights following the terrain, and three different block
+distributions (`infested_cobblestone` in one, none in another, `infested_cracked_stone_bricks` in the third),
+and the ring outside the ruin was terrain in every case.
+
+The `.nbt` carries a 26.3 `DataVersion`, so this content is branch-specific: `main` would need its own save
+and the older pool/processor JSON shapes.
