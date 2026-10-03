@@ -59,10 +59,15 @@ public class ResonanceAltarMenu extends TradeMenu {
         if (mobs.isEmpty()) {
             return List.of();
         }
+        // Both of a mob's adaptations, every time, in mob-major order — not "the ones this wheel does
+        // not have yet", which made the list empty itself as the wheel filled up: a bone offers ten
+        // rows with an empty wheel in the slot and four with a used one, and the four that survived
+        // had nothing to do with what the player was looking for. TradeMenu.exchange() refuses an
+        // adaptation the wheel already holds, with a message.
         List<String> pool = new ArrayList<>(mobs.size() * 2);
         for (String mob : mobs) {
-            addIfUnfinished(pool, fed, Concepts.offense(mob));
-            addIfUnfinished(pool, fed, Concepts.drop(mob));
+            pool.add(Concepts.offense(mob));
+            pool.add(Concepts.drop(mob));
         }
         return List.copyOf(pool);
     }
@@ -70,14 +75,6 @@ public class ResonanceAltarMenu extends TradeMenu {
     private static net.minecraft.server.MinecraftServer serverOf(ServerPlayer player) {
         return player.level() instanceof net.minecraft.server.level.ServerLevel level
                 ? level.getServer() : null;
-    }
-
-    private static void addIfUnfinished(List<String> pool, PlayerAdaption fed, String concept) {
-        // `fed` is the wheel being fed, so "already have it" has to mean what THAT wheel has --
-        // the player's own attachment belongs to the wheel they took off to put this one in.
-        if (!fed.isAdapted(concept) && fed.level(concept) <= 0) {
-            pool.add(concept);
-        }
     }
 
     @Override

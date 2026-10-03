@@ -40,9 +40,10 @@ public class DomainStoneMenu extends TradeMenu {
         if (recipe == null) {
             return List.of();
         }
-        // `fed`, not the player's attachment: what counts as already-learned has to be what the
-        // wheel being fed already has, because that is the wheel this purchase writes to.
-        return DomainExchange.candidates(fed,
+        // `fed`, not the player's attachment: the tier that orders the list is the fed wheel's, so
+        // the wheel in the slot and the list on screen describe the same wheel. The list itself does
+        // not depend on what the wheel has — see TradeMenu.candidatesFor.
+        return DomainExchange.candidates(
                 ru.adaptionwheel.category.WheelTier.forCount(fed.getAdaptCount()), recipe);
     }
 

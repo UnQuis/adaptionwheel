@@ -13,6 +13,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.client.AdaptationScreen;
+import ru.adaptionwheel.client.MouseButtons;
 import ru.adaptionwheel.menu.TradeMenu;
 import ru.adaptionwheel.network.TradeActionPayload;
 
@@ -162,6 +163,11 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
     }
 
     protected Component hintFor() {
+        // No wheel first, because without one the list is empty whatever else is true, and that is
+        // the one thing the player has to fix before anything else on this screen can happen.
+        if (!menu.hasWheel()) {
+            return Component.translatable("adaptionwheel.gui.need_wheel");
+        }
         return menu.hasOffering()
                 ? Component.translatable("adaptionwheel.gui.nothing_left")
                 : Component.translatable("adaptionwheel.gui.need_item");
@@ -434,11 +440,9 @@ public class TradeScreen<T extends TradeMenu> extends AbstractContainerScreen<T>
         double my = event.y() - this.topPos;
         int x = 0;
         int y = 0;
-        org.slf4j.LoggerFactory.getLogger("adaptionwheel/dbg").info(
-                "TradeScreen click raw=({}, {}) rel=({}, {}) leftPos={} topPos={} listTop={} rows={} pool={}",
-                event.x(), event.y(), mx, my, this.leftPos, this.topPos, listTop(),
-                LIST_ROWS * ROW_H, menu.candidates().size());
-        if (event.button() != 0) {
+        // Not the literal 0: 26.3 numbers the left button 1. See MouseButtons. Anything else falls
+        // straight through to the slot handling below, which is what a right-click should do.
+        if (!MouseButtons.isLeft(event)) {
             return super.mouseClicked(event, doubleClick);
         }
         if (within(mx, my, x + TradeMenu.BUTTON_X, y + TradeMenu.BUTTON_Y,

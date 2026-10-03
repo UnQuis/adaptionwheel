@@ -8,7 +8,6 @@ import ru.adaptionwheel.adapt.AdaptationDomain;
 import ru.adaptionwheel.adapt.AdaptationRegistry;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.WheelTier;
-import ru.adaptionwheel.data.PlayerAdaption;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -49,23 +48,30 @@ import java.util.Map;
  * {@code Drop_NPC_} are minted per mob — so a recipe naming either would offer nothing at all,
  * silently, with no error and no log line. Since a feather for levitation is the example the whole
  * block was sketched around, an <b>exact</b> selector is therefore resolved directly rather than
- * looked up in the registry: it names the concept, and the concept is offered if the wheel has
- * not finished it.</p>
+ * looked up in the registry: it names the concept, and the concept is offered.</p>
  *
  * <p>The consequence worth knowing: an exact selector can sell something the registry cannot
  * describe, and therefore something that sorts last by domain name, because
  * {@link AdaptationRegistry#get} returns {@code null} for it. That is only a cosmetic ordering
  * effect, and paying it is much cheaper than a recipe that quietly trades nothing.</p>
  *
- * <h2>The tier does not filter</h2>
+ * <h2>The wheel does not filter, and neither does the tier</h2>
  *
- * <p>Everything the wheel has not already finished is fair game, whatever the wheel has revealed.
- * That is the original behaviour — the stone preferred a family the wheel had <em>not</em> reached
- * yet, which was the whole reason the block existed — and it also keeps the subsystem honest about
- * the rest of the mod: tiers <em>reveal</em>, they never restrict, because the wheel is omnipotent
- * so a later tier is only ever a larger one. A block that refused to sell a concept until the
- * wheel could analyse it would impose the one rule the tier system does not have, and would make
- * the price of the item irrelevant to what it buys.</p>
+ * <p>The pool is what the offering item opens, in full, every time. It does not shrink because the
+ * wheel being fed has already finished something — that was the original behaviour ("everything the
+ * wheel has <em>not</em> already finished"), and it made the block's answer a function of two slots
+ * at once: put an item in and see four adaptations, then put the wheel in beside it and see two,
+ * with no way back to the four. A shop that empties itself as you shop at it is not a shortcut
+ * towards anything.</p>
+ *
+ * <p>An adaptation the wheel already holds is refused by the exchange, with a message, instead of by
+ * removing its row — so the player finds out by clicking, not by noticing an absence.</p>
+ *
+ * <p>The tier does not filter either, and that is also the original behaviour: tiers <em>reveal</em>,
+ * they never restrict, because the wheel is omnipotent so a later tier is only ever a larger one. A
+ * block that refused to sell a concept until the wheel could analyse it would impose the one rule the
+ * tier system does not have, and would make the price of the item irrelevant to what it buys. The
+ * tier is read here for one thing only: to put revealed families at the top of the list.</p>
  *
  * <h2>Ordering is total</h2>
  *
@@ -218,31 +224,37 @@ public final class DomainExchange {
     }
 
     /**
-     * What the stone would offer for this recipe: every adaptation the wheel has not finished that
-     * a selector reaches.
+     * What the stone would offer for this recipe: everything a selector reaches.
      *
      * <p>Exact selectors are resolved directly, family selectors by walking the registry. See the
      * class comment for why the two cannot be treated alike.</p>
+     *
+     * <p><b>Nothing here reads the wheel.</b> This used to skip whatever the wheel being fed had
+     * already finished, which meant the list was a function of two slots at once: an item alone
+     * showed adaptations, and the same item plus a wheel showed a shorter list, because the wheel is
+     * where "already finished" lives. The list is now the item's, and the exchange is the thing that
+     * refuses an adaptation the wheel already holds — with a message, rather than by making the row
+     * disappear. {@code tier} still comes from the wheel, but only to order the list.</p>
      *
      * <p>Never offers {@code ADBERSITY}. It is a survival challenge rather than an adaptation, and
      * being handed one would start a timed event the player neither asked for nor could have paid
      * for — the price would be an item, and what it buys would be a fight.</p>
      */
-    public static List<String> candidates(PlayerAdaption data, int tier, Recipe recipe) {
+    public static List<String> candidates(int tier, Recipe recipe) {
         if (recipe == null) {
             return List.of();
         }
         List<String> pool = new ArrayList<>();
         for (Selector selector : recipe.selectors()) {
             if (selector.isExact()) {
-                if (!isFinished(data, selector.text())) {
+                if (!pool.contains(selector.text())) {
                     pool.add(selector.text());
                 }
                 continue;
             }
             for (AdaptationDefinition definition : AdaptationRegistry.allDefinitions()) {
                 String concept = definition.concept();
-                if (selector.matches(concept) && !isFinished(data, concept) && !pool.contains(concept)) {
+                if (selector.matches(concept) && !pool.contains(concept)) {
                     pool.add(concept);
                 }
             }
@@ -250,10 +262,6 @@ public final class DomainExchange {
         pool.remove(Concepts.ADVERSITY);
         pool.sort(orderingFor(tier));
         return List.copyOf(pool);
-    }
-
-    private static boolean isFinished(PlayerAdaption data, String concept) {
-        return data.isAdapted(concept) || data.level(concept) > 0;
     }
 
     /**

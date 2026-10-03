@@ -57,6 +57,11 @@ TARGETS = [
     'ClientAdaption', 'AdaptionHud', 'DomainTriggers', 'FistProgressPayload',
     'FistInstabreakPayload', 'AdaptionCommand', 'WheelData', 'PlayerAdaption',
     'AdaptionSyncPayload', 'AdaptionNetworking', 'AdaptationScreen',
+    # The trading blocks: a file whose body holds a rule rather than a port. The pool, the price
+    # and the server-side legality re-check live here, and the "the list empties itself as you buy"
+    # bug was entirely inside TradeMenu/DomainExchange/ResonanceAltarMenu -- which this list did not
+    # name, so a green run of this tool proved nothing about any of it.
+    'TradeMenu', 'DomainExchange', 'ResonanceAltarMenu', 'AltarOfferings',
 ]
 
 JAVA = 'src/main/java/ru/adaptionwheel'

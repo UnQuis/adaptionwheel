@@ -11,7 +11,6 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
-import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.WheelTier;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.item.ModItems;
@@ -86,6 +85,13 @@ public abstract class TradeMenu extends AbstractContainerMenu {
 
     private List<String> candidates = List.of();
     private int selectedIndex = -1;
+    /**
+     * The item price of the current trade, as of the last {@link #recompute()}.
+     *
+     * <p>Server-computed and synced; see {@link #itemCost()}. Set in the same pass as the pool,
+     * because it is a property of the offering in the slot and must move with it.</p>
+     */
+    private int itemCost;
 
     // The wheel being fed, and the stack its state was read from.
     //
@@ -158,6 +164,13 @@ public abstract class TradeMenu extends AbstractContainerMenu {
      *
      * <p>Two blocks, two answers. The stone asks its price list; the altar asks which mobs drop this
      * item and then sells those mobs' adaptations.</p>
+     *
+     * <p><b>The pool is a property of the offering item, never of the wheel's contents.</b> A pool
+     * filtered by "what this wheel has already finished" is the list emptying itself as the player
+     * buys, and the same row appearing and vanishing depending on which of the two slots happened to
+     * be filled. The wheel is still consulted — for its tier, which orders the list — and
+     * {@link #exchange()} is still the thing that refuses an adaptation the wheel already has, but it
+     * refuses with a message instead of silently removing the row.</p>
      */
     protected abstract List<String> candidatesFor(ServerPlayer player, PlayerAdaption data,
                                                   ItemStack offering);
@@ -302,15 +315,24 @@ public abstract class TradeMenu extends AbstractContainerMenu {
         if (player == null) {
             return;
         }
-        candidates = candidatesFor(player, fedData(), input.getItem(OFFER_SLOT));
-        if (selectedIndex >= candidates.size()) {
-            // The pool shrank under the selection. Clear it rather than clamping, because a clamped
-            // index would silently point at a neighbouring adaptation nobody asked for.
-            selectedIndex = -1;
+        // Nothing is offered without a wheel in the wheel slot.
+        //
+        // The purchase is written onto the stack in that slot, so with the slot empty there is
+        // nothing the block could honestly be selling — and showing a pool anyway meant the list
+        // appeared the moment an item landed in the offering slot and then *shrank* when the wheel
+        // went in, because the wheel is where "already learned" is read from. Two different answers
+        // to the same question depending on which slot was filled, from two blocks.
+        if (isWheel(input.getItem(WHEEL_SLOT))) {
+            candidates = candidatesFor(player, fedData(), input.getItem(OFFER_SLOT));
+        } else {
+            candidates = List.of();
         }
-        if (selectedIndex < 0 && !candidates.isEmpty()) {
-            selectedIndex = 0;
+        // The pool shrank under the selection, or there is no pool at all. Clear rather than clamp:
+        // a clamped index would silently point at a neighbouring adaptation nobody asked for.
+        if (selectedIndex < 0 || selectedIndex >= candidates.size()) {
+            selectedIndex = candidates.isEmpty() ? -1 : 0;
         }
+        itemCost = itemPrice(player, input.getItem(OFFER_SLOT));
         sync(player);
     }
 
@@ -335,9 +357,11 @@ public abstract class TradeMenu extends AbstractContainerMenu {
      * Performs the exchange: verify, take the price, grant.
      *
      * <p>Every check is against live state rather than against what the screen showed, and the pool
-     * is rebuilt here rather than reused — the wheel may have finished that adaptation by some
-     * other route while the screen was open, and paying for an adaptation already held is the worst
-     * outcome available, because the item would be gone and nothing would have changed.</p>
+     * is rebuilt here rather than reused. That is not paranoia about the pool's <em>contents</em> —
+     * the pool is a function of the offering item alone — but about the wheel: it may have finished
+     * the chosen adaptation by some other route while the screen was open, and charging for one the
+     * wheel already holds is the worst outcome available, because the item would be gone and nothing
+     * would have changed. So it is refused by name, before either price is taken.</p>
      */
     public void exchange() {
         ServerPlayer player = serverPlayer();
@@ -347,13 +371,15 @@ public abstract class TradeMenu extends AbstractContainerMenu {
         ItemStack offering = input.getItem(OFFER_SLOT);
         ItemStack wheel = input.getItem(WHEEL_SLOT);
         PlayerAdaption fed = fedData();
+        // The wheel first, and for the same reason recompute() checks it first: with the slot empty
+        // there is no offer at all, and the message that says so is the one about the wheel.
+        if (!isWheel(wheel)) {
+            refuse(player, "adaptionwheel.msg.stone_no_wheel");
+            return;
+        }
         List<String> pool = candidatesFor(player, fed, offering);
         if (pool.isEmpty()) {
             refuse(player, "adaptionwheel.msg.stone_nothing");
-            return;
-        }
-        if (!isWheel(wheel)) {
-            refuse(player, "adaptionwheel.msg.stone_no_wheel");
             return;
         }
         if (selectedIndex < 0 || selectedIndex >= pool.size()) {
@@ -361,6 +387,15 @@ public abstract class TradeMenu extends AbstractContainerMenu {
             return;
         }
         String concept = pool.get(selectedIndex);
+        // The list does not filter itself by what the wheel already has -- a pool that emptied
+        // itself as the wheel filled up was the bug, not the feature -- so this is where the
+        // question is answered instead. Checked before either price is taken, so it costs nothing.
+        // "Finished", not "any progress": a wheel sitting at level 3 of a damage type is precisely
+        // the case the stone exists for, and only the finished thing is already bought.
+        if (fed.isAdapted(concept) || fed.level(concept) >= PlayerAdaption.MAX_LEVEL) {
+            refuse(player, "adaptionwheel.msg.stone_already");
+            return;
+        }
         int items = itemPrice(player, offering);
         if (items <= 0 || offering.getCount() < items) {
             refuse(player, "adaptionwheel.msg.stone_too_few");
@@ -410,9 +445,10 @@ public abstract class TradeMenu extends AbstractContainerMenu {
     }
 
     /** Applies a server sync on the client. */
-    public void acceptSync(List<String> pool, int selected) {
+    public void acceptSync(List<String> pool, int selected, int itemCost) {
         this.candidates = pool;
         this.selectedIndex = selected;
+        this.itemCost = itemCost;
     }
 
     // ------------------------------------------------------------------ read by both sides
@@ -442,10 +478,19 @@ public abstract class TradeMenu extends AbstractContainerMenu {
         return isWheel(input.getItem(WHEEL_SLOT));
     }
 
-    /** How many items the current trade consumes. */
+    /**
+     * How many items the current trade consumes.
+     *
+     * <p>Computed on the server and <em>sent</em>, not recomputed on the client. That is not an
+     * optimisation: the altar's price asks {@link ru.adaptionwheel.server.AltarOfferings} which mobs
+     * drop the offering, and that index is read out of the server's resources, so a client asked the
+     * same question answers "nothing drops this" — and a button that is never affordable is a button
+     * that is never pressed. Reading it live from {@link #itemPrice} on the client returned 0
+     * instead, so {@link #canAfford} was permanently false and the whole exchange was
+     * unreachable.</p>
+     */
     public int itemCost() {
-        ServerPlayer player = serverPlayer();
-        return player == null ? 0 : itemPrice(player, offering());
+        return itemCost;
     }
 
     /** What the current choice costs in whole levels of the player's own experience. */

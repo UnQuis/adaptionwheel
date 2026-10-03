@@ -104,6 +104,23 @@
   looked up. **The tier does not filter the pool**: the stone is a shortcut towards what the wheel
   has not reached, and tiers reveal rather than restrict. `ADBERSITY` is never sold — it is a
   challenge, and the price would be an item for a fight.
+- **The pool is the offering item's, never the wheel's — and it is empty until the wheel is in the
+  slot.** Both rules were violated at once and it read as a bug in the list: an item alone opened
+  four adaptations, then putting the wheel in beside it left two, because "already learned" was
+  read off the wheel being fed, so the shop emptied itself as you shopped at it and the same row
+  appeared or vanished depending on which of the two slots was filled. Nothing filters now
+  (`DomainExchange.candidates(tier, recipe)` takes no wheel; `ResonanceAltarMenu` offers both of a
+  mob's adaptations unconditionally), and **`TradeMenu.exchange()` refuses an adaptation the fed
+  wheel already holds** (`msg.stone_already`) instead of removing the row — so the player finds out
+  by clicking, not by noticing an absence. The wheel slot is not optional for the *list* either:
+  the purchase is written onto that stack, so with the slot empty there is nothing to sell and
+  `recompute()` returns an empty pool with `gui.need_wheel` as the empty state.
+- **The item price is server-computed and synced; the client cannot work it out.** The altar's price
+  is "which mobs drop this item", read out of the *server's* resources
+  (`AltarOfferings.mobsFor(stack, server)`), so a client asking the same question answers zero —
+  and `TradeMenu.itemCost()` used to be exactly that client-side question, returning 0, which made
+  `canAfford` permanently false and left the EXCHANGE button grey and inert. It rides in
+  `TradeSyncPayload` beside the pool and the selection.
 - **The player pays twice: the item is consumed, and the stone charges their own experience
   levels.** The ladder is `DomainExchange.priceFor` — **1** for a one-time adaptation, **2** for a
   leveled one, **3** for `Drop_NPC_`, **4** for `Existence_`/`Mutation_`/`Dimension_Destroy`.
@@ -148,6 +165,17 @@
   `openMenu(provider, BlockPos)` is gone, `Player.getBlockReach()` is replaced by
   `isWithinBlockInteractionRange(pos, 4.0)`, and `AbstractContainerMenu` grew
   `addStandardInventorySlots` with the same layout the hand-rolled 1.21.1 helper produced.
+- **The mouse buttons were renumbered, and nothing in the API shape says so.** 1.21.1 used GLFW's
+  numbers (left 0, right 1, middle 2); here **`MouseButtonEvent.button()` is 1 for left, 2 for
+  middle, 3 for right** — which is what vanilla's own `InputConstants.Type.MOUSE` table says
+  (`key.mouse.left` = 1, `key.mouse.right` = 3) and what `AbstractContainerScreen` assumes when it
+  maps a click back to a container button (`getContainerClickButton`: `case 1 -> 0`, `case 3 -> 1`;
+  and its pick-all double-click test is `event.button() == 1`). A `mouseClicked` override ported from
+  `main` asking "is this button 0" therefore **never fires on a left click**, silently, and the click
+  falls through to `super`, which for a container screen returns `true` unconditionally — so the game
+  looks like it ate the click. Both of this mod's screens were dead that way: the adaptation
+  browser's tabs and the trading blocks' rows. Ask `client/MouseButtons.isLeft(event)`; never write
+  the literal.
 - **`ResourceKey` has identity equality on this branch — it overrides neither `equals` nor
   `hashCode`,** and the only accessor is `identifier()` (1.21.1 spells it `location()`). So
   `event.getTabKey() == SomeVanillaTab` works only because the registry hands back the very same

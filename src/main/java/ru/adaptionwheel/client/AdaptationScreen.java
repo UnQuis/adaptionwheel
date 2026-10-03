@@ -281,12 +281,8 @@ public class AdaptationScreen extends Screen {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
         double mouseX = event.x();
         double mouseY = event.y();
-        org.slf4j.LoggerFactory.getLogger("adaptionwheel/dbg").info(
-                "AdaptationScreen click raw=({}, {}) button={} tabs={} tab0={} list=({}, {}, {}, {})",
-                mouseX, mouseY, event.button(), tabHitboxes.size(),
-                tabHitboxes.isEmpty() ? "-" : java.util.Arrays.toString(tabHitboxes.get(0)),
-                listX, listY, listW, listH);
-        if (event.button() == 0) {
+        // Not the literal 0: 26.3 numbers the left button 1. See MouseButtons.
+        if (MouseButtons.isLeft(event)) {
             for (int i = 0; i < tabHitboxes.size(); i++) {
                 int[] b = tabHitboxes.get(i);
                 if (mouseX >= b[0] && mouseX < b[0] + b[2] && mouseY >= b[1] && mouseY < b[1] + b[3]) {
