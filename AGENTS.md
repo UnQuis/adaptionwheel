@@ -77,6 +77,14 @@
 
 ## Commands
 
+- **The jar's name says which game it is for**: `build/libs/adaptionwheel-0.1.4+mc1.21.1.jar`, from
+  `version = "${mod_version}+mc${minecraft_version}"` in `build.gradle`. The manifest repeats it
+  (`Minecraft-Version`, `NeoForge-Version`, `FMLLoader-Type`) for anything that reads a jar without
+  unpacking. Both come from `minecraft_version` in `gradle.properties` — the same property
+  `neoforge.mods.toml` is expanded with — so the name cannot drift from what the mod declares.
+  The `26.3` branch produces `adaptionwheel-0.1.5+mc26.3.jar`, and the two are deliberately
+  distinguishable at a glance because the same mod has to be built twice against two incompatible
+  APIs.
 - Build: `./gradlew build --no-daemon` (first run downloads Minecraft + runs neoForm; long). Runs/tests: `./gradlew runClient`, `./gradlew runServer`, `./gradlew runData`. No lint/test framework configured.
 - Headless server smoke test: enable RCON in `runs/server/server.properties` (`enable-rcon=true`, `rcon.port=25575`, `rcon.password=...`), start `./gradlew runServer --no-daemon &`, poll the log for `Done (`, then drive it with a minimal RCON client — Gradle does NOT forward stdin to the server console, piped commands are lost.
 - Decompiled Minecraft sources for mixin/API research: `build/neoForm/neoFormJoined*/steps/decompile/output.jar` (unzip selected classes; Mojang mappings = runtime names).
