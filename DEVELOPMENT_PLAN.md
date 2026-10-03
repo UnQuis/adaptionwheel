@@ -860,30 +860,34 @@ against the hand-rolled helper 1.21.1 lacks, `Entity.hurt` against `hurtServer`,
 `SurfaceAdaptations.fistLevel` and `AdaptionConfig.fistTierSpeed` remain main-only by design: 26.3
 forked before the fist existed, so no 26.3 save can hold a `Fist_Copper` to migrate.
 
-### The altar model on 1.21.1 — waiting on a re-export
+### The altar model on 1.21.1 — shipped, and the UV rule that decided it
 
-`models/block/resonance_altar.json` is the author's export and it loads on 26.3. On 1.21.1 it does
-not: **1.21.1's element rotation is single-axis** (`{"origin","axis","angle"}`), and 216 of the 336
-elements carry a two-axis Euler rotation (`x=90,z=90` and friends) that the newer loader accepts and
-this one cannot express at all. The client answers with
-`JsonSyntaxException: Missing axis, expected to find a string`, and the altar renders as the
-missing-model cube.
+`models/block/resonance_altar_21.json` is the author's Java-format re-export and it loads on
+1.21.1. Textures are bound by a child model, `models/block/resonance_altar_21_bound.json`,
+because the file's own texture names (`block`, `block1`) cannot resolve through the block atlas:
+`assets/minecraft/atlases/blocks.json` puts every block texture under the `block/` prefix. Key `0`
+is the 14x14x14 core (`block.png`, the 64x64 teal glyph), key `1` is the 336 shards
+(`block1.png`, 32x32 solid black).
 
-**Chosen fix: re-export from Blockbench** rather than baking the rotations into geometry, because a
-bake is exact for the silhouette (every angle is a multiple of 90°) but has to re-derive the UVs, and
-a Java-target export is exact about both. What the export needs:
+**Block model UV are measured in 1/16 of the sprite, not in pixels, and this is not a version
+difference** — 1.21.1 does `sprite.getU(faceUV.getU(i) / 16.0F)` in `FaceBakery`, 26.3
+normalises through the same `16.0F` in `resources/model/cuboid/FaceBakery`. So a model drawn on a
+32x32 canvas cannot be read by either version: UV 0..32 becomes two sprite widths, and the face
+reads its neighbours out of the atlas. In game that looked exactly like the block "absorbing other
+blocks' textures" — gold ore, oak planks and stone on the shards — while the core looked fine,
+because its UV 0..3.5 is 22% of a 64px sprite and still lands inside it. No vanilla block model
+in 1.21.1 uses a texture larger than 16x16; there is no precedent for what this file was doing.
 
-1. Blockbench project format **Java Block/Item**, not Bedrock — that is what produced the `x/y/z`
-   Euler rotations in the first place (`"format_version": "26.3"` in the file is the giveaway).
-2. **Apply Rotation** on the six plates (`Ctrl+R`) so the two-axis rotations become geometry or a
-   single-axis rotation, then export.
-3. Leave the texture names as they are (`block1`, `block`): they cannot resolve through the block
-   atlas either way, so the textures are bound by a child model — `models/block/resonance_altar_bound.json`
-   with `"2": "adaptionwheel:block/resonance_altar"`, `"3": "adaptionwheel:block/resonance_altar_core"`,
-   `"particle": "adaptionwheel:block/resonance_altar"` — and the blockstate and item model point at
-   that child. **The child comes back with the export**, since the file it parents is unreadable
-   without it.
+`texture_size` is **not** read by either version (zero occurrences of that string in 1.21.1's or
+26.3's client classes): it is a Blockbench export convention, not a Minecraft key. Adding it would
+have been an edit that did nothing.
 
-Until then main keeps a `cube_all` placeholder so the block is a block rather than a missing model.
-Both textures (`textures/block/resonance_altar.png`, `resonance_altar_core.png`) are already in
-place and untouched.
+Fix: every `uv` in the shipped file is halved (the author authorised exactly this, UVs only, and
+the text outside the `uv` arrays is byte-identical to their export). Shards are then 0..16 = the
+whole 32x32 texture, the core 0..1.75 = the same opaque teal corner at a larger scale. Their
+untouched export is still in `Resonance altar/resonance_altar_21.json`, and the shipped file no
+longer matches it — that is the one deliberate difference.
+
+`tools/altar_preview.py` rasterises a block model with its bound textures in the game's own two
+rules: the `1/16` UV conversion and the child's texture substitution. It is what settled the
+diagnosis without launching the game.

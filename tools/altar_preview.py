@@ -24,8 +24,8 @@ BOUND = {
 }
 
 SIZE = 480
-SCALE = 15.0
-CX, CY = SIZE / 2, SIZE / 2 + 60
+SCALE = 8.0
+CX, CY = SIZE / 2, SIZE / 2 + 40
 
 
 def project(p):
@@ -103,7 +103,9 @@ def main():
             if spec is None:
                 continue
             poly = [pts[i] for i in idx]
-            depth = sum(p[1] for p in poly) / 4.0
+            # Ближе к камере там, где больше x, меньше z и меньше y: рисовать от
+            # дальнего к ближнему, иначе верхние грани затирают передние.
+            depth = sum((p[2] - p[0] + p[1]) for p in poly) / 4.0
             faces.append((depth, [project(p) for p in poly], spec, name))
     faces.sort(key=lambda f: f[0])   # painters algorithm: сверху вниз по y
 
@@ -114,10 +116,15 @@ def main():
         if uv is None:
             patch = fallback
         else:
-            u0, v0, u1, v1 = uv
-            lo_u, hi_u = sorted((int(u0), int(u1)))
-            lo_v, hi_v = sorted((int(v0), int(v1)))
-            patch = tex.crop((lo_u, lo_v, max(hi_u, lo_u + 1), max(hi_v, lo_v + 1)))
+            # Правило игры: UV измеряются в 1/16 ширины спрайта, а не в пикселях
+            # (FaceBakery: sprite.getU(faceUV.getU(i) / 16.0F)). Без этого превью
+            # показывает не то, что увидит игрок.
+            u0, v0, u1, v1 = (c * tex.width / 16.0 if i % 2 == 0 else c * tex.height / 16.0
+                              for i, c in enumerate(uv))
+            lo_u, hi_u = sorted((u0, u1))
+            lo_v, hi_v = sorted((v0, v1))
+            patch = tex.crop((int(lo_u), int(lo_v),
+                              max(int(hi_u), int(lo_u) + 1), max(int(hi_v), int(lo_v) + 1)))
             if u1 < u0:
                 patch = patch.transpose(Image.FLIP_LEFT_RIGHT)
             if v1 < v0:
