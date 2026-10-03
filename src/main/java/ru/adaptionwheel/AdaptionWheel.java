@@ -67,7 +67,7 @@ public class AdaptionWheel {
                     .build());
 
     public AdaptionWheel(IEventBus modEventBus, ModContainer modContainer) {
-        modContainer.registerConfig(ModConfig.Type.SERVER, AdaptionConfig.SERVER_SPEC);
+        modContainer.registerConfig(ModConfig.Type.SYNCED, AdaptionConfig.SERVER_SPEC);
         modContainer.registerConfig(ModConfig.Type.CLIENT, AdaptionConfig.CLIENT_SPEC);
         AttachmentTypes.ATTACHMENTS.register(modEventBus);
         ModDataComponents.COMPONENTS.register(modEventBus);
