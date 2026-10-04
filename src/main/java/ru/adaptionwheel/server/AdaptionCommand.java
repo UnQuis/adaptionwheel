@@ -184,7 +184,13 @@ public final class AdaptionCommand {
                         .then(net.minecraft.commands.Commands.argument("item",
                                         StringArgumentType.word())
                                 .executes(ctx -> altarLookup(ctx,
-                                        StringArgumentType.getString(ctx, "item"))))));
+                                        StringArgumentType.getString(ctx, "item")))))
+                .then(net.minecraft.commands.Commands.literal("flight")
+                        .requires(s2 -> s2.hasPermission(2))
+                        .executes(ctx -> flight(ctx, self(ctx)))
+                        .then(net.minecraft.commands.Commands.argument("player",
+                                        EntityArgument.player())
+                                .executes(ctx -> flight(ctx, selfOrTarget(ctx, "player"))))));
 
         event.getDispatcher().register(root);
     }
@@ -520,6 +526,77 @@ public final class AdaptionCommand {
                     + String.format(java.util.Locale.ROOT, "%.1f", mob.distanceTo(target)) + " blocks")), false);
         }
         return 1;
+    }
+
+    private static int flight(CommandContext<CommandSourceStack> ctx, ServerPlayer target) {
+        CommandSourceStack source = ctx.getSource();
+        PlayerAdaption data = AdaptionEvents.dataOf(target);
+        boolean wearing = AdaptionEvents.isWearingWheel(target);
+        source.sendSuccess(() -> Component.literal("— flight: " + target.getName().getString() + " —"), false);
+
+        source.sendSuccess(() -> Component.literal("wheel worn: " + wearing
+                + "   mutations.flight config=" + AdaptionConfig.ENABLE_MUTATION_FLIGHT.get()), false);
+
+        String concept = Concepts.MUTATION_FLIGHT;
+        source.sendSuccess(() -> Component.literal(Concepts.chatName(concept)
+                + ": adapted=" + data.isAdapted(concept) + " enabled=" + data.isEnabled(concept)), false);
+
+        ru.adaptionwheel.data.WheelData onItem = AdaptionEvents.getWheelStack(target)
+                .map(s -> s.get(ru.adaptionwheel.data.ModDataComponents.WHEEL_DATA))
+                .orElse(null);
+        int itemCount = onItem == null ? -1 : onItem.adaptCount();
+        source.sendSuccess(() -> Component.literal("attachment adaptCount=" + data.getAdaptCount()
+                + "   wheel item wheel_data adaptCount=" + (itemCount < 0 ? "(no component)" : itemCount)), false);
+        if (wearing && itemCount >= 0 && itemCount != data.getAdaptCount()) {
+            source.sendSuccess(() -> Component.literal(">>> THESE DIFFER. Equipping REPLACES the attachment with the "
+                    + "wheel item's data, so anything granted while the wheel was off is lost."), false);
+        }
+        if (onItem != null && itemCount > 0
+                && !onItem.adapted().contains(concept) && data.isAdapted(concept)) {
+            source.sendSuccess(() -> Component.literal(">>> " + Concepts.chatName(concept)
+                    + " is in the attachment but NOT on the wheel item: re-equipping will wipe it."), false);
+        }
+
+        double altitude = target.getY();
+        double needed = AdaptionConfig.FLIGHT_ALTITUDE.get();
+        int phantom = data.level(Concepts.contact("minecraft:phantom"));
+        boolean levitation = data.isAdapted(Concepts.debuff("minecraft:levitation"));
+        source.sendSuccess(() -> Component.literal("unlock: y=" + String.format(java.util.Locale.ROOT, "%.1f", altitude)
+                + " (needs " + needed + ") " + mark(altitude >= needed)
+                + "   " + Concepts.contact("minecraft:phantom") + "=" + phantom + "/"
+                + PlayerAdaption.MAX_LEVEL + " " + mark(phantom >= PlayerAdaption.MAX_LEVEL)
+                + "   " + Concepts.debuff("minecraft:levitation") + "=" + levitation + " " + mark(levitation)), false);
+
+        source.sendSuccess(() -> Component.literal("gamemode=" + target.gameMode.getGameModeForPlayer()
+                + " isCreative=" + target.isCreative() + " isSpectator=" + target.isSpectator()), false);
+        source.sendSuccess(() -> Component.literal("mayfly=" + target.getAbilities().mayfly
+                + " flying=" + target.getAbilities().flying
+                + " flySpeed=" + target.getAbilities().getFlyingSpeed()), false);
+
+        if (!wearing) {
+            source.sendSuccess(() -> Component.literal("=> NOT WORN: tickFlight is never reached."), false);
+        } else if (!AdaptionConfig.ENABLE_MUTATION_FLIGHT.get()) {
+            source.sendSuccess(() -> Component.literal("=> mutations.flight is off in the config."), false);
+        } else if (!data.isAdapted(concept)) {
+            source.sendSuccess(() -> Component.literal("=> NOT ADAPTED yet: it is granted the first tick you are at y="
+                    + needed + " with the other two conditions true."), false);
+        } else if (target.isCreative() || target.isSpectator()) {
+            source.sendSuccess(() -> Component.literal("=> creative/spectator: tickFlight returns early and never sets "
+                    + "mayfly. Creative already flies, so this is invisible there — test in SURVIVAL."), false);
+        } else if (!data.isEnabled(concept)) {
+            source.sendSuccess(() -> Component.literal("=> DISABLED in the adaptation panel, so mayfly is revoked."), false);
+        } else if (!target.getAbilities().mayfly) {
+            source.sendSuccess(() -> Component.literal("=> adapted, enabled, worn, survival — and mayfly is still false. "
+                    + "That is a bug; the two lines above the gate are where to look."), false);
+        } else {
+            source.sendSuccess(() -> Component.literal("=> mayfly is SET. Flight is a DOUBLE TAP of jump while not "
+                    + "standing still; vanilla only arms it within 7 ticks of the first tap."), false);
+        }
+        return 1;
+    }
+
+    private static String mark(boolean ok) {
+        return ok ? "OK" : "NO";
     }
 
     private static int altarLookup(CommandContext<CommandSourceStack> ctx, String itemId) {

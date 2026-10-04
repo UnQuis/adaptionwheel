@@ -50,18 +50,27 @@ public record WheelData(
     }
 
     public void loadInto(PlayerAdaption data) {
-        data.levels.clear();
-        data.levels.putAll(levels);
-        data.adapted.clear();
+        levels.forEach((concept, level) -> data.levels.merge(concept, level, Math::max));
         data.adapted.addAll(adapted);
-        data.existenceAdapted.clear();
         data.existenceAdapted.addAll(existenceAdapted);
-        data.killCounts.clear();
-        data.killCounts.putAll(killCounts);
-        data.history.clear();
-        data.history.addAll(history);
-        data.tasks.clear();
-        data.tasks.addAll(tasks);
+        killCounts.forEach((mob, count) -> data.killCounts.merge(mob, count, Math::max));
+        for (String entry : history) {
+            if (!data.history.contains(entry)) {
+                data.history.add(entry);
+            }
+        }
+        for (AdaptionTask task : tasks) {
+            boolean running = false;
+            for (AdaptionTask existing : data.tasks) {
+                if (existing.concept.equals(task.concept)) {
+                    running = true;
+                    break;
+                }
+            }
+            if (!running) {
+                data.tasks.add(task);
+            }
+        }
         data.invalidateAdaptCount();
         migrateLegacyConcepts(data);
     }

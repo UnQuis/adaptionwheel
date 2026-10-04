@@ -125,7 +125,7 @@ public class AdaptionEvents {
         return data(serverPlayer).level(concept);
     }
 
-    private static Optional<ItemStack> getWheelStack(Player player) {
+    public static Optional<ItemStack> getWheelStack(Player player) {
         return top.theillusivec4.curios.api.CuriosApi.getCuriosInventory(player)
                 .flatMap(handler -> handler.findFirstCurio(ModItems.MAHORAGA_WHEEL.get()))
                 .map(result -> result.stack());
@@ -560,7 +560,7 @@ public class AdaptionEvents {
         }
         PlayerAdaption data = data(attacker);
         startOrAccelerate(attacker, data, Concepts.COMBAT_FIST_DAMAGE, HardFist.analysisTicks(), true);
-        float bonus = HardFist.bonus(attacker, data);
+        float bonus = HardFist.bonus(data);
         if (bonus > 0f) {
             event.setNewDamage(event.getNewDamage() + bonus);
         }

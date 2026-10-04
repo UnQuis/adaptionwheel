@@ -94,6 +94,73 @@ public class TradeWheelDataTests {
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void equippingKeepsWhatThePlayerAlreadyHad(GameTestHelper helper) {
+        PlayerAdaption attachment = new PlayerAdaption();
+        attachment.levels.put("Type_Fire", PlayerAdaption.MAX_LEVEL);
+        attachment.adapted.add("Mutation_Flight");
+        attachment.adapted.add("Debuff_minecraft:levitation");
+        attachment.killCounts.put("Drop_NPC_minecraft:chicken", 12);
+        attachment.invalidateAdaptCount();
+
+        PlayerAdaption onWheel = new PlayerAdaption();
+        onWheel.levels.put("Contact_minecraft:phantom", PlayerAdaption.MAX_LEVEL);
+        onWheel.adapted.add("Env_Void");
+        onWheel.invalidateAdaptCount();
+        ru.adaptionwheel.data.WheelData.fromPlayer(onWheel).loadInto(attachment);
+
+        helper.assertTrue(attachment.level("Type_Fire") == PlayerAdaption.MAX_LEVEL,
+                "a grant made while the wheel was off must survive equipping it; loadInto used to clear"
+                        + " every collection first, which silently threw those adaptations away");
+        helper.assertTrue(attachment.isAdapted("Mutation_Flight"),
+                "and Mutation_Flight with them, which is why Flight never took effect");
+        helper.assertTrue(attachment.isAdapted("Debuff_minecraft:levitation"),
+                "and the levitation adaptation, the third of Flight's conditions");
+        helper.assertTrue(attachment.kills("Drop_NPC_minecraft:chicken") == 12,
+                "and the kill counts, which a Drop_NPC_ level is derived from");
+        helper.assertTrue(attachment.level("Contact_minecraft:phantom") == PlayerAdaption.MAX_LEVEL,
+                "while what the wheel itself carried comes across too");
+        helper.assertTrue(attachment.isAdapted("Env_Void"),
+                "including its one-time adaptations");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void loadingNeverLowersAConceptOrDuplicatesATask(GameTestHelper helper) {
+        PlayerAdaption attachment = new PlayerAdaption();
+        attachment.levels.put("Type_Fire", 7);
+        attachment.killCounts.put("Drop_NPC_minecraft:zombie", 30);
+        attachment.tasks.add(new ru.adaptionwheel.data.AdaptionTask("Env_Lava", 40, 100));
+        attachment.invalidateAdaptCount();
+
+        PlayerAdaption weaker = new PlayerAdaption();
+        weaker.levels.put("Type_Fire", 2);
+        weaker.killCounts.put("Drop_NPC_minecraft:zombie", 5);
+        weaker.tasks.add(new ru.adaptionwheel.data.AdaptionTask("Env_Lava", 10, 100));
+        weaker.tasks.add(new ru.adaptionwheel.data.AdaptionTask("Env_Void", 10, 100));
+        weaker.invalidateAdaptCount();
+        ru.adaptionwheel.data.WheelData.fromPlayer(weaker).loadInto(attachment);
+
+        helper.assertTrue(attachment.level("Type_Fire") == 7,
+                "a merge takes the higher level, so handing a wheel over cannot walk a concept backwards,"
+                        + " got " + attachment.level("Type_Fire"));
+        helper.assertTrue(attachment.kills("Drop_NPC_minecraft:zombie") == 30,
+                "kill counts must not fall either, or a Drop_NPC_ adaptation would regress");
+        int envLava = 0;
+        int total = 0;
+        for (ru.adaptionwheel.data.AdaptionTask task : attachment.tasks) {
+            if (task.concept.equals("Env_Lava")) {
+                envLava++;
+            }
+            total++;
+        }
+        helper.assertTrue(envLava == 1,
+                "one analysis per concept, or the same task completes twice and pays out twice;"
+                        + " found " + envLava);
+        helper.assertTrue(total == 2, "and the task the wheel carried is still added, got " + total);
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theKillsADropPurchasePaysForAreTheOnesTheTableAsksFor(GameTestHelper helper) {
         int max = PlayerAdaption.MAX_LEVEL;
         int wanted = (int) Math.ceil(ru.adaptionwheel.config.AdaptionConfig.lootKills(max));
