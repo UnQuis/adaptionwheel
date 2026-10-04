@@ -583,10 +583,11 @@ public class AdaptationScreen extends Screen {
             return null;
         }
         int y = listY + index * ENTRY_H - (int) Math.round(scrollOffset);
-        if (y + CARD_H < listY || y > listY + listH) {
+        int boxY = y + (CARD_H - TOGGLE_H) / 2;
+        if (boxY + TOGGLE_H <= listY || boxY >= listY + listH) {
             return null;
         }
-        return new int[]{listX + listW - TOGGLE_W - 6, y + (CARD_H - TOGGLE_H) / 2, TOGGLE_W + 4, TOGGLE_H};
+        return new int[]{listX + listW - TOGGLE_W - 6, boxY, TOGGLE_W + 4, TOGGLE_H};
     }
 
     private void bar(GuiGraphicsExtractor g, int x, int y, int width, float fill,
