@@ -126,6 +126,24 @@ All six exist on **both** branches (`1.21.1` and `26.3`) and are configured, not
   `ClientboundPlayerAbilitiesPacket`, because that is vanilla's own choke point and survives API churn. It runs
   every tick and only acts when `!mayfly`, because abilities are rebuilt on respawn and on every gamemode
   change; it never touches a creative or spectator player.
+  **Flight was unreachable for a while because equipping the wheel ERASED it, and the erasure was invisible.**
+  `WheelData.loadInto` used to `clear()` every collection before copying the wheel item's `wheel_data` over
+  them, so `loadFromItem` on the equip transition was a **replace, not a load**: anything living only in the
+  player attachment was destroyed with no message. An adaptation granted while the wheel was off therefore
+  survived right up to the equip and was then gone — so `Mutation_Flight` was granted, reported success, wiped
+  on the tick that filled the slot, and `tickFlight` then found it unadapted **with all three of its
+  preconditions wiped alongside it**, which is unrecoverable: nothing left to re-grant from. That is the shape
+  to recognise — a feature that "was granted" and then does nothing. `loadInto` is now a **merge**: levels and
+  kill counts take the higher value (a hand-over must not walk a concept backwards), sets union, history
+  dedupes, and a running analysis is kept rather than added twice, because two tasks for one concept would
+  complete the same adaptation and pay out twice. **This is the one place where Curios being OPTIONAL changes
+  the story**: `wearingWheel` goes through `CuriosCompat` reflection here and is a hard dependency on 1.21.1, so
+  a bug in `loadInto` presents as "the mutation is granted but nothing happens" on both branches but is only
+  reachable by a player who actually put the wheel in the slot. **`/adaptionwheel debug flight [player]`
+  prints every gate `tickFlight` reads** — worn, adapted, enabled, gamemode, `mayfly`/`flying`, all three
+  preconditions — plus whether the attachment and the wheel item disagree, and ends with the one line naming
+  the blocking condition. The two regression tests are on `1.21.1` only; this branch has no gametest framework,
+  so the merge semantics here are covered by nothing automated.
 - **Hard Fist** (`Combat_FistDamage`, **leveled**, COMBAT domain — deliberately *not* under `Fist_`, which belongs
   to the mining tiers and is walked by index): trained by hits with a bare hand or with any item that adds no
   attack damage, and by kills. `server/HardFist.java` holds the formula
