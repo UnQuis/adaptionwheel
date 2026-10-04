@@ -16,6 +16,6 @@ public final class SeaEyeFog {
 
     public static boolean seaEye() {
         LocalPlayer player = Minecraft.getInstance().player;
-        return player != null && ClientAdaption.ADAPTED.contains(Concepts.MUTATION_SEA_EYE);
+        return player != null && ClientAdaption.active(Concepts.MUTATION_SEA_EYE);
     }
 }

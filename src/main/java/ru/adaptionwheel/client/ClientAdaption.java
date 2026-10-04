@@ -106,6 +106,14 @@ public final class ClientAdaption {
         return ADAPTED.contains(concept);
     }
 
+    public static boolean active(String concept) {
+        return isEnabled(concept) && isAdapted(concept);
+    }
+
+    public static int levelOrZero(String concept) {
+        return isEnabled(concept) ? LEVELS.getOrDefault(concept, 0) : 0;
+    }
+
     public static boolean isEnabled(String concept) {
         return !DISABLED.contains(concept);
     }

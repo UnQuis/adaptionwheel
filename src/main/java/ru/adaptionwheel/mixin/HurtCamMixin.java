@@ -17,7 +17,7 @@ public abstract class HurtCamMixin {
     private void adaptionwheel$steadyGaze(PoseStack poseStack, float partialTick, CallbackInfo ci) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null && ClientAdaption.wearingWheel
-                && ClientAdaption.isAdapted(Concepts.PERCEP_STEADY_GAZE)) {
+                && ClientAdaption.active(Concepts.PERCEP_STEADY_GAZE)) {
             ci.cancel();
         }
     }
