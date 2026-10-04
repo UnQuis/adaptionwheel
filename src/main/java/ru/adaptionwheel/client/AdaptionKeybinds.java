@@ -24,6 +24,12 @@ public final class AdaptionKeybinds {
             GLFW.GLFW_KEY_G,
             "key.categories.adaptionwheel");
 
+    public static final KeyMapping OPEN_CACHE_KEY = new KeyMapping(
+            "key.adaptionwheel.open_cache",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_V,
+            "key.categories.adaptionwheel");
+
     private AdaptionKeybinds() {
     }
 
@@ -31,5 +37,6 @@ public final class AdaptionKeybinds {
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(OPEN_SCREEN_KEY);
         event.register(TOGGLE_INSTABREAK_KEY);
+        event.register(OPEN_CACHE_KEY);
     }
 }

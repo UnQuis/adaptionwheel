@@ -20,6 +20,10 @@ public final class ModMenus {
             MENUS.register("resonance_altar_trade", () -> IMenuTypeExtension.create(
                     (windowId, inventory, extra) -> new ResonanceAltarMenu(windowId, inventory, extra)));
 
+    public static final DeferredHolder<MenuType<?>, MenuType<CacheMenu>> CACHE =
+            MENUS.register("cache", () -> IMenuTypeExtension.create(
+                    (windowId, inventory, extra) -> new CacheMenu(windowId, inventory.player)));
+
     public static void register(IEventBus modEventBus) {
         MENUS.register(modEventBus);
     }

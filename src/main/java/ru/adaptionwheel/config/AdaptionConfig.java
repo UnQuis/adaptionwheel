@@ -50,6 +50,8 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_SEA_EYE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_FLIGHT;
     public static final ModConfigSpec.DoubleValue FLIGHT_ALTITUDE;
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_INVENTORY_ADAPTATION;
+    public static final ModConfigSpec.DoubleValue INVENTORY_ADAPTATION_SECONDS;
 
     public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_TIERS_ENABLED;
 
@@ -374,6 +376,14 @@ public final class AdaptionConfig {
                 .define("flight", true);
         FLIGHT_ALTITUDE = s.comment("Minimum Y (blocks) the wheel must have reached for Flight.")
                 .defineInRange("flightAltitude", 310.0, 1.0, 4096.0);
+
+        ENABLE_INVENTORY_ADAPTATION = s.comment("Inventory adaptation: fill every one of the 36 slots plus",
+                        "the offhand to earn a 50 slot personal cache (key: the mod's cache key).",
+                        "The extra slots are their OWN storage, never the vanilla inventory array,",
+                        "so nothing you are carrying can be overwritten by them.")
+                .define("inventoryAdaptation", true);
+        INVENTORY_ADAPTATION_SECONDS = s.comment("Seconds of a full inventory for the analysis to finish.")
+                .defineInRange("inventoryAnalysisSeconds", 60.0, 1.0, 3600.0);
 
         s.comment("--- Hard Fist (Combat_FistDamage: adaptation to punching) ---").push("fistDamage");
         FIST_DAMAGE_ENABLED = s.comment("Hard Fist: trained by hitting with a bare hand or with an item that",

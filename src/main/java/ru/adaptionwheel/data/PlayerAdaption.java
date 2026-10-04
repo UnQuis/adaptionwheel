@@ -33,7 +33,8 @@ public class PlayerAdaption {
             Codec.FLOAT.fieldOf("wheelRotation").forGetter(d -> d.wheelRotation),
             Codec.BOOL.optionalFieldOf("wasWearing", false).forGetter(d -> d.wasWearing),
             Codec.INT.optionalFieldOf("shedCount", 0).forGetter(d -> d.shedCount),
-            Codec.STRING.listOf().optionalFieldOf("disabled", List.of()).forGetter(d -> new ArrayList<>(d.disabled))
+            Extras.CODEC.optionalFieldOf("extras", Extras.EMPTY)
+                    .forGetter(d -> new Extras(new ArrayList<>(d.disabled), new ArrayList<>(d.cache)))
     ).apply(inst, PlayerAdaption::new));
 
     public final Map<String, Integer> levels = new HashMap<>();
@@ -42,6 +43,8 @@ public class PlayerAdaption {
     public final List<String> history = new ArrayList<>();
     public final Set<String> existenceAdapted = new HashSet<>();
     public final Set<String> disabled = new HashSet<>();
+
+    public final List<net.minecraft.world.item.ItemStack> cache = new ArrayList<>();
 
     public final Map<String, Integer> killCounts = new HashMap<>();
 
@@ -80,7 +83,7 @@ public class PlayerAdaption {
                           Map<String, Integer> existenceProgress,
                           int healingTimer, int adversityCooldownTimer,
                           int adversityTimer, boolean adversityActive, float targetRotation, float wheelRotation,
-                          boolean wasWearing, int shedCount, List<String> disabled) {
+                          boolean wasWearing, int shedCount, Extras extras) {
         this.shedCount = shedCount;
         this.levels.putAll(levels);
         this.adapted.addAll(adapted);
@@ -89,7 +92,8 @@ public class PlayerAdaption {
         this.existenceAdapted.addAll(existence);
         this.killCounts.putAll(killCounts);
         this.bossCombatTicks.putAll(existenceProgress);
-        this.disabled.addAll(disabled);
+        this.disabled.addAll(extras.disabled());
+        this.cache.addAll(extras.cache());
         this.healingTimer = healingTimer;
         this.adversityCooldownTimer = adversityCooldownTimer;
         this.adversityTimer = adversityTimer;
@@ -159,6 +163,7 @@ public class PlayerAdaption {
         killCounts.clear();
         bossCombatTicks.clear();
         disabled.clear();
+        cache.clear();
         healingTimer = 0;
         adversityCooldownTimer = 0;
         adversityTimer = 0;
@@ -183,6 +188,8 @@ public class PlayerAdaption {
         bossCombatTicks.putAll(other.bossCombatTicks);
         disabled.clear();
         disabled.addAll(other.disabled);
+        cache.clear();
+        cache.addAll(other.cache);
         healingTimer = other.healingTimer;
         adversityCooldownTimer = other.adversityCooldownTimer;
         adversityTimer = other.adversityTimer;

@@ -8,6 +8,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.category.Concepts;
+import ru.adaptionwheel.data.Extras;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.server.DomainExchange;
 
@@ -21,7 +22,7 @@ public class DomainExchangeTests {
 
     private static PlayerAdaption empty() {
         return new PlayerAdaption(new HashMap<>(), List.of(), List.of(), List.of(), List.of(),
-                new HashMap<>(), new HashMap<>(), 0, 0, 0, false, 0f, 0f, false, 0, List.of());
+                new HashMap<>(), new HashMap<>(), 0, 0, 0, false, 0f, 0f, false, 0, Extras.EMPTY);
     }
 
     private static PlayerAdaption holding(String... concepts) {

@@ -964,6 +964,13 @@ public class AdaptionEvents {
             tickFlight(player, data);
         }
 
+        if (AdaptionConfig.ENABLE_INVENTORY_ADAPTATION.get()
+                && !data.isAdapted(Concepts.ENV_INVENTORY)
+                && CacheService.inventoryIsFull(player)) {
+            startTask(player, data, Concepts.ENV_INVENTORY,
+                    (int) (AdaptionConfig.INVENTORY_ADAPTATION_SECONDS.get() * 20));
+        }
+
         if (AdaptionConfig.DIMENSION_DESTROY_ENABLED.get()
                 && !data.isAdapted(Concepts.DIMENSION_DESTROY)
                 && data.getAdaptCount() > AdaptionConfig.DIMENSION_DESTROY_REQUIRED.get()) {

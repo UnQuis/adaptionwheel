@@ -18,7 +18,7 @@ public class SynergyTests {
         return new PlayerAdaption(
                 new java.util.HashMap<>(), java.util.List.of(), java.util.List.of(),
                 java.util.List.of(), java.util.List.of(), new java.util.HashMap<>(),
-                new java.util.HashMap<>(), 0, 0, 0, false, 0f, 0f, false, 0, java.util.List.of());
+                new java.util.HashMap<>(), 0, 0, 0, false, 0f, 0f, false, 0, ru.adaptionwheel.data.Extras.EMPTY);
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
