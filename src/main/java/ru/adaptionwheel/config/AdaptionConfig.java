@@ -365,8 +365,9 @@ public final class AdaptionConfig {
         ENABLE_MUTATION_IMPACT = s.comment("Impact Mastery: unlocked by Env_FallDamage + Env_Knockback.",
                         "Landing from great heights unleashes a damaging shockwave.")
                 .define("impactMastery", true);
-        IMPACT_STOMP_MIN_FALL = s.comment("Minimum fall distance (blocks) to trigger the Impact shockwave.")
-                .defineInRange("impactMinFallDistance", 6.0, 1.0, 200.0);
+        IMPACT_STOMP_MIN_FALL = s.comment("Minimum fall distance (blocks) to trigger the Impact shockwave.",
+                        "This is a hard floor: no synergy lowers it, so a stomp always means a real fall.")
+                .defineInRange("impactMinFallDistance", 7.0, 1.0, 200.0);
         IMPACT_STOMP_DAMAGE_PER_BLOCK = s.comment("Shockwave damage per block fallen above the threshold.")
                 .defineInRange("impactDamagePerBlock", 2.0, 0.0, 100.0);
         IMPACT_STOMP_RADIUS = s.comment("Shockwave radius in blocks.")

@@ -119,11 +119,6 @@ public final class SynergyEffects {
                 ? configured * strength(player, Synergies.SKYBREAKER) : configured;
     }
 
-    public static double impactMinFall(ServerPlayer player, double configured) {
-        return isActive(player, Synergies.SKYBREAKER)
-                ? configured / strength(player, Synergies.SKYBREAKER) : configured;
-    }
-
     public static void onHit(ServerPlayer attacker, LivingEntity target, DamageSource source) {
         Set<String> active = ACTIVE.get(attacker.getUUID());
         if (active == null || active.isEmpty() || attacker.level().isClientSide()) {
