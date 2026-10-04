@@ -91,7 +91,7 @@
   "adaptionwheel.gui.max_reached": "МАКС",
   "adaptionwheel.gui.pending": "ЕЩЁ НЕ АДАПТИРОВАНО",
   "adaptionwheel.gui.count": "Адаптаций: %s",
-  "adaptionwheel.gui.footer_scroll": "Прокрутка для обзора | Клик по категории — фильтр",
+  "adaptionwheel.gui.footer_scroll": "Прокрутка для обзора | Клик по категории — фильтр | Клик по переключателю — выключить",
   "adaptionwheel.domain.damage": "Урон",
   "adaptionwheel.domain.effect": "Эффекты",
   "adaptionwheel.domain.movement": "Движение",

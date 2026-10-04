@@ -36,6 +36,8 @@ public final class ClientAdaption {
 
     public static final Map<String, Integer> EXISTENCE_PROGRESS = new HashMap<>();
 
+    public static final Set<String> DISABLED = new HashSet<>();
+
     public static int existenceThreshold;
 
     public static boolean instabreakActive;
@@ -62,6 +64,7 @@ public final class ClientAdaption {
         ADAPTED.clear();
         HISTORY.clear();
         EXISTENCE_PROGRESS.clear();
+        DISABLED.clear();
         existenceThreshold = 0;
         instabreakActive = false;
         fistProgressDone = 0;
@@ -90,6 +93,8 @@ public final class ClientAdaption {
         HISTORY.addAll(payload.history());
         EXISTENCE_PROGRESS.clear();
         EXISTENCE_PROGRESS.putAll(payload.existenceProgress());
+        DISABLED.clear();
+        DISABLED.addAll(payload.disabled());
         existenceThreshold = payload.existenceThreshold();
         instabreakActive = payload.instabreakActive();
         fistProgressDone = payload.fistProgressDone();
@@ -99,6 +104,10 @@ public final class ClientAdaption {
 
     public static boolean isAdapted(String concept) {
         return ADAPTED.contains(concept);
+    }
+
+    public static boolean isEnabled(String concept) {
+        return !DISABLED.contains(concept);
     }
 
     public static int fistTier() {

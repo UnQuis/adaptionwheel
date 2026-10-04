@@ -91,7 +91,7 @@
   "adaptionwheel.gui.max_reached": "MAX",
   "adaptionwheel.gui.pending": "NOT YET ADAPTED",
   "adaptionwheel.gui.count": "Adaptations: %s",
-  "adaptionwheel.gui.footer_scroll": "Scroll to browse | Click a category to filter",
+  "adaptionwheel.gui.footer_scroll": "Scroll to browse | Click a category to filter | Click a switch to turn it off",
   "adaptionwheel.domain.damage": "Damage",
   "adaptionwheel.domain.effect": "Effects",
   "adaptionwheel.domain.movement": "Movement",

@@ -9,6 +9,7 @@ import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.Synergies;
 import ru.adaptionwheel.data.AdaptionTask;
 import ru.adaptionwheel.data.PlayerAdaption;
+import ru.adaptionwheel.network.ToggleAdaptationPayload;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -51,6 +52,8 @@ public class AdaptationScreen extends Screen {
     private static final int SCROLLER_W = 10;
     private static final int SCROLLER_H = 18;
     private static final int TAB_H = 14;
+    private static final int TOGGLE_W = 18;
+    private static final int TOGGLE_H = 9;
     private static final int ENTRY_H = 44;
     private static final int CARD_H = ENTRY_H - 2;
     private static final int PAD = 8;
@@ -80,6 +83,10 @@ public class AdaptationScreen extends Screen {
     private int panelW;
     private int panelH;
     private int tabsY;
+    private int tabX;
+    private int tabW;
+    private int tabViewportH;
+    private double tabScroll;
     private int listX;
     private int listY;
     private int listW;
@@ -95,6 +102,8 @@ public class AdaptationScreen extends Screen {
 
     private long openedAt;
     private long lastFrame;
+    private int lastMouseX;
+    private int lastMouseY;
 
     public AdaptationScreen() {
         super(Component.translatable("adaptionwheel.gui.title"));
@@ -104,7 +113,7 @@ public class AdaptationScreen extends Screen {
     protected void init() {
         panelW = Math.max(MIN_W, Math.min(360, this.width - 20));
         panelX = (this.width - panelW) / 2;
-        panelH = Math.max(130, Math.min(270, this.height - 40));
+        panelH = Math.max(200, Math.min(340, this.height - 40));
         basePanelY = Math.max(8, this.height / 2 - panelH / 2);
         panelY = basePanelY;
         openedAt = System.nanoTime();
@@ -118,10 +127,25 @@ public class AdaptationScreen extends Screen {
         int sepY = headerSeparatorY();
         tabsY = sepY + 5 + synergyStripH + 2;
         int footerY = footerY();
-        listX = panelX + PAD + 2;
-        listY = tabsY + TAB_H + 5;
-        listW = panelW - PAD * 2 - 4 - SCROLLER_W - 3;
+        tabX = panelX + PAD - 1;
+        tabW = tabColumnWidth();
+        listX = tabX + tabW + 5;
+        listY = tabsY;
+        listW = panelX + panelW - PAD - 1 - listX - SCROLLER_W - 3;
         listH = Math.max(0, footerY - 5 - listY);
+        tabViewportH = listH;
+    }
+
+    private int tabColumnWidth() {
+        int widest = this.font.width(Component.translatable("adaptionwheel.gui.tab_all").getString());
+        for (AdaptationDomain domain : AdaptationDomain.values()) {
+            widest = Math.max(widest, this.font.width(domain.translation().getString()));
+        }
+        return Math.min(88, widest + PAD * 2 - 2);
+    }
+
+    private double maxTabScroll() {
+        return Math.max(0, tabLabels().size() * (TAB_H + 1) - tabViewportH);
     }
 
     private int headerSeparatorY() {
@@ -221,6 +245,10 @@ public class AdaptationScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (mouseX >= tabX && mouseX < tabX + tabW && mouseY >= tabsY && mouseY < tabsY + tabViewportH) {
+            tabScroll = Math.max(0, Math.min(maxTabScroll(), tabScroll - scrollY * (TAB_H + 1)));
+            return true;
+        }
         if (overList(mouseX, mouseY)) {
             scrollTarget = Math.max(0, Math.min(maxScroll(), scrollTarget - scrollY * ENTRY_H));
             return true;
@@ -234,6 +262,16 @@ public class AdaptationScreen extends Screen {
         double mouseY = my;
 
         if (button == 0) {
+            for (String concept : visibleEntries) {
+                int[] hit = toggleHitbox(concept);
+                if (hit == null) {
+                    continue;
+                }
+                if (mouseX >= hit[0] && mouseX < hit[0] + hit[2] && mouseY >= hit[1] && mouseY < hit[1] + hit[3]) {
+                    ToggleAdaptationPayload.send(concept);
+                    return true;
+                }
+            }
             for (int i = 0; i < tabHitboxes.size(); i++) {
                 int[] b = tabHitboxes.get(i);
                 if (mouseX >= b[0] && mouseX < b[0] + b[2] && mouseY >= b[1] && mouseY < b[1] + b[3]) {
@@ -283,6 +321,8 @@ public class AdaptationScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
 
         renderBackground(g, mouseX, mouseY, partialTick);
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
         long now = System.nanoTime();
         double dt = Math.min(0.1, (now - lastFrame) / 1.0e9);
         lastFrame = now;
@@ -375,30 +415,42 @@ public class AdaptationScreen extends Screen {
         }
     }
 
-    private void renderTabs(GuiGraphics g, int mouseX, int mouseY) {
-        tabHitboxes.clear();
-        int y = tabsY;
-        int x = panelX + PAD - 1;
-
+    private List<Component> tabLabels() {
         List<Component> labels = new ArrayList<>();
         labels.add(Component.translatable("adaptionwheel.gui.tab_all"));
         for (AdaptationDomain domain : tabs) {
             labels.add(domain.translation());
         }
+        return labels;
+    }
+
+    private void renderTabs(GuiGraphics g, int mouseX, int mouseY) {
+        tabHitboxes.clear();
+        List<Component> labels = tabLabels();
+        double maxTab = maxTabScroll();
+        tabScroll = Math.max(0, Math.min(maxTab, tabScroll));
+        int y = tabsY - (int) Math.round(tabScroll);
+        int x = tabX;
+
         for (int i = 0; i < labels.size(); i++) {
             boolean selected = i == 0 ? selectedTab == ALL_TAB : tabs.get(i - 1) == selectedTab;
             String label = labels.get(i).getString();
-            int w = this.font.width(label) + PAD * 2 - 2;
+            int w = tabW;
             boolean hovered = !selected && mouseX >= x && mouseX < x + w
                     && mouseY >= y && mouseY < y + TAB_H;
 
-            int ty = selected ? y - 2 : y;
+            int ty = selected ? y - 1 : y;
             int th = TAB_H + (selected ? 2 : 0);
             panel(g, x, ty, w, th, hovered ? PANEL_BODY_HOVER : PANEL_BODY);
-            g.drawString(this.font, label, x + (w - this.font.width(label)) / 2, ty + 3,
+            int textW = this.font.width(label);
+            g.drawString(this.font, this.font.plainSubstrByWidth(label, w - 8),
+                    x + Math.max(3, (w - textW) / 2), ty + 3,
                     selected ? TEXT_HEADER : (hovered ? TEXT : TEXT_DIM), false);
             tabHitboxes.add(new int[]{x, ty, w, th});
-            x += w + 1;
+            y += TAB_H + 1;
+        }
+        if (maxTab > 0) {
+            g.fill(x + tabW - 2, tabsY, x + tabW, tabsY + tabViewportH, WELL_SHADOW);
         }
     }
 
@@ -433,7 +485,8 @@ public class AdaptationScreen extends Screen {
     private void renderEntry(GuiGraphics g, String concept, int y, boolean hovered, long now) {
         int x = listX;
         int w = listW;
-        int accent = onPanel(Concepts.color(concept));
+        boolean on = ClientAdaption.isEnabled(concept);
+        int accent = on ? onPanel(Concepts.color(concept)) : 0xFF808080;
 
         g.fill(x, y, x + w, y + CARD_H, CARD_DARK);
         g.fill(x, y, x + w - 1, y + CARD_H - 1, CARD_LIGHT);
@@ -443,7 +496,7 @@ public class AdaptationScreen extends Screen {
         g.fill(x + 1, y + 1, x + 2, y + CARD_H - 1, mix(accent, 0xFFFFFFFF, 0.35f));
 
         int contentX = x + 9;
-        int contentW = w - 9 - 6;
+        int contentW = w - 9 - 6 - TOGGLE_W;
 
         int level = ClientAdaption.LEVELS.getOrDefault(concept, 0);
         boolean adapted = ClientAdaption.isAdapted(concept);
@@ -507,6 +560,34 @@ public class AdaptationScreen extends Screen {
         for (int i = 0; i < desc.size() && i < 2; i++) {
             g.drawString(this.font, desc.get(i), contentX, y + 24 + i * 9, TEXT_DIM, false);
         }
+
+        renderToggle(g, concept, x + w - TOGGLE_W - 4, y + (CARD_H - TOGGLE_H) / 2, on);
+    }
+
+    private void renderToggle(GuiGraphics g, String concept, int x, int y, boolean on) {
+        int cy = y + TOGGLE_H / 2;
+        int knobX = on ? x + TOGGLE_W - 5 : x + 2;
+        boolean hovered = lastMouseX >= x - 2 && lastMouseX < x + TOGGLE_W + 2
+                && lastMouseY >= y - 2 && lastMouseY < y + TOGGLE_H + 2;
+
+        g.fill(x, y, x + TOGGLE_W, y + TOGGLE_H, 0xFF1A1A1A);
+        g.fill(x + 1, y + 1, x + TOGGLE_W - 1, y + TOGGLE_H - 1,
+                on ? (hovered ? 0xFF6FA84A : 0xFF4E7C33) : (hovered ? 0xFF5A5A5A : 0xFF3A3A3A));
+        g.fill(knobX, cy - 3, knobX + 5, cy + 4, on ? 0xFFE8F5D8 : 0xFFB0B0B0);
+        g.fill(knobX, cy - 3, knobX + 5, cy + 1, 0x66FFFFFF);
+        g.fill(knobX, cy + 3, knobX + 5, cy + 4, 0x40000000);
+    }
+
+    private int[] toggleHitbox(String concept) {
+        int index = visibleEntries.indexOf(concept);
+        if (index < 0) {
+            return null;
+        }
+        int y = listY + index * ENTRY_H - (int) Math.round(scrollOffset);
+        if (y + CARD_H < listY || y > listY + listH) {
+            return null;
+        }
+        return new int[]{listX + listW - TOGGLE_W - 6, y + (CARD_H - TOGGLE_H) / 2, TOGGLE_W + 4, TOGGLE_H};
     }
 
     private void bar(GuiGraphics g, int x, int y, int width, float fill,

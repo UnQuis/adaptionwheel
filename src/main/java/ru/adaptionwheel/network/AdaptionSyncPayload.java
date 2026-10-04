@@ -29,7 +29,8 @@ public record AdaptionSyncPayload(
         int existenceThreshold,
         boolean instabreakActive,
         int fistProgressDone,
-        int fistProgressTotal
+        int fistProgressTotal,
+        List<String> disabled
 ) implements CustomPacketPayload {
 
     public static final Type<AdaptionSyncPayload> TYPE =
@@ -72,6 +73,10 @@ public record AdaptionSyncPayload(
                 buf.writeBoolean(p.instabreakActive);
                 buf.writeVarInt(p.fistProgressDone);
                 buf.writeVarInt(p.fistProgressTotal);
+                buf.writeVarInt(p.disabled.size());
+                for (String concept : p.disabled) {
+                    buf.writeUtf(concept);
+                }
             },
             buf -> {
                 boolean wearing = buf.readBoolean();
@@ -109,9 +114,14 @@ public record AdaptionSyncPayload(
                 boolean instabreakActive = buf.readBoolean();
                 int fistProgressDone = buf.readVarInt();
                 int fistProgressTotal = buf.readVarInt();
+                List<String> disabled = new ArrayList<>();
+                int disabledCount = buf.readVarInt();
+                for (int i = 0; i < disabledCount; i++) {
+                    disabled.add(buf.readUtf());
+                }
                 return new AdaptionSyncPayload(wearing, adversity, count, advTimer, advCooldown,
                         rotation, tasks, levels, adapted, history, existenceProgress, existenceThreshold,
-                        instabreakActive, fistProgressDone, fistProgressTotal);
+                        instabreakActive, fistProgressDone, fistProgressTotal, disabled);
             }
     );
 

@@ -270,7 +270,7 @@ public final class FistGameTests {
         var data = new ru.adaptionwheel.data.PlayerAdaption(
                 new java.util.HashMap<>(), java.util.List.of(), java.util.List.of(),
                 java.util.List.of(), java.util.List.of(), new java.util.HashMap<>(),
-                new java.util.HashMap<>(), 0, 0, 0, false, 0f, 0f, false, 0);
+                new java.util.HashMap<>(), 0, 0, 0, false, 0f, 0f, false, 0, java.util.List.of());
         wheel.loadInto(data);
         return data;
     }

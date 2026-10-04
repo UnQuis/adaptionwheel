@@ -28,5 +28,8 @@ public class AdaptionNetworking {
         registrar.playToServer(FistInstabreakPayload.TYPE, FistInstabreakPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         FistInstabreakPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
+        registrar.playToServer(ToggleAdaptationPayload.TYPE, ToggleAdaptationPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        ToggleAdaptationPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
     }
 }

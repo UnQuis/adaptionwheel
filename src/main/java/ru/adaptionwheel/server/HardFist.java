@@ -12,7 +12,7 @@ public final class HardFist {
     }
 
     public static float bonus(ServerPlayer player, PlayerAdaption data) {
-        int level = data.level(Concepts.COMBAT_FIST_DAMAGE);
+        int level = data.levelOrZero(Concepts.COMBAT_FIST_DAMAGE);
         if (level <= 0 || !AdaptionConfig.FIST_DAMAGE_ENABLED.get()) {
             return 0f;
         }

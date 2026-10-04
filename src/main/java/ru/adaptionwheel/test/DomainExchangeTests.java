@@ -21,7 +21,7 @@ public class DomainExchangeTests {
 
     private static PlayerAdaption empty() {
         return new PlayerAdaption(new HashMap<>(), List.of(), List.of(), List.of(), List.of(),
-                new HashMap<>(), new HashMap<>(), 0, 0, 0, false, 0f, 0f, false, 0);
+                new HashMap<>(), new HashMap<>(), 0, 0, 0, false, 0f, 0f, false, 0, List.of());
     }
 
     private static PlayerAdaption holding(String... concepts) {

@@ -175,7 +175,10 @@ public class AdaptionEvents {
         LivingEntity boss = BossHelper.resolveBossFromSource(source);
         if (boss != null) {
             String path = entityPath(boss.getType());
-            return data.existenceAdapted.contains(path) ? path : null;
+            if (data.isEnabled(Concepts.existence(path)) && data.existenceAdapted.contains(path)) {
+                return path;
+            }
+            return null;
         }
         if (AdaptionConfig.ENABLE_CHAOS_GUARDIAN.get()) {
             String linked = DraconicCompat.guardianLinkedPath(source.getDirectEntity());
@@ -201,25 +204,25 @@ public class AdaptionEvents {
         DamageSource source = event.getSource();
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        if (category == AdaptionCategory.FALL && data.isAdapted(Concepts.ENV_FALL)) {
+        if (category == AdaptionCategory.FALL && data.active(Concepts.ENV_FALL)) {
             event.setCanceled(true); return;
         }
-        if (category == AdaptionCategory.STARVE && data.isAdapted(Concepts.ENV_STARVE)) {
+        if (category == AdaptionCategory.STARVE && data.active(Concepts.ENV_STARVE)) {
             event.setCanceled(true); return;
         }
-        if (category == AdaptionCategory.DROWN && data.isAdapted(Concepts.ENV_DROWN)) {
+        if (category == AdaptionCategory.DROWN && data.active(Concepts.ENV_DROWN)) {
             event.setCanceled(true); return;
         }
-        if (category == AdaptionCategory.FIRE && data.isAdapted(Concepts.ENV_LAVA)) {
+        if (category == AdaptionCategory.FIRE && data.active(Concepts.ENV_LAVA)) {
             event.setCanceled(true); return;
         }
-        if (category == AdaptionCategory.SUFFOCATE && data.isAdapted(Concepts.ENV_SUFFOCATE)) {
+        if (category == AdaptionCategory.SUFFOCATE && data.active(Concepts.ENV_SUFFOCATE)) {
             event.setCanceled(true); return;
         }
-        if (category == AdaptionCategory.VOID && data.isAdapted(Concepts.ENV_VOID)) {
+        if (category == AdaptionCategory.VOID && data.active(Concepts.ENV_VOID)) {
             event.setCanceled(true); return;
         }
-        if (category == AdaptionCategory.CONTACT && data.isAdapted(Concepts.ENV_THORNS)) {
+        if (category == AdaptionCategory.CONTACT && data.active(Concepts.ENV_THORNS)) {
             event.setCanceled(true); return;
         }
 
@@ -273,25 +276,25 @@ public class AdaptionEvents {
 
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        if (category == AdaptionCategory.FALL && data.isAdapted(Concepts.ENV_FALL)) {
+        if (category == AdaptionCategory.FALL && data.active(Concepts.ENV_FALL)) {
             event.setNewDamage(0); return;
         }
-        if (category == AdaptionCategory.STARVE && data.isAdapted(Concepts.ENV_STARVE)) {
+        if (category == AdaptionCategory.STARVE && data.active(Concepts.ENV_STARVE)) {
             event.setNewDamage(0); return;
         }
-        if (category == AdaptionCategory.DROWN && data.isAdapted(Concepts.ENV_DROWN)) {
+        if (category == AdaptionCategory.DROWN && data.active(Concepts.ENV_DROWN)) {
             event.setNewDamage(0); return;
         }
-        if (category == AdaptionCategory.FIRE && data.isAdapted(Concepts.ENV_LAVA)) {
+        if (category == AdaptionCategory.FIRE && data.active(Concepts.ENV_LAVA)) {
             event.setNewDamage(0); return;
         }
-        if (category == AdaptionCategory.CONTACT && data.isAdapted(Concepts.ENV_THORNS)) {
+        if (category == AdaptionCategory.CONTACT && data.active(Concepts.ENV_THORNS)) {
             event.setNewDamage(0); return;
         }
-        if (category == AdaptionCategory.SUFFOCATE && data.isAdapted(Concepts.ENV_SUFFOCATE)) {
+        if (category == AdaptionCategory.SUFFOCATE && data.active(Concepts.ENV_SUFFOCATE)) {
             event.setNewDamage(0); return;
         }
-        if (category == AdaptionCategory.VOID && data.isAdapted(Concepts.ENV_VOID)) {
+        if (category == AdaptionCategory.VOID && data.active(Concepts.ENV_VOID)) {
             event.setNewDamage(0); return;
         }
 
@@ -321,7 +324,7 @@ public class AdaptionEvents {
 
         float reduction = 0f;
         for (String concept : concepts) {
-            int level = data.level(concept);
+            int level = data.levelOrZero(concept);
             if (level > 0) {
                 if (concept.startsWith("Contact_")) {
 
@@ -568,7 +571,7 @@ public class AdaptionEvents {
 
         String path = pathOf(target);
         String concept = Concepts.offense(path);
-        int level = data.level(concept);
+        int level = data.levelOrZero(concept);
         float damage = event.getNewDamage();
 
         if (level > 0) {
@@ -654,7 +657,7 @@ public class AdaptionEvents {
                 || BossHelper.isBoss(event.getEntity())) return;
 
         String concept = Concepts.drop(pathOf(event.getEntity()));
-        int level = data.level(concept);
+        int level = data.levelOrZero(concept);
         if (level <= 0) return;
 
         int base = event.getDroppedExperience();
@@ -684,7 +687,7 @@ public class AdaptionEvents {
         if (data.adversityActive || !AdaptionConfig.ENABLE_LOOT.get() || BossHelper.isBoss(dead)) return;
 
         String concept = Concepts.drop(pathOf(dead));
-        int level = data.level(concept);
+        int level = data.levelOrZero(concept);
         if (level <= 0) return;
 
         double increase = AdaptionConfig.lootBonus(level);
@@ -930,20 +933,20 @@ public class AdaptionEvents {
 
         if (!data.isAdapted(Concepts.MUTATION_THERMAL)
                 && data.level(Concepts.type(AdaptionCategory.FIRE)) >= PlayerAdaption.MAX_LEVEL
-                && data.isAdapted(Concepts.ENV_LAVA)) {
+                && data.active(Concepts.ENV_LAVA)) {
             grantComboMutation(player, data, Concepts.MUTATION_THERMAL);
         } else if (data.isAdapted(Concepts.MUTATION_THERMAL)) {
             tickThermalRegeneration(player, data);
         }
         if (AdaptionConfig.ENABLE_MUTATION_AQUATIC.get()) {
             if (!data.isAdapted(Concepts.MUTATION_AQUATIC)
-                    && data.isAdapted(Concepts.ENV_LIQUID) && data.isAdapted(Concepts.ENV_DROWN)) {
+                    && data.active(Concepts.ENV_LIQUID) && data.active(Concepts.ENV_DROWN)) {
                 grantComboMutation(player, data, Concepts.MUTATION_AQUATIC);
             }
         }
         if (AdaptionConfig.ENABLE_MUTATION_IMPACT.get()) {
             if (!data.isAdapted(Concepts.MUTATION_IMPACT)
-                    && data.isAdapted(Concepts.ENV_FALL) && data.isAdapted(Concepts.ENV_KNOCKBACK)) {
+                    && data.active(Concepts.ENV_FALL) && data.active(Concepts.ENV_KNOCKBACK)) {
                 grantComboMutation(player, data, Concepts.MUTATION_IMPACT);
             } else if (data.isAdapted(Concepts.MUTATION_IMPACT)) {
                 tickImpactStomp(player, data);
@@ -952,9 +955,9 @@ public class AdaptionEvents {
 
         if (AdaptionConfig.ENABLE_MUTATION_SEA_EYE.get()
                 && !data.isAdapted(Concepts.MUTATION_SEA_EYE)
-                && data.isAdapted(Concepts.ENV_LIQUID)
-                && data.isAdapted(Concepts.ENV_DROWN)
-                && data.isAdapted(Concepts.ENV_LAVA)) {
+                && data.active(Concepts.ENV_LIQUID)
+                && data.active(Concepts.ENV_DROWN)
+                && data.active(Concepts.ENV_LAVA)) {
             grantComboMutation(player, data, Concepts.MUTATION_SEA_EYE);
         }
         if (AdaptionConfig.ENABLE_MUTATION_FLIGHT.get()) {
@@ -977,7 +980,7 @@ public class AdaptionEvents {
                 if (mobEffect.isBeneficial()) continue;
                 String path = effectKey(effect);
                 String concept = Concepts.debuff(path);
-                if (data.isAdapted(concept)) {
+                if (data.active(concept)) {
                     player.removeEffect(effect.getEffect());
                 } else {
                     startTask(player, data, concept, (int) (AdaptionConfig.DEBUFF_ANALYSIS_SECONDS.get() * 20));
@@ -1188,11 +1191,21 @@ public class AdaptionEvents {
             grantComboMutation(player, data, Concepts.MUTATION_FLIGHT);
             return;
         }
-        if (!data.isAdapted(Concepts.MUTATION_FLIGHT) || player.isCreative() || player.isSpectator()
-                || player.getAbilities().mayfly) {
+        if (!data.isAdapted(Concepts.MUTATION_FLIGHT) || player.isCreative() || player.isSpectator()) {
             return;
         }
-        player.getAbilities().mayfly = true;
+        if (data.isEnabled(Concepts.MUTATION_FLIGHT)) {
+            if (!player.getAbilities().mayfly) {
+                player.getAbilities().mayfly = true;
+                player.getAbilities().flying = false;
+                player.onUpdateAbilities();
+            }
+            return;
+        }
+        if (!player.getAbilities().mayfly) {
+            return;
+        }
+        player.getAbilities().mayfly = false;
         player.getAbilities().flying = false;
         player.onUpdateAbilities();
     }
@@ -1396,13 +1409,14 @@ public class AdaptionEvents {
     }
 
     private static void applyEnvEffects(ServerPlayer player, PlayerAdaption data) {
-        if (data.isAdapted(Concepts.ENV_DROWN)) {
+        if (data.isEnabled(Concepts.ENV_DROWN) && data.active(Concepts.ENV_DROWN)) {
             player.setAirSupply(player.getMaxAirSupply());
         }
-        if (data.isAdapted(Concepts.ENV_LAVA)) {
+        if (data.isEnabled(Concepts.ENV_LAVA) && data.active(Concepts.ENV_LAVA)) {
             player.clearFire();
         }
-        if (data.isAdapted(Concepts.ENV_STARVE) && player.tickCount % 20 == 0) {
+        if (data.isEnabled(Concepts.ENV_STARVE) && data.active(Concepts.ENV_STARVE)
+                && player.tickCount % 20 == 0) {
             player.getFoodData().setFoodLevel(20);
             player.getFoodData().setSaturation(20f);
             resetExhaustion(player.getFoodData());
@@ -1440,7 +1454,8 @@ public class AdaptionEvents {
 
     public static void startTask(ServerPlayer player, PlayerAdaption data, String concept, int timer) {
 
-        if (data.adversityActive || data.isAdapted(concept) || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
+        if (data.adversityActive || !data.isEnabled(concept) || data.isAdapted(concept)
+                || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
 
         if (AdaptionConfig.WHEEL_TIERS_ENABLED.get()
                 && !ru.adaptionwheel.category.WheelTier.familyUnlocked(
@@ -1470,7 +1485,8 @@ public class AdaptionEvents {
     private static void startOrAccelerate(ServerPlayer player, PlayerAdaption data, String concept, int baseTicks,
                                           boolean accelerate, int accelerationTicks) {
 
-        if (data.adversityActive || data.isAdapted(concept) || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
+        if (data.adversityActive || !data.isEnabled(concept) || data.isAdapted(concept)
+                || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
         AdaptionTask existing = null;
         for (AdaptionTask task : data.tasks) {
             if (task.concept.equals(concept)) { existing = task; break; }
@@ -1882,7 +1898,7 @@ public class AdaptionEvents {
                 count * AdaptionConfig.BONUS_ARMOR_FLAT.get() + (float) (tierBonus * 20.0),
                 AttributeModifier.Operation.ADD_VALUE);
 
-        boolean liquid = data.isAdapted(Concepts.ENV_LIQUID);
+        boolean liquid = data.isEnabled(Concepts.ENV_LIQUID) && data.active(Concepts.ENV_LIQUID);
         applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), SWIM_MODIFIER,
                 liquid ? 0.6 : 0.0, AttributeModifier.Operation.ADD_VALUE);
         applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), LIQUID_SPEED_MODIFIER,
@@ -1891,7 +1907,9 @@ public class AdaptionEvents {
         applyStat(player.getAttribute(Attributes.SUBMERGED_MINING_SPEED), SUBMERGED_MINING_MODIFIER,
                 liquid ? 0.8 : 0.0, AttributeModifier.Operation.ADD_VALUE);
 
-        boolean aquatic = AdaptionConfig.ENABLE_MUTATION_AQUATIC.get() && data.isAdapted(Concepts.MUTATION_AQUATIC);
+        boolean aquatic = AdaptionConfig.ENABLE_MUTATION_AQUATIC.get()
+                && data.isEnabled(Concepts.MUTATION_AQUATIC)
+                && data.isAdapted(Concepts.MUTATION_AQUATIC);
         applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), AQUATIC_SWIM_SPEED_MODIFIER,
                 aquatic ? AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get() : 0.0, AttributeModifier.Operation.ADD_VALUE);
         applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), AQUATIC_SWIM_EFFICIENCY_MODIFIER,
@@ -1961,7 +1979,8 @@ public class AdaptionEvents {
                 (int) (AdaptionConfig.EXISTENCE_REQUIRED_SECONDS.get() * 20),
                 FistMastery.instabreakStance(player),
                 FistMastery.tierProgress(player.getUUID()),
-                fistProgressTotal(data)
+                fistProgressTotal(data),
+                new ArrayList<>(data.disabled)
         );
         AdaptionSyncPayload.sendTo(player, payload);
     }
