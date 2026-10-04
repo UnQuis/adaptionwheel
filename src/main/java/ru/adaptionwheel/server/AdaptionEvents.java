@@ -131,7 +131,7 @@ public class AdaptionEvents {
         return data(serverPlayer).level(concept);
     }
 
-    private static Optional<ItemStack> getWheelStack(Player player) {
+    public static Optional<ItemStack> getWheelStack(Player player) {
         return ru.adaptionwheel.compat.WheelSlots.findWorn(player);
     }
 
