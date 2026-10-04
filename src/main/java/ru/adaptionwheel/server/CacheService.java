@@ -11,11 +11,22 @@ public final class CacheService {
 
     public static final int SLOTS = 50;
     public static final int COLUMNS = 9;
-    public static final int ROWS = 6;
+    public static final int ROWS = 6; // ceil(50 / 9) → last row has 5 slots
     public static final int GAP = 14;
     public static final int PANEL_WIDTH = 176;
-    public static final int PANEL_HEIGHT = 200;
     public static final int SLOT = 18;
+
+    /** Y of the first player-inventory row (main inv). */
+    public static final int PLAYER_INV_Y = slotY(ROWS) + GAP; // 140
+
+    /** Extra pixels between main inventory and hotbar (vanilla-like). */
+    public static final int HOTBAR_GAP = 4;
+
+    /** Y of the hotbar. */
+    public static final int HOTBAR_Y = PLAYER_INV_Y + 3 * SLOT + HOTBAR_GAP; // 198
+
+    /** Total GUI height: hotbar bottom + bottom padding. */
+    public static final int PANEL_HEIGHT = HOTBAR_Y + SLOT + 7; // 223
 
     public static PlayerAdaption data(Player player) {
         if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
@@ -51,7 +62,14 @@ public final class CacheService {
         return 18 + row * SLOT;
     }
 
+    /**
+     * Y coordinate for player inventory slots.
+     * rows 0-2 → main inventory, row 3 → hotbar (with vanilla-style gap).
+     */
     public static int playerSlotY(int row) {
-        return slotY(ROWS) + GAP + row * SLOT;
+        if (row < 3) {
+            return PLAYER_INV_Y + row * SLOT;
+        }
+        return HOTBAR_Y;
     }
 }

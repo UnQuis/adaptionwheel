@@ -22,23 +22,31 @@ public class CacheMenu extends AbstractContainerMenu {
         this.data = CacheService.data(player);
         pushIn();
 
+        // Cache slots (50 slots, 9 columns → 6 rows, last row partial)
         for (int index = 0; index < CacheService.SLOTS; index++) {
             addSlot(new Slot(cache, index,
-                    CacheService.slotX(index % COLUMNS), CacheService.slotY(index / COLUMNS)));
+                    CacheService.slotX(index % COLUMNS),
+                    CacheService.slotY(index / COLUMNS)));
         }
 
+        // Player main inventory (3×9)
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < COLUMNS; col++) {
-                addSlot(new Slot(player.getInventory(), col + row * COLUMNS + 9,
-                        CacheService.slotX(col), CacheService.playerSlotY(row)));
+                addSlot(new Slot(player.getInventory(),
+                        col + row * COLUMNS + 9,
+                        CacheService.slotX(col),
+                        CacheService.playerSlotY(row)));
             }
         }
+
+        // Hotbar (9)
         for (int col = 0; col < COLUMNS; col++) {
-            addSlot(new Slot(player.getInventory(), col, CacheService.slotX(col),
+            addSlot(new Slot(player.getInventory(), col,
+                    CacheService.slotX(col),
                     CacheService.playerSlotY(3)));
         }
-        addSlot(new Slot(player.getInventory(), Inventory.getSelectionSize(),
-                CacheService.slotX(8), CacheService.playerSlotY(4)));
+        // Note: offhand is intentionally omitted — most container GUIs do not show it
+        // and the previous implementation used an incorrect slot index + out-of-bounds Y.
     }
 
     private void pushIn() {
@@ -55,8 +63,9 @@ public class CacheMenu extends AbstractContainerMenu {
         }
     }
 
+    /** First index of the player inventory slots in this menu. */
     public int playerSlotBase() {
-        return CacheService.SLOTS + CacheService.GAP;
+        return CacheService.SLOTS;
     }
 
     @Override
@@ -80,20 +89,23 @@ public class CacheMenu extends AbstractContainerMenu {
         ItemStack stack = slot.getItem();
         ItemStack copy = stack.copy();
         int playerBase = playerSlotBase();
+
         if (index < CacheService.SLOTS) {
-            if (!moveItemStackTo(stack, playerBase, slots.size() - playerBase, true)) {
+            // From cache → player inventory
+            if (!moveItemStackTo(stack, playerBase, slots.size(), true)) {
                 return ItemStack.EMPTY;
             }
-        } else if (!moveItemStackTo(stack, 0, CacheService.SLOTS, false)) {
-            return ItemStack.EMPTY;
+        } else {
+            // From player inventory → cache
+            if (!moveItemStackTo(stack, 0, CacheService.SLOTS, false)) {
+                return ItemStack.EMPTY;
+            }
         }
+
         if (stack.isEmpty()) {
             slot.set(ItemStack.EMPTY);
         } else {
             slot.setChanged();
-        }
-        if (slot.container == cache) {
-            writeBack();
         }
         return copy;
     }

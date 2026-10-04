@@ -280,6 +280,56 @@ All three are on **both** branches and configured, not hard-coded.
   tier-aware rewrite of `HardFistAndSynergyTests`). This branch has no gametest framework, so the
   guarantees here rest on `./gradlew build` plus the 1.21.1 suite covering the same logic.
 
+### Flight could not be left, and the cache layout the player redrew
+
+- **"Из режима полета нельзя выйти" — and the cause was the tick loop writing `flying = true`
+  every tick.** Four vanilla sites, each individually reasonable, add up to the trap, and the fix is
+  worth recording because the *obvious* reading of the code is wrong:
+  - `LocalPlayer.aiStep` — double-tapping jump toggles `abilities.flying = !abilities.flying`, and
+    the whole branch is guarded by `if (abilities.mayfly)`, so **permission alone is enough for the
+    toggle**;
+  - `LocalPlayer.aiStep` again — `if (onGround() && abilities.flying && !gameMode.isAlwaysFlying())
+    abilities.flying = false;` clears it on landing;
+  - `ServerGamePacketListenerImpl` — `player.getAbilities().flying = packet.isFlying() &&
+    player.getAbilities().mayfly`, so the server **adopts** whichever the client sent;
+  - `tickFlight` — which put it straight back on the next tick, authoritatively.
+  So both ways out lasted exactly one tick. `FlightAbility.apply` now writes `flying` **once, on the
+  permission transition**, and leaves it alone after — which is also why the `if (apply(...))` early
+  return was so harmful: it fired *precisely* when the player had just turned flight off, and that
+  is the corrective packet that put them back in the air.
+  **`MultiPlayerGameMode.isAlwaysFlying()` means SPECTATOR** (`return localPlayerMode ==
+  GameType.SPECTATOR`), not "the `flying` flag is set". Reading it the other way produces a confident
+  and completely wrong diagnosis — that is where the earlier `flying = true` "fix" came from, and its
+  javadoc asserted the false claim, which is what made the bug repeatable. **A wrong javadoc is a
+  bug that reproduces itself; when a fix and its reasoning disagree, re-read the vanilla source
+  rather than the comment you just wrote.**
+- **The cache GUI's layout now comes from the player's own rewrite** (`inventory_files/` → live
+  sources), and it fixed two real defects that nothing had caught. **Only the layout crosses
+  verbatim**: `CacheService` keeps this branch's `player.getOffhandItem()` instead of 1.21.1's
+  `inventory.offhand.get(0)`, and `CacheScreen` had to be edited by hand because this branch draws
+  in `extractLabels(GuiGraphicsExtractor)` with relative coordinates rather than in
+  `renderBg(GuiGraphics)` with `leftPos`/`topPos` — copying the file puts a `GuiGraphics` where a
+  `GuiGraphicsExtractor` belongs.
+  - **The offhand slot was removed, and it was never an offhand slot.**
+    `new Slot(player.getInventory(), Inventory.getSelectionSize(), ...)` — `getSelectionSize()` is
+    **45**, a *hotbar* slot; the offhand is `getSelectionSize() + getArmorSize()` = 49. With the new
+    `playerSlotY` it also sat one row *below* the panel. Most container GUIs do not show the offhand,
+    so dropping it is right rather than a regression.
+  - **`moveItemStackTo`'s range is half-open `[index, end)`.** The call passed
+    `slots.size() - playerBase` as `end`, so the upper bound was wrong by exactly the number of
+    cache slots; it is now `slots.size()`.
+  - `PANEL_HEIGHT` is **derived** (`HOTBAR_Y + SLOT + 7` = 223, was a literal 200) and
+    `CacheScreen.inventoryLabelY` is `PLAYER_INV_Y - 11` instead of `imageHeight - 94`. The literal
+    was correct only for the old height, so the two had to move together — which is the argument for
+    deriving it.
+  - **`CacheLayoutTests` (3 tests)** pins the arithmetic: every cache and player row inside the
+    panel, and the hotbar separated by exactly `HOTBAR_GAP`. A slot drawn one row below the panel
+    throws nothing and reports nothing, which is the whole reason the offhand slot survived; pure
+    layout maths in a drawing routine is where a test earns its keep.
+- **`inventory_files/` is now a mirror, not a source.** It was how the player handed over a rewrite;
+  it is committed and kept identical to the live sources, but the live ones are authoritative and
+  will move on.
+
 ---
 ## Commands
 
