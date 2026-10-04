@@ -74,6 +74,90 @@
 - **Curios wheel slot**: dedicated slot `wheel` that only accepts the Mahoraga Wheel — `data/adaptionwheel/curios/slots/wheel.json` (validator `curios:tag`), item tag `data/curios/tags/item/wheel.json`, player assignment `data/adaptionwheel/curios/entities/player.json`. **Entity-file format is flat**: `{"entities": ["minecraft:player"], "slots": ["wheel"]}` — a nested `"minecraft:player": {...}` object parses fine but silently assigns nothing (no log error). The wheel itself only equips in this slot (`MahoragaWheelItem.canEquip`).
 - The 3D wheel's model is Java code in `DharmaChakraModel`, converted from the Blockbench source. The `.bbmodel`/`.json`/`.png` sources themselves are **no longer in the repository**; to change the wheel's geometry, edit `DharmaChakraModel` and the texture in `assets/`.
 
+## The six features added after the wheel awakening work
+
+All six exist on **both** branches (`1.21.1` and `26.3`) and are configured, not hard-coded.
+
+- **Adaptations can be switched off from the panel.** `PlayerAdaption.disabled` (a `Set<String>`) is the whole
+  mechanism, and it rides inside `Extras` — see the codec trap below. The client's mirror is
+  `ClientAdaption.DISABLED`. The switch is a small `fill()`-drawn switch on every row of
+  `client/AdaptationScreen.java`, clicked through `ToggleAdaptationPayload` (client→server intent only; the
+  server rejects a concept the player does not have and is the only thing that mutates the set).
+  **The deliberate split is the whole design**: `isAdapted`/`level` keep reporting what is *stored*, and only
+  `active`/`levelOrZero` (both on `PlayerAdaption`) are what effects read. Anything else would make turning an
+  adaptation off look like never having had it — and `DomainExchange.isFinished` would then sell it to the
+  altar again, which is the exact thing a switch is supposed to prevent. Every effect site asks
+  `data.active(...)`/`data.levelOrZero(...)`: the `Env_*` immunity blocks in `onAttack`/`onHurt`, the reduction
+  loop, `applyOffense`, `applyEnvEffects`, `applyStats`, the debuff-denial loop, `HardFist.bonus`,
+  `adaptedExistenceTarget`, and `tickFlight` (which **revokes** `mayfly` again). `startTask` and
+  `startOrAccelerate` both refuse to start or accelerate a disabled concept, so a disabled adaptation does not
+  re-analyse either. `AdaptionHud` greys the row and prints `[OFF]`.
+- **The panel's domain tabs are a vertical column**, because twelve domains plus `ALL` never fit in one row at
+  any panel width. The column is `tabX`/`tabW` wide, has its own `tabScroll` (the mouse wheel over the column
+  scrolls it, and a 1 px track is drawn when it overflows), and the list shifts right of it. `panelH` was raised
+  to 200–340 to give it room. Both the tabs and the row switches are plain `int[]` rects tested through the same
+  click path, so they needed no widget. One trap worth keeping: a row switch is **rejected when its box falls
+  outside the scissor viewport**, or a half-scrolled row would be clickable where nothing is drawn.
+- **Sea Eye** (`Mutation_SeaEye`, one-time SPECIAL): `Env_Liquid` + `Env_Drowning` + `Env_Lava`. It removes
+  liquid fog. The rule lives once in `client/SeaEyeFog.suppresses(FogType)`; the mixins only translate the
+  answer. **1.21.1 asks the camera for fog in two places** — `FogRenderer.setupColor` (colour) and
+  `FogRenderer.setupFog` (distances) — so there are two `@Redirect`s on
+  `Camera#getFluidInCamera()Lnet/minecraft/world/level/material/FogType;`, returning `FogType.NONE`.
+  **26.3 has exactly one private `FogRenderer.getFogType(Camera)`** feeding both `setupFog` and
+  `computeFogColor`, so there is a single `@Inject` at its HEAD returning `FogType.ATMOSPHERIC` (which is also
+  what that method itself synthesises from `NONE`). Neither branch touches `Camera#getFluidInCamera` itself:
+  `Camera.modifyFovBasedOnDeathOrFluid` and `GameRenderer.getFov` read it too, and "no fog" must not become "no
+  underwater FOV narrowing". `POWDER_SNOW` is passed through — the mutation is about liquids.
+  Returning the game's own "no fog" value is also the mod-compatible answer: whatever a mod did to make its
+  fluid foggy, it did it by making the camera report it.
+- **Flight** (`Mutation_Flight`, one-time SPECIAL): Y ≥ `flightAltitude` (310) **and** `Contact_minecraft:phantom`
+  at max level **and** an adaptation to `Debuff_minecraft:levitation`. `tickFlight` sets
+  `abilities.mayfly` and calls **`player.onUpdateAbilities()`** — not a hand-built
+  `ClientboundPlayerAbilitiesPacket`, because that is vanilla's own choke point and survives API churn. It runs
+  every tick and only acts when `!mayfly`, because abilities are rebuilt on respawn and on every gamemode
+  change; it never touches a creative or spectator player.
+- **Hard Fist** (`Combat_FistDamage`, **leveled**, COMBAT domain — deliberately *not* under `Fist_`, which belongs
+  to the mining tiers and is walked by index): trained by hits with a bare hand or with any item that adds no
+  attack damage, and by kills. `server/HardFist.java` holds the formula
+  `(base + perLevel × level) × (1 + perAdaptation × adaptCount)`. Two decisions: the bonus is **added** in
+  `LivingDamageEvent.Pre` (`applyFistDamage`) **before** `applyOffense`, so the per-mob offense bonus, the crit
+  and the adapt-count multiplier all scale the punch instead of the punch being computed outside them — and
+  with a weapon in hand the sum lands on top of the weapon, which is what was asked for. "Adds no attack
+  damage" is **`FistTiers.dealsExtraAttackDamage`**, which was made `public` for this: the definition of "bare
+  hand" must not exist twice.
+- **Inventory adaptation** (`Env_Inventory`, one-time ENVIRONMENT): all 36 slots *and* the offhand filled starts
+  the analysis (`CacheService.inventoryIsFull`); the reward is a **50-slot personal cache** of its own, opened
+  with `V` (`AdaptionKeybinds.OPEN_CACHE_KEY`) through `OpenCachePayload`, which re-checks server-side.
+  **Why it is a separate container and not a longer `Inventory`**: the two reference mods settle this by their
+  source. `Funwayguy/InfiniteInvo`'s `BigInventoryPlayer extends InventoryPlayer` allocates
+  `mainInventory = new ItemStack[invoSize + 9]` and copies only the first 36 — the four armour slots and the
+  offhand live at indices ≥ 36 and get overwritten by ordinary items, and the whole thing only works by
+  *replacing* `player.inventory` with the subclass. `Lothrazar/OverpoweredInventory` (a fork of it) fixed exactly
+  that by **not** subclassing: the vanilla inventory is untouched and the extra slots are a separate
+  player-persisted `IInventory` with its own container and GUI. Ours follows OverpoweredInventory.
+  `CacheMenu` therefore holds a `SimpleContainer` view and writes it back into `PlayerAdaption.cache` on
+  **every `broadcastChanges` and on `removed`**, so an open container cannot lose a stack to a crash or a
+  logout. `pad()` normalises the list to exactly 50 without touching the contents (pinned by a test).
+- **Synergies now do something that scales.** Every one of the ten already had an effect, but all of them were
+  flat, and the two whose requirements are terminal (GOLIATH, ASTRAL_MINE) had nothing left to scale with.
+  `SynergyEffects.refresh` now also stores a per-player `strength` per synergy: `1 + 3 × progress`, where
+  `progress` is the mean completion of that synergy's own *leveled* requirements, falling back to
+  `min(1, adaptCount / 60)` when it has none. Every effect multiplies by it. `Unseen` scaled by distance
+  (`36 × strength`, so "mobs lose track of you" gets truer), and Goliath's "cooks what it touches" is an
+  on-hit ignite that shares one `ignite()` helper with Ashwalker — `Math.max` of the two, never an overwrite.
+
+### Two traps from this work that will bite again
+
+- **`RecordCodecBuilder.group` accepts at most 16 components.** `PlayerAdaption` was already at 16, so
+  `disabled` and `cache` went into a nested `data/Extras.java` record and the attachment gained exactly one
+  component. That record is a `Codec` on 1.21.1 (`RecordCodecBuilder.create`) but on 26.3
+  `PlayerAdaption` is built with `mapCodec`, whose `group()` only accepts `MapCodec` components — so `Extras`
+  exposes a plain `Codec` on both branches and the attachment uses `Extras.CODEC.optionalFieldOf(...)`.
+- **26.3 spells `FogType`'s "no fog" answer `ATMOSPHERIC`, 1.21.1 spells it `NONE`,** and only 1.21.1 has the
+  two-call-site fog shape. Copying a mixin between the branches compiles nowhere; `SeaEyeFog` is the shared part
+  and nothing else is.
+
+---
 ## Commands
 
 - **The jar's name says which game it is for**: `build/libs/adaptionwheel-0.1.5+mc26.3.jar`, from
