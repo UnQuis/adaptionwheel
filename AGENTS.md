@@ -326,6 +326,21 @@ All three are on **both** branches and configured, not hard-coded.
     panel, and the hotbar separated by exactly `HOTBAR_GAP`. A slot drawn one row below the panel
     throws nothing and reports nothing, which is the whole reason the offhand slot survived; pure
     layout maths in a drawing routine is where a test earns its keep.
+- **Do not "fix" a mod shader's path from the vanilla decompile — NeoForge patches
+  `ShaderInstance`, and it prepends `shaders/core/` itself.** `SHADER` is `adaptionwheel:slash` for a
+  file at `assets/adaptionwheel/shaders/core/slash.json`, and the JSON's `"vertex": "adaptionwheel:slash"`
+  is what resolves to the `.vsh`. The patch reads
+  `ResourceLocation.fromNamespaceAndPath(ns, "shaders/core/" + path + ".json")` and applies the same
+  shape to `getOrCreate`, which is why a namespaced value inside the JSON is legal even though
+  vanilla's `isValidPath` allows only `[a-z0-9/._-]` and would reject the colon. Writing
+  `adaptionwheel:shaders/core/slash` instead yields `shaders/core/shaders/core/slash.json` and a
+  silently blank effect — no exception, no log line. **The vanilla decompile is not the runtime
+  source**: `build/neoForm/.../decompile/output.jar` says the JSON is read verbatim and that the
+  namespaced JSON values would throw, and both statements are wrong here. Check
+  `patches/net/minecraft/client/renderer/ShaderInstance.java.patch` in the userdev jar before
+  concluding anything about this class; it has now produced two confident, opposite, wrong readings.
+  Worth knowing that `glslangValidator` wants `.vert`/`.frag` extensions, so copy the `.vsh`/`.fsh`
+  aside before validating — Minecraft's GLSL is `#version 150` and all four stages here compile clean.
 - **`inventory_files/` is now a mirror, not a source.** It was how the player handed over a rewrite;
   it is committed and kept identical to the live sources, but the live ones are authoritative and
   will move on.
