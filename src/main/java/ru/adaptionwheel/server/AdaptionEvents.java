@@ -1173,19 +1173,14 @@ public class AdaptionEvents {
             return;
         }
         if (data.isEnabled(Concepts.MUTATION_FLIGHT)) {
-            if (!player.getAbilities().mayfly) {
-                player.getAbilities().mayfly = true;
-                player.getAbilities().flying = false;
+            if (FlightAbility.apply(player.getAbilities(), true)) {
                 player.onUpdateAbilities();
             }
             return;
         }
-        if (!player.getAbilities().mayfly) {
-            return;
+        if (FlightAbility.apply(player.getAbilities(), false)) {
+            player.onUpdateAbilities();
         }
-        player.getAbilities().mayfly = false;
-        player.getAbilities().flying = false;
-        player.onUpdateAbilities();
     }
 
     private static void spawnMutationBurst(ServerPlayer player, String concept) {

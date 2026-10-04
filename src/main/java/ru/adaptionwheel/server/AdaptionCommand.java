@@ -601,9 +601,11 @@ public final class AdaptionCommand {
         } else if (!target.getAbilities().mayfly) {
             source.sendSuccess(() -> Component.literal("=> adapted, enabled, worn, survival — and mayfly is still false. "
                     + "That is a bug; the two lines above the gate are where to look."), false);
+        } else if (!target.getAbilities().flying) {
+            source.sendSuccess(() -> Component.literal("=> mayfly is SET but flying is not. "
+                    + "tickFlight re-asserts both every tick, so this should not survive a tick."), false);
         } else {
-            source.sendSuccess(() -> Component.literal("=> mayfly is SET. Flight is a DOUBLE TAP of jump while not "
-                    + "standing still; vanilla only arms it within 7 ticks of the first tap."), false);
+            source.sendSuccess(() -> Component.literal("=> mayfly AND flying are both SET: the player is flying."), false);
         }
         return 1;
     }
