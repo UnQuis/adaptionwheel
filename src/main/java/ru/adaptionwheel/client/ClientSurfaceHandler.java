@@ -24,7 +24,7 @@ public final class ClientSurfaceHandler {
         if (!player.isLocalPlayer() || !ClientAdaption.wearingWheel || player.isDeadOrDying()) {
             return;
         }
-        if (!player.isInLava() || !ClientAdaption.isAdapted(Concepts.ENV_LAVA)) {
+        if (!player.isInLava() || !ClientAdaption.active(Concepts.ENV_LAVA)) {
             return;
         }
         applyLavaSwim(player, inputDirection(player));

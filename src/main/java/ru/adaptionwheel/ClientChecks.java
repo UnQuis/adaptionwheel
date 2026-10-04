@@ -9,10 +9,10 @@ final class ClientChecks {
     }
 
     static boolean has(String concept) {
-        return ClientAdaption.wearingWheel && ClientAdaption.isAdapted(concept);
+        return ClientAdaption.wearingWheel && ClientAdaption.active(concept);
     }
 
     static int level(String concept) {
-        return ClientAdaption.wearingWheel ? ClientAdaption.LEVELS.getOrDefault(concept, 0) : 0;
+        return ClientAdaption.wearingWheel ? ClientAdaption.levelOrZero(concept) : 0;
     }
 }

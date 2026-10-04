@@ -109,6 +109,14 @@ public final class ClientAdaption {
         return ADAPTED.contains(concept);
     }
 
+    public static boolean active(String concept) {
+        return isEnabled(concept) && isAdapted(concept);
+    }
+
+    public static int levelOrZero(String concept) {
+        return isEnabled(concept) ? LEVELS.getOrDefault(concept, 0) : 0;
+    }
+
     public static float taskProgress(AdaptionTask task) {
         int elapsed = progressElapsedTicks();
         int remaining = Math.max(0, task.timer - elapsed);

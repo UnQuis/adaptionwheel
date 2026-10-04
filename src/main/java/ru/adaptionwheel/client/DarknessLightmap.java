@@ -24,7 +24,7 @@ public final class DarknessLightmap {
 
         boolean wanted = AdaptionConfig.DARKNESS_LIGHTMAP_ENABLED.get()
                 && ClientAdaption.wearingWheel
-                && ClientAdaption.ADAPTED.contains(Concepts.ENV_DARKNESS);
+                && ClientAdaption.active(Concepts.ENV_DARKNESS);
         if (!wanted) {
             active = false;
             return;

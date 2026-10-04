@@ -44,8 +44,7 @@ public final class AdaptionScreenOpener {
             if (mc.player == null || mc.gui.screen() != null) {
                 continue;
             }
-            if (ClientAdaption.isEnabled(ru.adaptionwheel.category.Concepts.ENV_INVENTORY)
-                    && ClientAdaption.ADAPTED.contains(ru.adaptionwheel.category.Concepts.ENV_INVENTORY)) {
+            if (ClientAdaption.active(ru.adaptionwheel.category.Concepts.ENV_INVENTORY)) {
                 OpenCachePayload.send();
             }
         }
