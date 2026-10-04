@@ -1,0 +1,23 @@
+/give Dev adaptionwheel:mahoraga_wheel
+/give Dev adaptionwheel:all_adaption
+/give Dev minecraft:obsidian
+/give Dev adaptionwheel:mahoraga_wheel
+/give Dev adaptionwheel:sword_of_extermination
+/summon adaptionwheel:disciple
+/give Dev adaptionwheel:adaptation_brazier
+/give Dev adaptionwheel:disciple_spawn_egg
+/give Dev adaptionwheel:domain_stone
+/give Dev adaptionwheel:resonance_altar
+/give Dev adaptionwheel:wheel_totem
+/xp set Dev 1000 levels
+/effect give Dev minecraft:hunger
+/effect give Dev minecraft:hunger 255
+/effect give Dev minecraft:darkness
+/effect give Dev minecraft:levitation 255
+/time set minecraft:day
+/time pause
+/give Dev minecraft:structure_block
+/locate structure adaptionwheel:adaptation_temple
+/tp @s -288 ~ 32
+/locate structure adaptionwheel:adaptation_temple
+/tp @s 624 ~ -4464

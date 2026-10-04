@@ -72,6 +72,9 @@ import java.util.UUID;
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public class AdaptionEvents {
 
+    private static final String FLIGHT_MOB = "minecraft:phantom";
+    private static final String FLIGHT_LEVITATION = "minecraft:levitation";
+
     private static final ResourceLocation HP_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "hp");
     private static final ResourceLocation ARMOR_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "armor");
     private static final ResourceLocation SWIM_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "swim");
@@ -931,6 +934,17 @@ public class AdaptionEvents {
             }
         }
 
+        if (AdaptionConfig.ENABLE_MUTATION_SEA_EYE.get()
+                && !data.isAdapted(Concepts.MUTATION_SEA_EYE)
+                && data.isAdapted(Concepts.ENV_LIQUID)
+                && data.isAdapted(Concepts.ENV_DROWN)
+                && data.isAdapted(Concepts.ENV_LAVA)) {
+            grantComboMutation(player, data, Concepts.MUTATION_SEA_EYE);
+        }
+        if (AdaptionConfig.ENABLE_MUTATION_FLIGHT.get()) {
+            tickFlight(player, data);
+        }
+
         if (AdaptionConfig.DIMENSION_DESTROY_ENABLED.get()
                 && !data.isAdapted(Concepts.DIMENSION_DESTROY)
                 && data.getAdaptCount() > AdaptionConfig.DIMENSION_DESTROY_REQUIRED.get()) {
@@ -1150,12 +1164,31 @@ public class AdaptionEvents {
         sync(player, data, true);
     }
 
+    private static void tickFlight(ServerPlayer player, PlayerAdaption data) {
+        if (!data.isAdapted(Concepts.MUTATION_FLIGHT)
+                && player.getY() >= AdaptionConfig.FLIGHT_ALTITUDE.get()
+                && data.level(Concepts.contact(FLIGHT_MOB)) >= PlayerAdaption.MAX_LEVEL
+                && data.isAdapted(Concepts.debuff(FLIGHT_LEVITATION))) {
+            grantComboMutation(player, data, Concepts.MUTATION_FLIGHT);
+            return;
+        }
+        if (!data.isAdapted(Concepts.MUTATION_FLIGHT) || player.isCreative() || player.isSpectator()
+                || player.getAbilities().mayfly) {
+            return;
+        }
+        player.getAbilities().mayfly = true;
+        player.getAbilities().flying = false;
+        player.onUpdateAbilities();
+    }
+
     private static void spawnMutationBurst(ServerPlayer player, String concept) {
         if (!(player.level() instanceof ServerLevel serverLevel)) return;
         var particle = switch (concept) {
             case Concepts.MUTATION_THERMAL -> net.minecraft.core.particles.ParticleTypes.FLAME;
             case Concepts.MUTATION_AQUATIC -> net.minecraft.core.particles.ParticleTypes.SPLASH;
             case Concepts.MUTATION_IMPACT -> net.minecraft.core.particles.ParticleTypes.POOF;
+            case Concepts.MUTATION_SEA_EYE -> net.minecraft.core.particles.ParticleTypes.BUBBLE;
+            case Concepts.MUTATION_FLIGHT -> net.minecraft.core.particles.ParticleTypes.CLOUD;
             case Concepts.MUTATION_FIST -> net.minecraft.core.particles.ParticleTypes.CRIT;
             case Concepts.DIMENSION_DESTROY -> net.minecraft.core.particles.ParticleTypes.SONIC_BOOM;
             default -> net.minecraft.core.particles.ParticleTypes.END_ROD;

@@ -19,7 +19,9 @@
   ],
   "client": [
     "HurtCamMixin",
-    "LightTextureMixin"
+    "LightTextureMixin",
+    "FogColorMixin",
+    "FogDistanceMixin"
   ],
   "injectors": {
     "defaultRequire": 1

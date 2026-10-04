@@ -20,11 +20,10 @@ public final class SynergyHooks {
         if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide()) {
             return;
         }
-        LivingEntity target = event.getNewAboutToBeSetTarget();
-        if (!(target instanceof ServerPlayer player)) {
+        if (!(event.getNewAboutToBeSetTarget() instanceof ServerPlayer player)) {
             return;
         }
-        if (SynergyEffects.refuseTarget(player, target)) {
+        if (SynergyEffects.refuseTarget(player, mob)) {
             event.setCanceled(true);
         }
     }

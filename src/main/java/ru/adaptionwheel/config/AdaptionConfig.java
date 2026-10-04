@@ -47,6 +47,9 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_PERCEPTION;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_AQUATIC;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_IMPACT;
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_SEA_EYE;
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_FLIGHT;
+    public static final ModConfigSpec.DoubleValue FLIGHT_ALTITUDE;
 
     public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_TIERS_ENABLED;
 
@@ -357,6 +360,15 @@ public final class AdaptionConfig {
         AQUATIC_SWIM_SPEED_BONUS = s.comment("Flat swim speed bonus added by Aquatic Mastery.",
                         "(Base water swim acceleration is ~0.02; NeoForge swim-speed attribute scales it.)")
                 .defineInRange("aquaticSwimSpeedBonus", 2.5, 0.0, 20.0);
+        ENABLE_MUTATION_SEA_EYE = s.comment("Sea Eye: unlocked by Env_Liquid + Env_Drowning + Env_Lava.",
+                        "Removes the liquid fog the camera reports: clear sight underwater, in lava",
+                        "and in any modded liquid whose fog comes from the same camera query.")
+                .define("seaEye", true);
+        ENABLE_MUTATION_FLIGHT = s.comment("Flight: unlocked at altitude 310+ together with Contact_phantom Lv.8",
+                        "and an adaptation to levitation. Grants creative-style flight.")
+                .define("flight", true);
+        FLIGHT_ALTITUDE = s.comment("Minimum Y (blocks) the wheel must have reached for Flight.")
+                .defineInRange("flightAltitude", 310.0, 1.0, 4096.0);
 
         s.comment("--- Fist Mastery (Mutation_Fist: adaptation to breaking) ---").push("fistMastery");
         FIST_ENABLED = s.comment("Fist Mastery: max Mine_Labor and break a stone block bare-handed to",

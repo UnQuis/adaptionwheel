@@ -46,7 +46,8 @@ public final class AdaptationRegistry {
 
         for (String id : new String[]{
                 "Env_Lava", "Env_Drowning", "Env_Thorns", "Env_Darkness",
-                "Env_Suffocate", "Env_Void", "Env_Starve", "Env_Liquid"}) {
+                "Env_Suffocate", "Env_Void", "Env_Starve", "Env_Liquid",
+                ru.adaptionwheel.category.Concepts.ENV_INVENTORY}) {
             register(AdaptationDefinition.oneTime(id, AdaptationDomain.ENVIRONMENT));
         }
 
@@ -63,6 +64,12 @@ public final class AdaptationRegistry {
         register(AdaptationDefinition.oneTime("Mutation_Thermal", AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime("Mutation_Aquatic", AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime("Mutation_Impact", AdaptationDomain.SPECIAL));
+        register(AdaptationDefinition.oneTime(ru.adaptionwheel.category.Concepts.MUTATION_SEA_EYE,
+                AdaptationDomain.SPECIAL));
+        register(AdaptationDefinition.oneTime(ru.adaptionwheel.category.Concepts.MUTATION_FLIGHT,
+                AdaptationDomain.SPECIAL));
+        register(AdaptationDefinition.leveled(ru.adaptionwheel.category.Concepts.COMBAT_FIST_DAMAGE,
+                AdaptationDomain.COMBAT));
         register(AdaptationDefinition.oneTime(ru.adaptionwheel.category.Concepts.MUTATION_FIST,
                 AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime("Dimension_Destroy", AdaptationDomain.SPECIAL));

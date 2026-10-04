@@ -1,0 +1,45 @@
+{
+  "stats": {
+    "minecraft:custom": {
+      "minecraft:sprint_one_cm": 13442,
+      "minecraft:time_since_rest": 149312,
+      "minecraft:walk_one_cm": 112588,
+      "minecraft:total_world_time": 149477,
+      "minecraft:leave_game": 18,
+      "minecraft:fly_one_cm": 195394,
+      "minecraft:crouch_one_cm": 198,
+      "minecraft:damage_dealt": 20,
+      "minecraft:sneak_time": 1060,
+      "minecraft:play_time": 74656,
+      "minecraft:jump": 97,
+      "minecraft:time_since_death": 74656
+    },
+    "minecraft:used": {
+      "minecraft:stone_brick_wall": 44,
+      "minecraft:mossy_stone_brick_stairs": 73,
+      "minecraft:grass_block": 8,
+      "adaptionwheel:resonance_altar": 2,
+      "minecraft:oxidized_lightning_rod": 1,
+      "minecraft:oxidized_copper_chain": 7,
+      "minecraft:iron_chain": 11,
+      "minecraft:mossy_stone_brick_slab": 49,
+      "minecraft:stone_button": 38,
+      "minecraft:cracked_stone_bricks": 90,
+      "minecraft:mossy_cobblestone": 53,
+      "adaptionwheel:adaptation_brazier": 1,
+      "minecraft:mossy_cobblestone_slab": 61,
+      "minecraft:cobblestone": 8,
+      "minecraft:mossy_cobblestone_stairs": 18,
+      "minecraft:structure_block": 11,
+      "minecraft:stone_brick_slab": 29,
+      "minecraft:stone_brick_stairs": 11,
+      "minecraft:mossy_stone_brick_wall": 17,
+      "minecraft:stone_bricks": 47,
+      "minecraft:soul_lantern": 5,
+      "minecraft:mossy_cobblestone_wall": 12,
+      "minecraft:mossy_stone_bricks": 169,
+      "minecraft:chiseled_stone_bricks": 131
+    }
+  },
+  "DataVersion": 5023
+}

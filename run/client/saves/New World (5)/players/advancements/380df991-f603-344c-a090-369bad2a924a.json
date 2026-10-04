@@ -1,0 +1,128 @@
+{
+  "minecraft:recipes/decorations/crafting_table": {
+    "criteria": {
+      "unlock_right_away": "2026-10-03 13:56:53 +0800"
+    },
+    "done": true
+  },
+  "minecraft:adventure/adventuring_time": {
+    "criteria": {
+      "minecraft:cold_ocean": "2026-10-03 20:50:48 +0800",
+      "minecraft:dappled_forest": "2026-10-03 20:50:52 +0800",
+      "minecraft:beach": "2026-10-03 13:59:04 +0800",
+      "minecraft:forest": "2026-10-03 13:56:54 +0800",
+      "minecraft:taiga": "2026-10-03 14:01:13 +0800",
+      "minecraft:deep_ocean": "2026-10-03 13:59:52 +0800",
+      "minecraft:river": "2026-10-03 13:58:05 +0800",
+      "minecraft:lukewarm_ocean": "2026-10-03 13:59:49 +0800",
+      "minecraft:stony_shore": "2026-10-03 13:58:19 +0800",
+      "minecraft:old_growth_birch_forest": "2026-10-03 13:59:43 +0800",
+      "minecraft:windswept_forest": "2026-10-03 14:01:11 +0800",
+      "minecraft:ocean": "2026-10-03 13:58:20 +0800",
+      "minecraft:cherry_grove": "2026-10-03 13:58:08 +0800",
+      "minecraft:sunflower_plains": "2026-10-03 13:58:09 +0800",
+      "minecraft:birch_forest": "2026-10-03 14:01:07 +0800",
+      "minecraft:windswept_hills": "2026-10-03 14:01:09 +0800",
+      "minecraft:old_growth_spruce_taiga": "2026-10-03 14:02:27 +0800",
+      "minecraft:plains": "2026-10-03 13:57:59 +0800"
+    },
+    "done": false
+  },
+  "minecraft:adventure/root": {
+    "criteria": {
+      "killed_something": "2026-10-03 20:53:47 +0800"
+    },
+    "done": true
+  },
+  "adaptionwheel:first_environment": {
+    "criteria": {
+      "any": "2026-10-03 20:52:50 +0800"
+    },
+    "done": true
+  },
+  "adaptionwheel:first_offense": {
+    "criteria": {
+      "any": "2026-10-03 20:52:48 +0800"
+    },
+    "done": true
+  },
+  "adaptionwheel:first_plunder": {
+    "criteria": {
+      "any": "2026-10-03 20:53:48 +0800"
+    },
+    "done": true
+  },
+  "adaptionwheel:first_steps": {
+    "criteria": {
+      "any": "2026-10-03 20:52:45 +0800"
+    },
+    "done": true
+  },
+  "minecraft:recipes/building_blocks/white_wool_slab": {
+    "criteria": {
+      "has_white_wool": "2026-10-03 20:53:47 +0800"
+    },
+    "done": true
+  },
+  "minecraft:recipes/building_blocks/white_wool_stairs": {
+    "criteria": {
+      "has_white_wool": "2026-10-03 20:53:47 +0800"
+    },
+    "done": true
+  },
+  "minecraft:recipes/decorations/painting": {
+    "criteria": {
+      "has_wool": "2026-10-03 20:53:47 +0800"
+    },
+    "done": true
+  },
+  "minecraft:recipes/decorations/white_banner": {
+    "criteria": {
+      "has_white_wool": "2026-10-03 20:53:47 +0800"
+    },
+    "done": true
+  },
+  "minecraft:recipes/decorations/white_bed": {
+    "criteria": {
+      "has_white_wool": "2026-10-03 20:53:47 +0800"
+    },
+    "done": true
+  },
+  "minecraft:recipes/decorations/white_carpet": {
+    "criteria": {
+      "has_white_wool": "2026-10-03 20:53:47 +0800"
+    },
+    "done": true
+  },
+  "minecraft:recipes/food/cooked_mutton": {
+    "criteria": {
+      "has_mutton": "2026-10-03 20:53:47 +0800"
+    },
+    "done": true
+  },
+  "minecraft:recipes/food/cooked_mutton_from_campfire_cooking": {
+    "criteria": {
+      "has_mutton": "2026-10-03 20:53:47 +0800"
+    },
+    "done": true
+  },
+  "minecraft:recipes/food/cooked_mutton_from_smoking": {
+    "criteria": {
+      "has_mutton": "2026-10-03 20:53:47 +0800"
+    },
+    "done": true
+  },
+  "adaptionwheel:soe": {
+    "criteria": {
+      "has": "2026-10-03 20:52:31 +0800"
+    },
+    "done": true
+  },
+  "adaptionwheel:wheel": {
+    "criteria": {
+      "has": "2026-10-03 20:52:27 +0800"
+    },
+    "done": true
+  },
+  "DataVersion": 5023
+}

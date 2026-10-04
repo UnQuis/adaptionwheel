@@ -1,0 +1,101 @@
+---- Minecraft Crash Report ----
+// On the bright side, I bought you a teddy bear!
+
+Time: 2026-09-30 16:45:10
+Description: Mod loading failures have occurred; consult the issue messages for more details
+
+net.neoforged.neoforge.logging.CrashReportExtender$ModLoadingCrashException: Mod loading has failed
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: main
+Stacktrace:
+	at TRANSFORMER/neoforge@26.3.0.16-beta/net.neoforged.neoforge.registries.DeferredRegister.register(DeferredRegister.java:317) ~[neoforge-26.3.0.16-beta-universal.jar:?] {}
+-- Mod loading issue for: adaptionwheel --
+Details:
+	Mod file: /home/alexquasar/Проекты/MCAaptationMod/build/resources/main/
+	Failure message: Adaption Wheel (adaptionwheel) has failed to load correctly
+		java.lang.IllegalStateException: Cannot register DeferredRegister to more than one event bus.
+	Mod version: 0.1.4
+	Mod issues URL: <No issues URL found>
+	Exception message: java.lang.IllegalStateException: Cannot register DeferredRegister to more than one event bus.
+Stacktrace:
+	at TRANSFORMER/neoforge@26.3.0.16-beta/net.neoforged.neoforge.registries.DeferredRegister.register(DeferredRegister.java:317) ~[neoforge-26.3.0.16-beta-universal.jar:?] {}
+	at TRANSFORMER/adaptionwheel@0.1.4/ru.adaptionwheel.AdaptionWheel.<init>(AdaptionWheel.java:67) ~[main/:?] {}
+	at java.base/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62) ~[?:?] {}
+	at java.base/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:499) ~[?:?] {}
+	at java.base/java.lang.reflect.Constructor.newInstance(Constructor.java:483) ~[?:?] {}
+	at net.neoforged.fml.javafmlmod.FMLModContainer.constructMod(FMLModContainer.java:124) ~[loader-12.0.0.jar:12.0] {}
+	at net.neoforged.fml.ModLoader.lambda$constructMods$0(ModLoader.java:125) ~[loader-12.0.0.jar:12.0] {}
+	at net.neoforged.fml.ModLoader.lambda$dispatchParallelTask$3(ModLoader.java:203) ~[loader-12.0.0.jar:12.0] {}
+	at java.base/java.util.concurrent.CompletableFuture.uniHandle(CompletableFuture.java:955) ~[?:?] {}
+	at java.base/java.util.concurrent.CompletableFuture$UniHandle.tryFire(CompletableFuture.java:932) ~[?:?] {}
+	at java.base/java.util.concurrent.CompletableFuture$Completion.exec(CompletableFuture.java:504) ~[?:?] {}
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:511) ~[?:?] {}
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1450) ~[?:?] {}
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:2019) ~[?:?] {}
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:187) ~[?:?] {}
+
+
+-- System Details --
+Details:
+	Minecraft Version: 26.3
+	Minecraft Version ID: 26.3
+	Operating System: Linux (amd64) version 7.2.8-1-cachyos
+	Java Version: 25.0.4.1, Eclipse Adoptium
+	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode, sharing), Eclipse Adoptium
+	Memory: 183815560 bytes (175 MiB) / 352321536 bytes (336 MiB) up to 4171235328 bytes (3978 MiB)
+	Memory (heap): init: 250MiB, used: 158MiB, committed: 336MiB, max: 3978MiB
+	Memory (non-heap): init: 007MiB, used: 116MiB, committed: 117MiB, max: 000MiB
+	CPUs: 12
+	Processor Vendor: AuthenticAMD
+	Processor Name: AMD Ryzen 5 5600 6-Core Processor
+	Identifier: AuthenticAMD Family 25 Model 33 Stepping 2
+	Microarchitecture: Zen 3
+	Frequency (GHz): -0.00
+	Number of physical packages: 1
+	Number of physical CPUs: 6
+	Number of logical CPUs: 12
+	Graphics card #0 name: Lexa PRO [Radeon 540/540X/550/550X / RX 540X/550/550X]
+	Graphics card #0 vendor: Advanced Micro Devices, Inc. [AMD/ATI] (0x1002)
+	Graphics card #0 VRAM (MiB): 258.00
+	Graphics card #0 deviceId: 0x699f
+	Graphics card #0 versionInfo: unknown
+	Virtual memory max (MiB): 39762.80
+	Virtual memory used (MiB): 22845.37
+	Swap memory total (MiB): 31810.00
+	Swap memory used (MiB): 10984.86
+	Space in storage for jna.tmpdir (MiB): <path not set>
+	Space in storage for org.lwjgl.system.SharedLibraryExtractPath (MiB): <path not set>
+	Space in storage for io.netty.native.workdir (MiB): <path not set>
+	Space in storage for java.io.tmpdir (MiB): available: 6424.64, total: 7952.80
+	Space in storage for workdir (MiB): available: 204354.66, total: 476426.00
+	Operating System Version: GNU/Linux CachyOS Linux unknown (unknown) build 7.2.8-1-cachyos
+	Process Elevated: false
+	Process Loads: Uptime: 6s, user: 20s (304.79%), kernel: 1s (8.70%), total: 20s (313.49%)
+	Process Virtual Size (MiB): 6447.29
+	Process Resident Size (MiB): 617.18
+	JVM Flags: 0 total; 
+	Debug Flags: 0 total; 
+	Class Processors: 
+		00,00%: neoforge:mixin_frame_context
+		00,00%: neoforge:neoforge_dev_dist_cleaner
+		00,00%: neoforge:computing_frames (marker)
+		00,00%: neoforge:runtime_enum_extender
+		04,32%: neoforge:access_transformer
+		00,26%: neoforge:mixin
+		00,00%: neoforge:simple_processors_default (marker)
+		00,02%: neoforge.coremods:field_to_getter.net.minecraft.world.level.biome.biome
+		00,02%: neoforge.coremods:field_to_getter.net.minecraft.world.level.block.flowerpotblock
+		00,02%: neoforge.coremods:field_to_getter.net.minecraft.world.level.levelgen.structure.structure
+		00,36%: neoforge.coremods:method_redirector
+	Mod List: 
+		main                                              |Adaption Wheel                |adaptionwheel                 |0.1.4               |Manifest: NOSIGNATURE
+		neoforge-26.3.0.16-beta.jar                       |Minecraft                     |minecraft                     |26.3                |Manifest: NOSIGNATURE
+		neoforge-26.3.0.16-beta-universal.jar             |NeoForge                      |neoforge                      |26.3.0.16-beta      |Manifest: NOSIGNATURE
+	Crash Report UUID: d52d6cf7-2e4e-46e0-a9bf-d691647aa05d
+	FML: 12.0.0
+	NeoForge: 26.3.0.16-beta

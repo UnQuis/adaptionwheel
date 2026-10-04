@@ -1,0 +1,34 @@
+#--- Visual Settings ---
+[visual]
+	showAnalysisHud = true
+	# Default: 0.8
+	# Range: 0.25 ~ 3.0
+	hudScale = 0.8
+	# Default: -8
+	# Range: -500 ~ 500
+	hudOffsetX = -8
+	# Default: 8
+	# Range: -500 ~ 500
+	hudOffsetY = 8
+	# Default: 100
+	# Range: 5 ~ 100
+	hudOpacity = 100
+	showAdaptationLog = true
+	renderWheelAboveHead = true
+	# Default: 0.45
+	# Range: 0.1 ~ 2.0
+	wheelModelScale = 0.45
+
+#--- Adaptation to Darkness (Env_Darkness) ---
+[darkness]
+	#Light the wearer's surroundings by lifting the lightmap.
+	#Written on the frame the game already rebuilds it, so it is steady: no
+	#duration to run out and nothing to flicker. Replaces the night vision
+	#effect, which blinked out and back once per refresh window.
+	darknessLightmapEnabled = true
+	#How bright the darkest areas become. 1.0 is flat white and
+	#washes out all shading; 0.7 reads as night vision. Anything above this
+	#floor keeps its own brightness, so torches still read as brighter.
+	# Default: 0.72
+	# Range: 0.0 ~ 1.0
+	darknessLightmapFloor = 1.0

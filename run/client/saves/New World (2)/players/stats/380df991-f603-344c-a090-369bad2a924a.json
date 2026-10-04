@@ -1,0 +1,58 @@
+{
+  "stats": {
+    "minecraft:mined": {
+      "minecraft:short_grass": 7,
+      "minecraft:wildflowers": 15,
+      "minecraft:oak_leaves": 1,
+      "minecraft:tall_seagrass": 2,
+      "minecraft:seagrass": 3,
+      "minecraft:leaf_litter": 4
+    },
+    "minecraft:picked_up": {
+      "adaptionwheel:mahoraga_wheel": 1,
+      "minecraft:salmon": 2,
+      "minecraft:leaf_litter": 3,
+      "minecraft:white_wool": 2,
+      "minecraft:wildflowers": 37,
+      "minecraft:mutton": 3
+    },
+    "minecraft:killed": {
+      "minecraft:salmon": 3,
+      "adaptionwheel:disciple": 1,
+      "minecraft:sheep": 2
+    },
+    "minecraft:dropped": {
+      "adaptionwheel:mahoraga_wheel": 1
+    },
+    "minecraft:used": {
+      "minecraft:waxed_exposed_copper_chest": 1,
+      "adaptionwheel:sword_of_extermination": 11,
+      "adaptionwheel:resonance_altar": 1,
+      "adaptionwheel:wheel_totem": 1,
+      "adaptionwheel:domain_stone": 1,
+      "adaptionwheel:adaptation_brazier": 1
+    },
+    "minecraft:custom": {
+      "minecraft:time_since_rest": 27172,
+      "minecraft:walk_one_cm": 7935,
+      "minecraft:leave_game": 6,
+      "minecraft:mob_kills": 6,
+      "minecraft:walk_under_water_one_cm": 1891,
+      "minecraft:damage_taken": 374,
+      "minecraft:damage_dealt": 200,
+      "minecraft:play_time": 13586,
+      "minecraft:jump": 65,
+      "minecraft:time_since_death": 13586,
+      "minecraft:drop": 1,
+      "minecraft:sprint_one_cm": 14018,
+      "minecraft:open_chest": 2,
+      "minecraft:fall_one_cm": 1000,
+      "minecraft:swim_one_cm": 14226,
+      "minecraft:total_world_time": 13710,
+      "minecraft:fly_one_cm": 13866,
+      "minecraft:walk_on_water_one_cm": 6644,
+      "minecraft:sneak_time": 8
+    }
+  },
+  "DataVersion": 5023
+}
