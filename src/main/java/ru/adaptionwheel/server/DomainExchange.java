@@ -58,7 +58,8 @@ public final class DomainExchange {
             return;
         }
 
-        register(Items.FEATHER, 1, "Debuff_levitation");
+        register(Items.FEATHER, 1, ru.adaptionwheel.category.Concepts
+                .debuff(net.minecraft.world.effect.MobEffects.LEVITATION));
         register(Items.ENDER_EYE, 1, "Env_Void");
         register(Items.ENDER_PEARL, 1, "Env_Void");
 

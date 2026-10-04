@@ -45,6 +45,10 @@ public final class ClientAdaption {
     public static int fistProgressDone;
     public static int fistProgressTotal;
 
+    public static int combatFistProgressDone;
+    public static int combatFistProgressTotal;
+    public static int combatFistProgressTier = -1;
+
     private static long syncedAtGameTime;
 
     public static long adversityTriggeredAtGameTime = Long.MIN_VALUE;
@@ -69,6 +73,9 @@ public final class ClientAdaption {
         instabreakActive = false;
         fistProgressDone = 0;
         fistProgressTotal = 0;
+        combatFistProgressDone = 0;
+        combatFistProgressTotal = 0;
+        combatFistProgressTier = -1;
         syncedAtGameTime = currentGameTime();
         adversityTriggeredAtGameTime = Long.MIN_VALUE;
     }
@@ -124,6 +131,27 @@ public final class ClientAdaption {
         }
         return ru.adaptionwheel.category.FistTiers.reachTier(
                 tier -> LEVELS.getOrDefault(ru.adaptionwheel.category.FistTiers.concept(tier), 0));
+    }
+
+    /**
+     * The stage the punching fist is training, or -1 before the first bare-handed hostile kill.
+     *
+     * <p>Unlike {@link #fistTier()} this is the HIGHEST stage with levels, not the next unlocked one.
+     * The breaking fist pays for REACHING a stage, so a maxed wooden fist already gives stone speed;
+     * the punching fist pays for what was trained, and maxing wood must not start paying out of stone
+     * before stone has a single level.
+     */
+    public static int combatFistTier() {
+        if (!wearingWheel) {
+            return -1;
+        }
+        int granted = -1;
+        for (int tier = 0; tier < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT; tier++) {
+            if (levelOrZero(ru.adaptionwheel.category.CombatFistTiers.concept(tier)) > 0) {
+                granted = tier;
+            }
+        }
+        return granted;
     }
 
     public static float taskProgress(AdaptionTask task) {

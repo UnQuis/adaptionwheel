@@ -92,6 +92,13 @@ public class AdaptionHud {
                     fistProgress(), false, ClientAdaption.fistProgressDone,
                     ClientAdaption.fistProgressTotal, suffix));
         }
+
+        if (hasCombatFistRow()) {
+            int tier = ClientAdaption.combatFistProgressTier;
+            rows.add(new Row(ru.adaptionwheel.category.CombatFistTiers.concept(tier),
+                    combatFistProgress(), false, ClientAdaption.combatFistProgressDone,
+                    ClientAdaption.combatFistProgressTotal, null));
+        }
         rows.sort(Comparator.comparingInt(r -> priority(r.concept)));
 
         int maxDisplay = Math.max(5, (int) (mc.getWindow().getGuiScaledHeight() * 0.6f / (SPACING * scale)));
@@ -213,5 +220,19 @@ public class AdaptionHud {
             return 0f;
         }
         return Math.min(1f, (float) ClientAdaption.fistProgressDone / total);
+    }
+
+    private static boolean hasCombatFistRow() {
+        return ClientAdaption.combatFistProgressTotal > 0
+                && ClientAdaption.combatFistProgressTier >= 0
+                && ClientAdaption.combatFistProgressTier < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT;
+    }
+
+    private static float combatFistProgress() {
+        int total = ClientAdaption.combatFistProgressTotal;
+        if (total <= 0) {
+            return 0f;
+        }
+        return Math.min(1f, (float) ClientAdaption.combatFistProgressDone / total);
     }
 }

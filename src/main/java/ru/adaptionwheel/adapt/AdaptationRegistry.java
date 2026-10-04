@@ -68,8 +68,10 @@ public final class AdaptationRegistry {
                 AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime(ru.adaptionwheel.category.Concepts.MUTATION_FLIGHT,
                 AdaptationDomain.SPECIAL));
-        register(AdaptationDefinition.leveled(ru.adaptionwheel.category.Concepts.COMBAT_FIST_DAMAGE,
-                AdaptationDomain.COMBAT));
+        for (int tier = 0; tier < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT; tier++) {
+            register(AdaptationDefinition.leveled(
+                    ru.adaptionwheel.category.CombatFistTiers.concept(tier), AdaptationDomain.COMBAT));
+        }
         register(AdaptationDefinition.oneTime(ru.adaptionwheel.category.Concepts.MUTATION_FIST,
                 AdaptationDomain.SPECIAL));
         register(AdaptationDefinition.oneTime("Dimension_Destroy", AdaptationDomain.SPECIAL));

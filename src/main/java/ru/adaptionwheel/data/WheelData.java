@@ -50,6 +50,7 @@ public record WheelData(
     }
 
     public void loadInto(PlayerAdaption data) {
+        LegacyConcepts.migrate(levels, adapted, history);
         levels.forEach((concept, level) -> data.levels.merge(concept, level, Math::max));
         data.adapted.addAll(adapted);
         data.existenceAdapted.addAll(existenceAdapted);
@@ -72,16 +73,6 @@ public record WheelData(
             }
         }
         data.invalidateAdaptCount();
-        migrateLegacyConcepts(data);
-    }
-
-    private static void migrateLegacyConcepts(PlayerAdaption data) {
-        Integer copper = data.levels.remove("Fist_Copper");
-        if (copper == null) {
-            return;
-        }
-        int merged = Math.min(ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL,
-                data.level("Fist_Iron") + copper);
-        data.levels.put("Fist_Iron", merged);
+        LegacyConcepts.migrate(data);
     }
 }

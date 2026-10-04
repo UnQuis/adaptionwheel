@@ -59,7 +59,7 @@ public class DomainExchangeTests {
         DomainExchange.Recipe feather = DomainExchange.recipeFor(Items.FEATHER);
         List<String> levitation = DomainExchange.candidates(empty(), 0, feather);
 
-        helper.assertTrue(levitation.contains("Debuff_levitation"),
+        helper.assertTrue(levitation.contains(ru.adaptionwheel.category.Concepts.debuff(net.minecraft.world.effect.MobEffects.LEVITATION)),
                 "a feather must buy levitation, got " + levitation);
 
         DomainExchange.Recipe star = DomainExchange.recipeFor(Items.NETHER_STAR);
@@ -71,7 +71,7 @@ public class DomainExchangeTests {
             helper.assertTrue(concept.startsWith("Type_"),
                     "a nether star must only ever offer damage types, got " + concept);
         }
-        helper.assertTrue(!damageTypes.contains("Debuff_levitation"),
+        helper.assertTrue(!damageTypes.contains(ru.adaptionwheel.category.Concepts.debuff(net.minecraft.world.effect.MobEffects.LEVITATION)),
                 "a nether star must not leak outside the family it names");
         helper.succeed();
     }
