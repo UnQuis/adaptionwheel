@@ -20,7 +20,8 @@
   ],
   "client": [
     "HurtCamMixin",
-    "LightmapRenderStateExtractorMixin"
+    "LightmapRenderStateExtractorMixin",
+    "FogTypeMixin"
   ],
   "injectors": {
     "defaultRequire": 1

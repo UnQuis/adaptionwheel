@@ -41,6 +41,8 @@ public final class ClientAdaption {
 
     public static final Map<String, Integer> EXISTENCE_PROGRESS = new HashMap<>();
 
+    public static final Set<String> DISABLED = new HashSet<>();
+
     public static int existenceThreshold;
 
     private static long syncedAtGameTime;
@@ -62,6 +64,7 @@ public final class ClientAdaption {
         ADAPTED.clear();
         HISTORY.clear();
         EXISTENCE_PROGRESS.clear();
+        DISABLED.clear();
         existenceThreshold = 0;
         instabreakActive = false;
         fistProgressDone = 0;
@@ -89,11 +92,17 @@ public final class ClientAdaption {
         HISTORY.addAll(payload.history());
         EXISTENCE_PROGRESS.clear();
         EXISTENCE_PROGRESS.putAll(payload.existenceProgress());
+        DISABLED.clear();
+        DISABLED.addAll(payload.disabled());
         existenceThreshold = payload.existenceThreshold();
         instabreakActive = payload.instabreakActive();
         fistProgressDone = payload.fistProgressDone();
         fistProgressTotal = payload.fistProgressTotal();
         syncedAtGameTime = currentGameTime();
+    }
+
+    public static boolean isEnabled(String concept) {
+        return !DISABLED.contains(concept);
     }
 
     public static boolean isAdapted(String concept) {

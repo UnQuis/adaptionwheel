@@ -28,12 +28,19 @@ public final class AdaptionKeybinds {
             InputConstants.KEY_G,
             CATEGORY);
 
+    public static final KeyMapping OPEN_CACHE_KEY = new KeyMapping(
+            "key.adaptionwheel.open_cache",
+            InputConstants.Type.KEYBOARD,
+            InputConstants.KEY_V,
+            CATEGORY);
+
     private AdaptionKeybinds() {
     }
 
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.registerCategory(CATEGORY);
+        event.register(OPEN_CACHE_KEY);
         event.register(OPEN_SCREEN_KEY);
         event.register(TOGGLE_INSTABREAK_KEY);
     }

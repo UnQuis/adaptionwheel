@@ -102,6 +102,8 @@ public class AdaptionWheel {
 
             event.register(ru.adaptionwheel.menu.ModMenus.RESONANCE_ALTAR_TRADE.get(),
                     ru.adaptionwheel.TradeScreen::new);
+            event.register(ru.adaptionwheel.menu.ModMenus.CACHE.get(),
+                    ru.adaptionwheel.client.CacheScreen::new);
         }
 
         @SubscribeEvent

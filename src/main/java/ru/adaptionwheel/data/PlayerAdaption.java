@@ -33,7 +33,9 @@ public class PlayerAdaption {
             Codec.FLOAT.fieldOf("targetRotation").forGetter(d -> d.targetRotation),
             Codec.FLOAT.fieldOf("wheelRotation").forGetter(d -> d.wheelRotation),
             Codec.BOOL.optionalFieldOf("wasWearing", false).forGetter(d -> d.wasWearing),
-            Codec.INT.optionalFieldOf("shedCount", 0).forGetter(d -> d.shedCount)
+            Codec.INT.optionalFieldOf("shedCount", 0).forGetter(d -> d.shedCount),
+            Extras.CODEC.optionalFieldOf("extras", Extras.EMPTY)
+                    .forGetter(d -> new Extras(new ArrayList<>(d.disabled), new ArrayList<>(d.cache)))
     ).apply(inst, PlayerAdaption::new));
 
     public static final Codec<PlayerAdaption> CODEC = MAP_CODEC.codec();
@@ -43,6 +45,10 @@ public class PlayerAdaption {
     public final List<AdaptionTask> tasks = new ArrayList<>();
     public final List<String> history = new ArrayList<>();
     public final Set<String> existenceAdapted = new HashSet<>();
+
+    public final Set<String> disabled = new HashSet<>();
+
+    public final List<net.minecraft.world.item.ItemStack> cache = new ArrayList<>();
 
     public final Map<String, Integer> killCounts = new HashMap<>();
 
@@ -83,7 +89,7 @@ public class PlayerAdaption {
                           Map<String, Integer> existenceProgress,
                           int healingTimer, int adversityCooldownTimer,
                           int adversityTimer, boolean adversityActive, float targetRotation, float wheelRotation,
-                          boolean wasWearing, int shedCount) {
+                          boolean wasWearing, int shedCount, Extras extras) {
         this.shedCount = shedCount;
         this.levels.putAll(levels);
         this.adapted.addAll(adapted);
@@ -92,6 +98,8 @@ public class PlayerAdaption {
         this.existenceAdapted.addAll(existence);
         this.killCounts.putAll(killCounts);
         this.bossCombatTicks.putAll(existenceProgress);
+        this.disabled.addAll(extras.disabled());
+        this.cache.addAll(extras.cache());
         this.healingTimer = healingTimer;
         this.adversityCooldownTimer = adversityCooldownTimer;
         this.adversityTimer = adversityTimer;
@@ -107,6 +115,26 @@ public class PlayerAdaption {
 
     public int level(String concept) {
         return levels.getOrDefault(concept, 0);
+    }
+
+    public boolean isEnabled(String concept) {
+        return !disabled.contains(concept);
+    }
+
+    public boolean toggleEnabled(String concept) {
+        if (!disabled.remove(concept)) {
+            disabled.add(concept);
+            return false;
+        }
+        return true;
+    }
+
+    public int levelOrZero(String concept) {
+        return isEnabled(concept) ? level(concept) : 0;
+    }
+
+    public boolean active(String concept) {
+        return isEnabled(concept) && adapted.contains(concept);
     }
 
     public boolean isAdapted(String concept) {
@@ -140,6 +168,8 @@ public class PlayerAdaption {
         existenceAdapted.clear();
         killCounts.clear();
         bossCombatTicks.clear();
+        disabled.clear();
+        cache.clear();
         healingTimer = 0;
         adversityCooldownTimer = 0;
         adversityTimer = 0;
@@ -163,6 +193,10 @@ public class PlayerAdaption {
         killCounts.putAll(other.killCounts);
         bossCombatTicks.clear();
         bossCombatTicks.putAll(other.bossCombatTicks);
+        disabled.clear();
+        disabled.addAll(other.disabled);
+        cache.clear();
+        cache.addAll(other.cache);
         healingTimer = other.healingTimer;
         adversityCooldownTimer = other.adversityCooldownTimer;
         adversityTimer = other.adversityTimer;

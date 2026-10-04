@@ -110,7 +110,9 @@ public class AdaptionHud {
     }
 
     private static void drawRow(GuiGraphicsExtractor graphics, Font font, Row row, int y, int opacity) {
-        int color = row.rainbow ? rainbowColor() : Concepts.color(row.concept);
+        boolean off = !row.rainbow && !ClientAdaption.isEnabled(row.concept);
+        int color = row.rainbow ? rainbowColor()
+                : (off ? 0xFF9A9A9A : Concepts.color(row.concept));
         int barW = Math.min(BAR_WIDTH, Math.max(0, (int) (BAR_WIDTH * row.progress)));
 
         graphics.fill(9, y - 2, 9 + ROW_WIDTH, y - 2 + ROW_HEIGHT, withAlpha(color, opacity * 15 / 100));
@@ -129,6 +131,9 @@ public class AdaptionHud {
                 ? row.blocksDone + "/" + row.blocksTotal + " blocks"
                 : String.format("%.1f%%", row.progress * 100f);
         String suffix = row.suffix == null ? "" : " " + row.suffix;
+        if (off) {
+            tag = " [OFF]";
+        }
         String text = name + tag + " : " + meter + suffix;
         graphics.text(font, text, 15, y, withAlpha(color, opacity), true);
 

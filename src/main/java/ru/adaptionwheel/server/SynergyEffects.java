@@ -11,6 +11,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -40,18 +41,54 @@ public final class SynergyEffects {
 
     private static final Map<UUID, Set<String>> ACTIVE = new HashMap<>();
 
+    private static final Map<UUID, Map<String, Double>> STRENGTH = new HashMap<>();
+
     private static final Set<UUID> CHAINED = new HashSet<>();
 
     private static final Map<UUID, Long> LAST_ON_FIRE = new HashMap<>();
 
     public static void forget(UUID id) {
         ACTIVE.remove(id);
+        STRENGTH.remove(id);
         CHAINED.remove(id);
         LAST_ON_FIRE.remove(id);
     }
 
     public static void refresh(ServerPlayer player, PlayerAdaption data) {
-        ACTIVE.put(player.getUUID(), new HashSet<>(Synergies.activeIds(data)));
+        UUID id = player.getUUID();
+        ACTIVE.put(id, new HashSet<>(Synergies.activeIds(data)));
+        Map<String, Double> strengths = new HashMap<>();
+        for (Synergies.Synergy synergy : Synergies.ALL) {
+            strengths.put(synergy.id(), strengthOf(data, synergy));
+        }
+        STRENGTH.put(id, strengths);
+    }
+
+    private static double strengthOf(PlayerAdaption data, Synergies.Synergy synergy) {
+        int max = PlayerAdaption.MAX_LEVEL;
+        double sum = 0.0;
+        int counted = 0;
+        for (String[] requirement : synergy.requires()) {
+            if (requirement[1].equals(Synergies.Requirement.MAXED.name())) {
+                continue;
+            }
+            int level = data.levels.getOrDefault(requirement[0], 0);
+            if (level <= 0) {
+                continue;
+            }
+            sum += Math.min(1.0, (double) level / max);
+            counted++;
+        }
+        double progress = counted == 0 ? Math.min(1.0, data.getAdaptCount() / 60.0) : sum / counted;
+        return 1.0 + 3.0 * progress;
+    }
+
+    public static double strength(ServerPlayer player, Synergies.Synergy synergy) {
+        Map<String, Double> strengths = STRENGTH.get(player.getUUID());
+        if (strengths == null) {
+            return 1.0;
+        }
+        return strengths.getOrDefault(synergy.id(), 1.0);
     }
 
     public static boolean isActive(ServerPlayer player, Synergies.Synergy synergy) {
@@ -71,17 +108,20 @@ public final class SynergyEffects {
         double swim = 0.0;
         if (isActive(player, Synergies.DROWNED_WALTZ) && player.isInWater()) {
             player.setAirSupply(player.getMaxAirSupply());
-            swim = AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get() + 1.5;
+            swim = (AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get() + 1.5)
+                    * strength(player, Synergies.DROWNED_WALTZ);
         }
         applyStat(player.getAttribute(NeoForgeMod.SWIM_SPEED), WALTZ_SWIM_SPEED, swim);
     }
 
     public static double impactRadius(ServerPlayer player, double configured) {
-        return isActive(player, Synergies.SKYBREAKER) ? configured * 2.0 : configured;
+        return isActive(player, Synergies.SKYBREAKER)
+                ? configured * strength(player, Synergies.SKYBREAKER) : configured;
     }
 
     public static double impactMinFall(ServerPlayer player, double configured) {
-        return isActive(player, Synergies.SKYBREAKER) ? configured * 0.5 : configured;
+        return isActive(player, Synergies.SKYBREAKER)
+                ? configured / strength(player, Synergies.SKYBREAKER) : configured;
     }
 
     public static void onHit(ServerPlayer attacker, LivingEntity target, DamageSource source) {
@@ -95,36 +135,44 @@ public final class SynergyEffects {
             Long last = LAST_ON_FIRE.get(attacker.getUUID());
             if (last == null || now - last >= 20) {
                 LAST_ON_FIRE.put(attacker.getUUID(), now);
-
-                target.setRemainingFireTicks(80);
+                ignite(target, Math.max(20,
+                        (int) Math.round(40 * strength(attacker, Synergies.ASHWALKER))));
             }
         }
+        if (active.contains(Synergies.GOLIATH.id())) {
+            ignite(target, Math.max(20,
+                    (int) Math.round(20 * strength(attacker, Synergies.GOLIATH))));
+        }
         if (active.contains(Synergies.GLACIERBLOOD.id())) {
-            target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 40, 2, true, false));
+            double power = strength(attacker, Synergies.GLACIERBLOOD);
+            int amplifier = Math.min(4, (int) Math.round(power));
+            target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS,
+                    Math.max(20, (int) Math.round(20 * power)), amplifier, true, false));
         }
         if (active.contains(Synergies.STORMCALL.id())) {
-            chainLightning(attacker, target, now);
+            chainLightning(attacker, target, (int) strength(attacker, Synergies.STORMCALL));
         }
     }
 
-    private static void chainLightning(ServerPlayer attacker, LivingEntity first, long now) {
+    private static void chainLightning(ServerPlayer attacker, LivingEntity first, double power) {
         if (!CHAINED.add(attacker.getUUID())) {
             return;
         }
-
         ((ServerLevel) attacker.level()).getServer()
                 .execute(() -> CHAINED.remove(attacker.getUUID()));
+        boolean scheduled = true;
         try {
             AABB box = attacker.getBoundingBox().inflate(6.0);
             List<LivingEntity> near = attacker.level().getEntitiesOfClass(LivingEntity.class, box,
                     e -> e != attacker && e != first && e.isAlive() && !e.isAlliedTo(attacker));
             int chained = 0;
+            int limit = Math.min(5, Math.max(1, (int) Math.round(power)));
             for (LivingEntity other : near) {
-                if (chained >= 2) {
+                if (chained >= limit) {
                     break;
                 }
                 other.hurt(attacker.damageSources().indirectMagic(attacker, first),
-                        Math.max(1.0F, first.getHealth() * 0.08F));
+                        Math.max(1.0F, (float) (first.getHealth() * 0.08 * power)));
                 chained++;
             }
             if (chained > 0) {
@@ -134,7 +182,7 @@ public final class SynergyEffects {
                         first.getX(), first.getY(0.5), first.getZ(), 8, 0.3, 0.3, 0.3, 0.05);
             }
         } finally {
-            if (now < 0) {
+            if (!scheduled) {
                 CHAINED.remove(attacker.getUUID());
             }
         }
@@ -147,7 +195,7 @@ public final class SynergyEffects {
         if (AdaptionCategory.VOID != AdaptionCategory.match(source)) {
             return false;
         }
-        player.heal(4.0F);
+        player.heal((float) (2.0 * strength(player, Synergies.UNMAKER)));
         return true;
     }
 
@@ -156,17 +204,25 @@ public final class SynergyEffects {
             return;
         }
         if (attacker != null && attacker.isAlive() && !attacker.isAlliedTo(player)) {
-            attacker.hurt(player.damageSources().playerAttack(player), amount * 0.25F);
+            attacker.hurt(player.damageSources().playerAttack(player),
+                    (float) (amount * 0.12 * strength(player, Synergies.GRAVEBLOOM)));
         }
     }
 
-    public static boolean refuseTarget(ServerPlayer player, LivingEntity candidate) {
-        return isActive(player, Synergies.UNSEEN) && candidate == player;
+    public static boolean refuseTarget(ServerPlayer player, Mob mob) {
+        if (!isActive(player, Synergies.UNSEEN) || !mob.isAlive()) {
+            return false;
+        }
+        return mob.distanceToSqr(player) > 36.0 * strength(player, Synergies.UNSEEN);
+    }
+
+    private static void ignite(LivingEntity target, int ticks) {
+        target.setRemainingFireTicks(Math.max(target.getRemainingFireTicks(), ticks));
     }
 
     public static void onBlockBroken(ServerPlayer player, BlockState state) {
         if (isActive(player, Synergies.ASTRAL_MINE)) {
-            player.heal(0.5F);
+            player.heal((float) (0.25 * strength(player, Synergies.ASTRAL_MINE)));
         }
     }
 

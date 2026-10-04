@@ -71,6 +71,16 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_PERCEPTION;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_AQUATIC;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_IMPACT;
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_SEA_EYE;
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_MUTATION_FLIGHT;
+    public static final ModConfigSpec.DoubleValue FLIGHT_ALTITUDE;
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_INVENTORY_ADAPTATION;
+    public static final ModConfigSpec.DoubleValue INVENTORY_ADAPTATION_SECONDS;
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_DAMAGE_ENABLED;
+    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_ANALYSIS_SECONDS;
+    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_BASE;
+    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_PER_LEVEL;
+    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_PER_ADAPTATION;
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
 
@@ -357,6 +367,40 @@ public final class AdaptionConfig {
         AQUATIC_SWIM_SPEED_BONUS = s.comment("Flat swim speed bonus added by Aquatic Mastery.",
                         "(Base water swim acceleration is ~0.02; NeoForge swim-speed attribute scales it.)")
                 .defineInRange("aquaticSwimSpeedBonus", 2.5, 0.0, 20.0);
+        ENABLE_MUTATION_SEA_EYE = s.comment("Sea Eye: unlocked by Env_Liquid + Env_Drowning + Env_Lava.",
+                        "Removes the liquid fog the camera reports: clear sight underwater, in lava",
+                        "and in any modded liquid whose fog comes from the same camera query.")
+                .define("seaEye", true);
+        ENABLE_MUTATION_FLIGHT = s.comment("Flight: unlocked at altitude 310+ together with Contact_phantom Lv.8",
+                        "and an adaptation to levitation. Grants creative-style flight.")
+                .define("flight", true);
+        FLIGHT_ALTITUDE = s.comment("Minimum Y (blocks) the wheel must have reached for Flight.")
+                .defineInRange("flightAltitude", 310.0, 1.0, 4096.0);
+        ENABLE_INVENTORY_ADAPTATION = s.comment("Inventory adaptation: fill every one of the 36 slots plus",
+                        "the offhand to earn a 50 slot personal cache (key: the mod's cache key).",
+                        "The extra slots are their OWN storage, never the vanilla inventory array,",
+                        "so nothing you are carrying can be overwritten by them.")
+                .define("inventoryAdaptation", true);
+        INVENTORY_ADAPTATION_SECONDS = s.comment("Seconds of a full inventory for the analysis to finish.")
+                .defineInRange("inventoryAnalysisSeconds", 60.0, 1.0, 3600.0);
+
+        s.pop();
+
+        s.comment("--- Hard Fist (Combat_FistDamage: adaptation to punching) ---").push("fistDamage");
+        FIST_DAMAGE_ENABLED = s.comment("Hard Fist: trained by hitting with a bare hand or with an item that",
+                        "adds no attack damage, and by killing mobs. The bonus is ADDED to a weapon's",
+                        "damage rather than replacing it, so a Sword of Extermination stacks on top.")
+                .define("enabled", true);
+        FIST_DAMAGE_ANALYSIS_SECONDS = s.comment("Seconds of qualifying hits or kills for one level.")
+                .defineInRange("analysisSeconds", 20.0, 1.0, 600.0);
+        FIST_DAMAGE_BASE = s.comment("Flat bonus damage of a level-1 punch.")
+                .defineInRange("baseDamage", 1.0, 0.0, 1000.0);
+        FIST_DAMAGE_PER_LEVEL = s.comment("Bonus damage added per level above the first.")
+                .defineInRange("damagePerLevel", 0.75, 0.0, 1000.0);
+        FIST_DAMAGE_PER_ADAPTATION = s.comment("The fist also scales with how much the wheel knows: each",
+                        "adaptation adds this fraction of the level bonus (0.04 = +4% per adaptation).")
+                .defineInRange("damagePerAdaptation", 0.04, 0.0, 10.0);
+        s.pop();
 
         s.comment("--- Fist Mastery (Mutation_Fist) ---").push("fistMastery");
         FIST_ENABLED = s.comment("Fist Mastery: max Mine_Labor and break a stone block bare-handed to",

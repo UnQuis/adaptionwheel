@@ -29,7 +29,12 @@ public final class Concepts {
     public static final String MUTATION_THERMAL = "Mutation_Thermal";
     public static final String MUTATION_AQUATIC = "Mutation_Aquatic";
     public static final String MUTATION_IMPACT = "Mutation_Impact";
+    public static final String MUTATION_SEA_EYE = "Mutation_SeaEye";
+    public static final String MUTATION_FLIGHT = "Mutation_Flight";
+
     public static final String MUTATION_FIST = "Mutation_Fist";
+
+    public static final String COMBAT_FIST_DAMAGE = "Combat_FistDamage";
 
     public static final String DIMENSION_DESTROY = "Dimension_Destroy";
 
@@ -46,6 +51,7 @@ public final class Concepts {
     public static final String ENV_ICE = "Env_Ice";
     public static final String ENV_SLIME = "Env_Slime";
     public static final String ENV_COBWEB = "Env_Cobweb";
+    public static final String ENV_INVENTORY = "Env_Inventory";
 
     public static final String MOVE_SOUL_SAND = "Move_SoulSand";
     public static final String MOVE_HONEY = "Move_Honey";

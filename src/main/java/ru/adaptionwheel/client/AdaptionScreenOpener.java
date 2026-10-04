@@ -7,6 +7,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.SurfaceAdaptations;
+import ru.adaptionwheel.network.OpenCachePayload;
 
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class AdaptionScreenOpener {
@@ -36,6 +37,17 @@ public final class AdaptionScreenOpener {
 
             ClientAdaption.instabreakActive = !ClientAdaption.instabreakActive;
             ru.adaptionwheel.network.FistInstabreakPayload.send(ClientAdaption.instabreakActive);
+        }
+
+        while (AdaptionKeybinds.OPEN_CACHE_KEY.consumeClick()) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.gui.screen() != null) {
+                continue;
+            }
+            if (ClientAdaption.isEnabled(ru.adaptionwheel.category.Concepts.ENV_INVENTORY)
+                    && ClientAdaption.ADAPTED.contains(ru.adaptionwheel.category.Concepts.ENV_INVENTORY)) {
+                OpenCachePayload.send();
+            }
         }
     }
 }
