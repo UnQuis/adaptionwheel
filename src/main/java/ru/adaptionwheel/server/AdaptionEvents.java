@@ -255,6 +255,7 @@ public class AdaptionEvents {
                 && target != attacker
                 && !REFLECTING.contains(target.getUUID())
                 && wearingWheel(attacker)) {
+            applyFistDamage(attacker, target, event);
             applyOffense(attacker, target, event);
         }
 
@@ -550,6 +551,18 @@ public class AdaptionEvents {
         return true;
     }
 
+    private static void applyFistDamage(ServerPlayer attacker, LivingEntity target, LivingDamageEvent.Pre event) {
+        if (!HardFist.trains(attacker)) {
+            return;
+        }
+        PlayerAdaption data = data(attacker);
+        startOrAccelerate(attacker, data, Concepts.COMBAT_FIST_DAMAGE, HardFist.analysisTicks(), true);
+        float bonus = HardFist.bonus(attacker, data);
+        if (bonus > 0f) {
+            event.setNewDamage(event.getNewDamage() + bonus);
+        }
+    }
+
     private static void applyOffense(ServerPlayer attacker, LivingEntity target, LivingDamageEvent.Pre event) {
         PlayerAdaption data = data(attacker);
 
@@ -617,6 +630,9 @@ public class AdaptionEvents {
         ServerPlayer player = killerOf(event.getSource());
         if (player == null || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
+        if (HardFist.trains(player)) {
+            startOrAccelerate(player, data, Concepts.COMBAT_FIST_DAMAGE, HardFist.analysisTicks(), true);
+        }
         if (data.adversityActive || !AdaptionConfig.ENABLE_LOOT.get() || BossHelper.isBoss(dead)) return;
 
         String concept = Concepts.drop(pathOf(dead));

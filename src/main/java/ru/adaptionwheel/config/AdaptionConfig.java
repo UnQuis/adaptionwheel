@@ -76,6 +76,11 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_PROTECT_TIER;
 
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Boolean> FIST_DAMAGE_ENABLED;
+    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_ANALYSIS_SECONDS;
+    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_BASE;
+    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_PER_LEVEL;
+    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_PER_ADAPTATION;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_HARVEST_WITHOUT_TOOL;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> FIST_TIER_COST_MULTIPLIER;
     public static final ModConfigSpec.ConfigValue<Double> FIST_SPEED_SCALE;
@@ -369,6 +374,21 @@ public final class AdaptionConfig {
                 .define("flight", true);
         FLIGHT_ALTITUDE = s.comment("Minimum Y (blocks) the wheel must have reached for Flight.")
                 .defineInRange("flightAltitude", 310.0, 1.0, 4096.0);
+
+        s.comment("--- Hard Fist (Combat_FistDamage: adaptation to punching) ---").push("fistDamage");
+        FIST_DAMAGE_ENABLED = s.comment("Hard Fist: trained by hitting with a bare hand or with an item that",
+                        "adds no attack damage, and by killing mobs. The bonus is ADDED to a weapon's",
+                        "damage rather than replacing it, so a Sword of Extermination stacks on top.")
+                .define("enabled", true);
+        FIST_DAMAGE_ANALYSIS_SECONDS = s.comment("Seconds of qualifying hits or kills for one level.")
+                .defineInRange("analysisSeconds", 20.0, 1.0, 600.0);
+        FIST_DAMAGE_BASE = s.comment("Flat bonus damage of a level-1 punch.")
+                .defineInRange("baseDamage", 1.0, 0.0, 1000.0);
+        FIST_DAMAGE_PER_LEVEL = s.comment("Bonus damage added per level above the first.")
+                .defineInRange("damagePerLevel", 0.75, 0.0, 1000.0);
+        FIST_DAMAGE_PER_ADAPTATION = s.comment("The fist also scales with how much the wheel knows: each",
+                        "adaptation adds this fraction of the level bonus (0.04 = +4% per adaptation).")
+                .defineInRange("damagePerAdaptation", 0.04, 0.0, 10.0);
 
         s.comment("--- Fist Mastery (Mutation_Fist: adaptation to breaking) ---").push("fistMastery");
         FIST_ENABLED = s.comment("Fist Mastery: max Mine_Labor and break a stone block bare-handed to",

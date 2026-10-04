@@ -205,7 +205,7 @@ public final class FistTiers {
         return stack.getItem().getDestroySpeed(stack, target) <= 1.0f;
     }
 
-    private static boolean dealsExtraAttackDamage(ItemStack stack) {
+    public static boolean dealsExtraAttackDamage(ItemStack stack) {
         boolean[] weapon = {false};
         stack.forEachModifier(EquipmentSlot.MAINHAND, (attribute, modifier) -> {
             if (attribute.is(Attributes.ATTACK_DAMAGE) && modifier.amount() > 0.0) {
