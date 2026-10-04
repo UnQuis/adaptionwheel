@@ -96,6 +96,10 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> DARKNESS_LIGHTMAP_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> DARKNESS_LIGHTMAP_FLOOR;
 
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_FRAME_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_STRENGTH;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_ABERRATION;
+
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> COOLDOWN_RECOVERY_LEVELS;
@@ -468,6 +472,8 @@ public final class AdaptionConfig {
 
         s.pop();
 
+        s.pop();
+
         s.comment("--- Contact Defense ---").push("contactDefense");
 
         CONTACT_IMMUNITY_LEVEL = s
@@ -613,6 +619,20 @@ public final class AdaptionConfig {
                         "washes out all shading; 0.7 reads as night vision. Anything above this",
                         "floor keeps its own brightness, so torches still read as brighter.")
                 .defineInRange("darknessLightmapFloor", 0.72, 0.0, 1.0);
+        c.pop();
+
+        c.comment("--- Dimension Destroy impact frame ---").push("dimensionImpactFrame");
+        DIMENSION_IMPACT_FRAME_ENABLED = c.comment("Play a manga two-tone impact frame over the whole",
+                        "screen when the wearer's own spatial rifts go out. Client-side only, and",
+                        "only for rifts this player fired.")
+                .define("dimensionImpactFrameEnabled", true);
+        DIMENSION_IMPACT_STRENGTH = c.comment("How far the frame replaces the picture: 0 leaves the",
+                        "world alone and only the chromatic aberration remains, 1 is fully drawn.")
+                .defineInRange("dimensionImpactStrength", 1.0, 0.0, 1.5);
+        DIMENSION_IMPACT_ABERRATION = c.comment("Radial red/blue split. The split grows with the square",
+                        "of the distance from the centre of the screen, so the middle holds still.",
+                        "0 disables it and leaves a plain two-tone frame.")
+                .defineInRange("dimensionImpactAberration", 1.0, 0.0, 4.0);
         c.pop();
 
         c.pop();
