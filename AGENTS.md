@@ -129,6 +129,19 @@ All six exist on **both** branches (`1.21.1` and `26.3`) and are configured, not
   `ClientboundPlayerAbilitiesPacket`, because that is vanilla's own choke point and survives API churn. It runs
   every tick and only acts when `!mayfly`, because abilities are rebuilt on respawn and on every gamemode
   change; it never touches a creative or spectator player.
+  **`mayfly` is not "flight" — `mayfly` is permission to flight, and the second flag is the flight.**
+  The grant used to set `mayfly = true` and `flying = false`, which reads correct in a save file and does
+  nothing in the game: `mayfly` only *arms* vanilla's double-tap-to-fly, and the client then does
+  `if (onGround && flying && !isAlwaysFlying) flying = false`, so a player standing anywhere never leaves the
+  ground. **Both flags must be set** — that is what vanilla's creative mode does, and what IMDS's
+  `WaaProcedures.godMode` does (`mayfly`, `flying`, `instabuild`, `onUpdateAbilities()`), which was the
+  reference for how to turn flight on at all. The rule now lives in
+  `server/FlightAbility.apply(Abilities, boolean)`, which sets both and **returns whether anything changed**,
+  so `tickFlight` only sends `ClientboundPlayerAbilitiesPacket` on a real transition instead of every tick;
+  the repair also covers the half-armed state (`mayfly` true, `flying` false), which is exactly what the old
+  code left behind. Pinned by `FlightAbilityTests` (both flags, no packet on an unchanged state, half-armed
+  state repaired) — a plain `new Abilities()` is all it needs, so none of this requires the mock player that
+  Curios makes unusable in gametests.
   **Flight was unreachable for a while because equipping the wheel ERASED it, and the erasure was invisible.**
   `WheelData.loadInto` used to `clear()` every collection before copying the wheel item's `wheel_data` over
   them, so `loadFromItem` on the equip transition was a **replace, not a load**: anything living only in the
