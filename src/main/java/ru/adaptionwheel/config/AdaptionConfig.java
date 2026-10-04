@@ -17,6 +17,10 @@ public final class AdaptionConfig {
 
     private static final double[] DEFAULT_FIST_TIER_COST = {1.0, 1.5, 2.5, 4.0, 5.0};
 
+    private static final double[] DEFAULT_FIST_DAMAGE_TIER_KILL_COST = {1.0, 2.0, 3.5, 6.0, 10.0};
+
+    private static final double[] DEFAULT_FIST_DAMAGE_TIER_MULTIPLIER = {1.0, 2.0, 4.0, 8.0, 16.0};
+
     public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_TIERS_ENABLED;
 
     public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_ENABLED;
@@ -77,7 +81,10 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_INVENTORY_ADAPTATION;
     public static final ModConfigSpec.DoubleValue INVENTORY_ADAPTATION_SECONDS;
     public static final ModConfigSpec.ConfigValue<Boolean> FIST_DAMAGE_ENABLED;
-    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_ANALYSIS_SECONDS;
+    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_FIRST_KILLS;
+    public static final ModConfigSpec.DoubleValue FIST_DAMAGE_KILL_GROWTH;
+    public static final ModConfigSpec.ConfigValue<List<? extends Double>> FIST_DAMAGE_TIER_KILL_COST;
+    public static final ModConfigSpec.ConfigValue<List<? extends Double>> FIST_DAMAGE_TIER_MULTIPLIER;
     public static final ModConfigSpec.DoubleValue FIST_DAMAGE_BASE;
     public static final ModConfigSpec.DoubleValue FIST_DAMAGE_PER_LEVEL;
     public static final ModConfigSpec.DoubleValue FIST_DAMAGE_PER_ADAPTATION;
@@ -386,14 +393,29 @@ public final class AdaptionConfig {
 
         s.pop();
 
-        s.comment("--- Hard Fist (Combat_FistDamage: adaptation to punching) ---").push("fistDamage");
-        FIST_DAMAGE_ENABLED = s.comment("Hard Fist: trained by hitting with a bare hand or with an item that",
-                        "adds no attack damage, and by killing mobs. The bonus is ADDED to a weapon's",
-                        "damage rather than replacing it, so a Sword of Extermination stacks on top.")
+        s.comment("--- Hard Fist (the punching fist, five material stages) ---").push("fistDamage");
+        FIST_DAMAGE_ENABLED = s.comment("The punching fist: unlocked by killing a hostile mob with a bare",
+                        "hand -- a KILL, with the last blow landed by the hand and nothing in it that adds",
+                        "attack damage. Every level is trained the same way, and the stages run",
+                        "wood > stone > iron > diamond > netherite, 8 levels each, a stage opening",
+                        "only when the previous one is maxed. The bonus is ADDED to a weapon's damage",
+                        "rather than replacing it, so a Sword of Extermination stacks on top.")
                 .define("enabled", true);
-        FIST_DAMAGE_ANALYSIS_SECONDS = s.comment("Seconds of qualifying hits or kills for one level.")
-                .defineInRange("analysisSeconds", 20.0, 1.0, 600.0);
-        FIST_DAMAGE_BASE = s.comment("Flat bonus damage of a level-1 punch.")
+        FIST_DAMAGE_FIRST_KILLS = s.comment("Bare-handed hostile kills for level 1 of the first stage.")
+                .defineInRange("firstLevelKills", 3.0, 1.0, 10000.0);
+        FIST_DAMAGE_KILL_GROWTH = s.comment("Each level costs this multiple more kills than the last.")
+                .defineInRange("levelCostGrowth", 1.6, 1.0, 10.0);
+        FIST_DAMAGE_TIER_KILL_COST = s.comment("Per-stage kill cost multiplier, Wood > Stone > Iron >",
+                        "Diamond > Netherite. Must have exactly one entry per stage; a wrong-length",
+                        "list is ignored and the defaults are used instead.")
+                .defineList("tierKillCost", doubleList(DEFAULT_FIST_DAMAGE_TIER_KILL_COST),
+                        AdaptionConfig::isDouble);
+        FIST_DAMAGE_TIER_MULTIPLIER = s.comment("Per-stage damage multiplier, same order. This is what makes",
+                        "the later stages hit for dramatically more than the early ones.")
+                .defineList("tierDamageMultiplier",
+                        doubleList(DEFAULT_FIST_DAMAGE_TIER_MULTIPLIER),
+                        AdaptionConfig::isDouble);
+        FIST_DAMAGE_BASE = s.comment("Flat bonus damage of a level-1 punch, before the stage multiplier.")
                 .defineInRange("baseDamage", 1.0, 0.0, 1000.0);
         FIST_DAMAGE_PER_LEVEL = s.comment("Bonus damage added per level above the first.")
                 .defineInRange("damagePerLevel", 0.75, 0.0, 1000.0);
@@ -632,6 +654,18 @@ public final class AdaptionConfig {
         FIST_TIER_COST_MULTIPLIER.set(doubleList(DEFAULT_FIST_TIER_COST));
     }
 
+    public static int fistKillsForNextLevel(int tier, int currentLevel) {
+        double base = Math.max(1.0, FIST_DAMAGE_FIRST_KILLS.get());
+        double growth = Math.max(1.0, FIST_DAMAGE_KILL_GROWTH.get());
+        double cost = base * Math.pow(growth, Math.max(0, currentLevel - 1))
+                * listValue(FIST_DAMAGE_TIER_KILL_COST, tier, DEFAULT_FIST_DAMAGE_TIER_KILL_COST);
+        return Math.max(1, (int) Math.round(cost));
+    }
+
+    public static float fistDamageTierMultiplier(int tier) {
+        return (float) listValue(FIST_DAMAGE_TIER_MULTIPLIER, tier, DEFAULT_FIST_DAMAGE_TIER_MULTIPLIER);
+    }
+
     public static int fistBlocksForNextLevel(int tier, int currentLevel) {
         double base = Math.max(1, FIST_FIRST_LEVEL_BLOCKS.get());
         double growth = Math.max(1.0, FIST_LEVEL_COST_GROWTH.get());
@@ -714,6 +748,25 @@ public final class AdaptionConfig {
             return fallback[Math.min(level - 1, fallback.length - 1)];
         }
         return values.get(idx);
+    }
+
+    /**
+     * Reads one entry out of a per-tier list, falling back to the shipped defaults.
+     *
+     * <p>A wrong-length list is ignored rather than clamped into place: clamping would silently give
+     * netherite the diamond entry, and a config typo should cost the player their own numbers, not
+     * quietly hand them a different ladder.
+     */
+    private static double listValue(ModConfigSpec.ConfigValue<List<? extends Double>> config, int index,
+            double[] fallback) {
+        if (index < 0) {
+            return 0;
+        }
+        List<? extends Double> values = config.get();
+        if (values == null || values.size() != fallback.length) {
+            return fallback[Math.min(index, fallback.length - 1)];
+        }
+        return values.get(Math.min(index, values.size() - 1));
     }
 
     private AdaptionConfig() {

@@ -195,6 +195,91 @@ All six exist on **both** branches (`1.21.1` and `26.3`) and are configured, not
   two-call-site fog shape. Copying a mixin between the branches compiles nowhere; `SeaEyeFog` is the shared part
   and nothing else is.
 
+### The three follow-ups: All Adaptation, the inventory files, and the punching fist
+
+All three are on **both** branches and configured, not hard-coded.
+
+- **The All Adaptation item granted everything except the things added most recently.** It reported
+  success and left the player unadapted, which is the worst shape a bug can have: no error, no
+  message, and the only evidence is noticing a concept is absent. The cause was structural rather
+  than a typo — `grantAllAdaptations` carried a **hand-written copy** of the core concept list, so
+  `Env_Inventory`, `Mutation_SeaEye`, `Mutation_Flight` and the five fist stages were simply not in
+  it. **It now iterates `AdaptationRegistry.allDefinitions()`**, which already answers "which concepts
+  exist and does this one have levels", so a concept registered anywhere is granted by construction
+  and a future one needs no edit here at all. Only the two families that are minted at runtime and so
+  cannot be registered — debuffs and the per-entity `Contact_`/`Offense_`/`Drop_NPC_`/`Existence_`
+  keys — are still walked explicitly, over the live registries. The registry is descriptive and
+  adding a definition still changes nothing about storage or sync; this just means the item reads it
+  rather than duplicating it.
+- **The same silence hid a second half of that bug: debuff keys had two live spellings.** The
+  runtime minted `Debuff_<path>` from `Identifier.getPath()`, which **drops the namespace**, while
+  flight's gate and the altar named `Debuff_minecraft:levitation`. So the item granted levitation
+  denial under a key nothing ever asked about — eating it did not enable flight — and both spellings
+  sat in real save data. `getPath()` is wrong for a third reason: `othermod:poison` and
+  `minecraft:poison` both mint `Debuff_poison`, so two mods shipping the same effect path silently
+  shared one adaptation, and `Identifier.tryParse` rejects a string with no colon, so the bare key
+  could not resolve a display name either and fell through to a raw lowercase literal.
+  **`Concepts.debuff` now normalises once** — always namespaced, resolving a bare path against the
+  effect registry (`minecraft` wins a tie) — so every call site is correct by construction rather than
+  by being remembered. `debuffId`/`debuff(Holder<MobEffect>)` are the runtime entry points.
+  `data/LegacyConcepts` renames the old spelling on disk, and it must run on **both** load paths:
+  the attachment *and* the wheel item's component, because `loadInto` merges the item's stored keys
+  back in on every equip and would otherwise undo the attachment's migration on the next one. One
+  rule, two call sites. **On this branch the migration is new rather than moved** — 1.21.1 had a
+  `Fist_Copper` rename inside `WheelData` that never existed here, so `LegacyConcepts` is the only
+  migration this branch has had, and `LegacyConcepts` is the right place for it.
+- **The punching fist is now a material ladder, wood → stone → iron → diamond → netherite**, eight
+  levels a stage, a stage opening only when the previous one is maxed — deliberately the shape of
+  `FistTiers`, because that is the shape the player already learned. `category/CombatFistTiers.java`
+  is the table; `server/HardFist.java` is the ladder. **Unlock and every level are earned the same
+  way: kill a hostile mob bare-handed to death** — a KILL, last blow landed by the hand, nothing in
+  it that adds attack damage (`!FistTiers.dealsExtraAttackDamage`, the same single definition of
+  "bare hand" the breaking fist uses). That is the mining fist's gate applied to something no
+  normal player does, and a kill rather than a hit so the ladder cannot be farmed on cows.
+- **The fist's bonus sums every trained stage rather than reading the highest one, and that is not a
+  style choice.** A stage's own `(base + perLevel x level)` times its material multiplier is *smaller
+  at level 1 than the material below it is at max* — wooden Lv.8 is 7.0 while stone Lv.1 is 3.5 — so
+  keying off the highest stage pays out **less** the moment a player advances, which is backwards for
+  a reward. Summing is monotonic in both level and stage: training can never lose damage, and the
+  later materials still dominate because they carry the larger multipliers. Measured with the default
+  tables before writing the code, not tuned by feel.
+- **`CombatFistTiers` deliberately has no `reachTier`, and `HardFist.currentTier` is hand-written.**
+  1.21.1's version of this ladder reached for `FistTiers.reachTier`, which answers "which stage is
+  *unlocked*", so a maxed wooden fist reported **stone**, and stone at level 0 pays nothing — two
+  tests failed on exactly that before it was removed. The breaking fist wants that semantic (maxing
+  wood *is* why you get stone speed) but the punching fist pays for what was trained, so the tier is
+  the highest stage with levels, and `ClientAdaption.combatFistTier()` mirrors it. Two helpers with
+  different meanings is the shape to expect whenever a ladder is read both as capability and as
+  progress.
+- **Two fists, two HUD rows and two payloads.** `FistProgressPayload` feeds a row gated on and named
+  after the *breaking* fist's tier, so sending the punching fist's counters through it drew the wrong
+  fist's row and drew it at all for a player who never unlocked that one. `CombatFistProgressPayload`
+  carries `done/total/tier`; the tier is in the packet because maxing a stage hands over to the next,
+  and leaving the finished stage's numbers up would freeze the bar at its last fill. Kill progress is
+  pushed **per kill**, not on the 1 Hz sync, or a kill is invisible for up to a second.
+- **Config `fistDamage`** replaced `analysisSeconds` (a wall-clock timer fit for "hits or kills") with
+  `firstLevelKills`, `levelCostGrowth` and two lists, `tierKillCost {1, 2, 3.5, 6, 10}` and
+  `tierDamageMultiplier {1, 2, 4, 8, 16}`. **A `defineList` validator must be
+  `AdaptionConfig::isDouble`, never a raw lambda** — the predicate's argument arrives as `Object`, so
+  `o -> o >= 1.0` does not compile (`bad operand types for binary operator`). **This branch also had
+  no `listValue` helper**, so one was added, and it falls back to the shipped defaults on a
+  wrong-length list rather than clamping: clamping would silently give netherite the diamond entry.
+  Note the existing `fistTierCost` on this branch *does* clamp, so the two now differ on purpose —
+  the breaking fist self-repairs its table, the punching fist is the newer rule.
+- **Four places do not copy between the branches** and each one failed to compile rather than to
+  behave: `Identifier` not `ResourceLocation`; `PacketDistributor.sendToPlayer` not
+  `ClientPacketDistributor`; `ResourceKey.identifier()` not `Holder`'s `location()`; and there is no
+  `grantConceptLevel` here — the level bump is `AdaptionEvents.completeTask(player, data, concept)`,
+  whose `applyGrant` with `targetLevel = -1` does `data.level(concept) + 1` clamped to max, which is
+  exactly what 1.21.1's `grantConceptLevel` did.
+- **`inventory_files/`** at the repo root holds read-only copies of the 50-slot cache's five files
+  (`CacheMenu`, `CacheMenuProvider`, `CacheScreen`, `CacheService`, `OpenCachePayload`) for review.
+  The live sources are the ones under `src/main/java/ru/adaptionwheel/`; these are a copy and will
+  drift, so edit there.
+- **1.21.1 has the matching tests and this branch does not** (`AllAdaptationTests`, 6 tests, plus the
+  tier-aware rewrite of `HardFistAndSynergyTests`). This branch has no gametest framework, so the
+  guarantees here rest on `./gradlew build` plus the 1.21.1 suite covering the same logic.
+
 ---
 ## Commands
 

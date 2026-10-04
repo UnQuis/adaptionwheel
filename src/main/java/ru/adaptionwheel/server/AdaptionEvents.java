@@ -538,11 +538,10 @@ public class AdaptionEvents {
     }
 
     private static void applyFistDamage(ServerPlayer attacker, LivingEntity target, LivingDamageEvent.Pre event) {
-        if (!HardFist.trains(attacker)) {
+        if (!wearingWheel(attacker)) {
             return;
         }
         PlayerAdaption data = data(attacker);
-        startOrAccelerate(attacker, data, Concepts.COMBAT_FIST_DAMAGE, HardFist.analysisTicks(), true);
         float bonus = HardFist.bonus(attacker, data);
         if (bonus > 0f) {
             event.setNewDamage(event.getNewDamage() + bonus);
@@ -616,8 +615,8 @@ public class AdaptionEvents {
         ServerPlayer player = killerOf(event.getSource());
         if (player == null || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
-        if (HardFist.trains(player)) {
-            startOrAccelerate(player, data, Concepts.COMBAT_FIST_DAMAGE, HardFist.analysisTicks(), true);
+        if (dead instanceof net.minecraft.world.entity.monster.Enemy && HardFist.trains(player)) {
+            HardFist.onFistKill(player, data, dead);
         }
         if (data.adversityActive || !AdaptionConfig.ENABLE_LOOT.get() || BossHelper.isBoss(dead)) return;
 
@@ -748,6 +747,7 @@ public class AdaptionEvents {
 
         SynergyEffects.forget(id);
         FistMastery.forget(id);
+        HardFist.forget(id);
     }
 
     @SubscribeEvent
@@ -1422,7 +1422,7 @@ public class AdaptionEvents {
 
     private static String effectKey(MobEffectInstance effect) {
         Identifier key = BuiltInRegistries.MOB_EFFECT.getKey(effect.getEffect().value());
-        return key != null ? key.getPath() : "unknown";
+        return key != null ? key.toString() : "minecraft:unknown";
     }
 
     private static int levelPenaltyTicks(String concept) {
@@ -1572,60 +1572,22 @@ public class AdaptionEvents {
         data.adversityTimer = 0;
         data.adversityCooldownTimer = 0;
 
-        String[] envConcepts = {
-                Concepts.ENV_LAVA, Concepts.ENV_FALL, Concepts.ENV_KNOCKBACK, Concepts.ENV_LIQUID,
-                Concepts.ENV_DARKNESS, Concepts.ENV_DROWN, Concepts.ENV_THORNS, Concepts.ENV_SUFFOCATE,
-                Concepts.ENV_VOID, Concepts.ENV_STARVE, Concepts.ENV_ICE, Concepts.ENV_SLIME,
-                Concepts.ENV_COBWEB
-        };
-        String[] moveConcepts = {
-                Concepts.MOVE_SOUL_SAND, Concepts.MOVE_HONEY, Concepts.MOVE_POWDER_SNOW,
-                Concepts.MOVE_BERRY_BUSH, Concepts.MOVE_BUBBLE_COLUMN
-        };
-        String[] discomfortLeveled = { Concepts.MINE_LABOR, Concepts.COMBAT_COOLDOWN };
-        String[] discomfortOneTime = { Concepts.COMBAT_SHIELD_LOCK, Concepts.PERCEP_STEADY_GAZE,
-                Concepts.COMBAT_SKILL_ISSUE, Concepts.DIMENSION_DESTROY };
-        for (String concept : envConcepts) {
-            data.adapted.add(concept);
-            data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
-            data.addHistory(concept);
-        }
-        for (String concept : moveConcepts) {
-            data.adapted.add(concept);
-            data.addHistory(concept);
-        }
-        for (String concept : discomfortLeveled) {
-            data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
-            data.addHistory(concept);
-        }
-        for (String concept : discomfortOneTime) {
-            data.adapted.add(concept);
-            data.addHistory(concept);
-        }
-
-        data.adapted.add(Concepts.ADVERSITY);
-        data.levels.put(Concepts.ADVERSITY, PlayerAdaption.MAX_LEVEL);
-        data.addHistory(Concepts.ADVERSITY);
-        data.levels.put(Concepts.SELF_DAMAGE, PlayerAdaption.MAX_LEVEL);
-        data.addHistory(Concepts.SELF_DAMAGE);
-        data.adapted.add(Concepts.MUTATION_THERMAL);
-        data.addHistory(Concepts.MUTATION_THERMAL);
-        data.adapted.add(Concepts.MUTATION_AQUATIC);
-        data.addHistory(Concepts.MUTATION_AQUATIC);
-        data.adapted.add(Concepts.MUTATION_IMPACT);
-        data.addHistory(Concepts.MUTATION_IMPACT);
-
-        data.adapted.add(Concepts.MUTATION_FIST);
-        data.addHistory(Concepts.MUTATION_FIST);
-        for (int tier = 0; tier < ru.adaptionwheel.category.FistTiers.TIER_COUNT; tier++) {
-            String concept = ru.adaptionwheel.category.FistTiers.concept(tier);
-            data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
-            data.addHistory(concept);
-        }
-
-        for (AdaptionCategory category : AdaptionCategory.values()) {
-            String concept = Concepts.type(category);
-            data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
+        // Everything in the registry, rather than a list written out again here.
+        //
+        // A hand-written copy of the core concepts is the whole bug: it silently went stale the moment
+        // Env_Inventory, Mutation_SeaEye, Mutation_Flight and the five Combat_Fist* stages were added,
+        // and "eats the All Adaptation item and still is not adapted to it" is exactly what a stale
+        // copy looks like from the outside. The registry is the single source of truth for which
+        // concepts exist and whether they have levels, so iterating it makes the item grant everything
+        // by construction and a future concept needs no edit here at all.
+        for (ru.adaptionwheel.adapt.AdaptationDefinition def
+                : ru.adaptionwheel.adapt.AdaptationRegistry.allDefinitions()) {
+            String concept = def.concept();
+            if (def.leveled()) {
+                data.levels.put(concept, def.maxLevel());
+            } else {
+                data.adapted.add(concept);
+            }
             data.addHistory(concept);
         }
 
@@ -1637,7 +1599,7 @@ public class AdaptionEvents {
             if (key == null) {
                 continue;
             }
-            String concept = Concepts.debuff(key.getPath());
+            String concept = Concepts.debuff(key.toString());
             data.adapted.add(concept);
             data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
             data.addHistory(concept);
@@ -1747,6 +1709,7 @@ public class AdaptionEvents {
 
         if (ru.adaptionwheel.category.Concepts.MUTATION_FIST.equals(concept)) {
             FistMastery.forget(player.getUUID());
+        HardFist.forget(player.getUUID());
         }
         saveToItem(player, d);
         sync(player, d, true);

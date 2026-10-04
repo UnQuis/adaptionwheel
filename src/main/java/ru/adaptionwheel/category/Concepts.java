@@ -2,7 +2,10 @@ package ru.adaptionwheel.category;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.effect.MobEffect;
+import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 
 public final class Concepts {
 
@@ -33,8 +36,6 @@ public final class Concepts {
     public static final String MUTATION_FLIGHT = "Mutation_Flight";
 
     public static final String MUTATION_FIST = "Mutation_Fist";
-
-    public static final String COMBAT_FIST_DAMAGE = "Combat_FistDamage";
 
     public static final String DIMENSION_DESTROY = "Dimension_Destroy";
 
@@ -101,8 +102,63 @@ public final class Concepts {
         return DROP_PREFIX + mobPath;
     }
 
-    public static String debuff(String effectPath) {
-        return "Debuff_" + effectPath;
+    /**
+     * The concept key for a status effect.
+     *
+     * <p>Always namespaced, and a bare path is resolved against the effect registry so that callers
+     * holding either form get the same key. Namespacing is not cosmetic: {@code getPath()} drops the
+     * namespace, so {@code othermod:poison} and {@code minecraft:poison} both used to mint
+     * {@code Debuff_poison} - two different effects silently sharing one adaptation - and the display
+     * name only resolves for the namespaced form, because {@link Identifier#tryParse} rejects a
+     * string with no colon and the bare key fell through to a raw lowercase literal.
+     *
+     * <p>This is the single place the shape of the key is decided. Two forms used to coexist: the
+     * runtime minted bare keys and the flight gate and the altar named {@code Debuff_minecraft:...},
+     * so the All Adaptation item granted levitation denial under one key while flight asked for the
+     * other and never saw it. Normalising here rather than at each call site is what keeps that from
+     * coming back.
+     */
+    public static String debuff(String effectId) {
+        if (effectId.indexOf(':') >= 0) {
+            return DEBUFF_PREFIX + effectId;
+        }
+        return DEBUFF_PREFIX + resolveEffectPath(effectId);
+    }
+
+    /**
+     * Turns a bare effect path back into a full id by looking it up across every namespace.
+     *
+     * <p>Needed only for keys that were minted before debuff keys were namespaced, where the
+     * namespace was already lost and has to be recovered. {@code minecraft} wins a tie so the common
+     * case lands on the effect everyone means; an unknown path is namespaced to {@code minecraft}
+     * anyway, because leaving it bare would keep it a second, unreachable spelling of the same key.
+     */
+    private static String resolveEffectPath(String path) {
+        String fallback = null;
+        for (MobEffect effect : BuiltInRegistries.MOB_EFFECT) {
+            Identifier key = BuiltInRegistries.MOB_EFFECT.getKey(effect);
+            if (key == null || !path.equals(key.getPath())) {
+                continue;
+            }
+            if ("minecraft".equals(key.getNamespace())) {
+                return key.toString();
+            }
+            if (fallback == null) {
+                fallback = key.toString();
+            }
+        }
+        return fallback != null ? fallback : Identifier.fromNamespaceAndPath("minecraft", path).toString();
+    }
+
+    /** The namespaced effect id for a live effect, the form every debuff concept key is built from. */
+    public static String debuffId(Holder<MobEffect> effect) {
+        Identifier key = effect.unwrapKey().map(ResourceKey::identifier).orElse(null);
+        return key != null ? key.toString() : "minecraft:unknown";
+    }
+
+    /** The concept key for a live effect holder, the form the runtime analysis mints. */
+    public static String debuff(Holder<MobEffect> effect) {
+        return debuff(debuffId(effect));
     }
 
     public static String existence(String mobPath) {
@@ -157,6 +213,7 @@ public final class Concepts {
         if (concept.startsWith(MOVE_PREFIX)) return COLOR_MOVEMENT;
         if (concept.startsWith(MINE_PREFIX)) return COLOR_MINING;
         if (concept.startsWith(FIST_PREFIX)) return fistColor(concept.substring("Fist_".length()));
+        if (concept.startsWith(CombatFistTiers.CONCEPTS[0])) return combatFistColor(concept);
         if (concept.startsWith(COMBAT_PREFIX)) return COLOR_COMBAT;
         if (concept.startsWith(PERCEP_PREFIX)) return COLOR_PERCEPTION;
         if (concept.startsWith(MUTATION_PREFIX)) return COLOR_MUTATION;
@@ -268,6 +325,15 @@ public final class Concepts {
 
     private static Component mutationName(String name) {
         return Component.translatable("adaptionwheel.concept.mutation." + name);
+    }
+
+    private static int combatFistColor(String concept) {
+        for (int i = 0; i < CombatFistTiers.TIER_COUNT; i++) {
+            if (CombatFistTiers.concept(i).equals(concept)) {
+                return CombatFistTiers.color(i);
+            }
+        }
+        return COLOR_COMBAT;
     }
 
     private static Component debuffName(String effectPath) {

@@ -50,6 +50,7 @@ public record WheelData(
     }
 
     public void loadInto(PlayerAdaption data) {
+        LegacyConcepts.migrate(levels, adapted, history);
         levels.forEach((concept, level) -> data.levels.merge(concept, level, Math::max));
         data.adapted.addAll(adapted);
         data.existenceAdapted.addAll(existenceAdapted);
@@ -72,5 +73,6 @@ public record WheelData(
             }
         }
         data.invalidateAdaptCount();
+        LegacyConcepts.migrate(data);
     }
 }
