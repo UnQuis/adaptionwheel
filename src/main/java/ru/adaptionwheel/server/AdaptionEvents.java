@@ -312,7 +312,6 @@ public class AdaptionEvents {
             if (bossFromSource != null) {
                 String bossPath = entityPath(bossFromSource.getType());
                 noteBossEncounter(data, bossPath);
-                data.bossCombatTicks.merge(bossPath, 1, Integer::sum);
             }
         }
 
@@ -596,7 +595,6 @@ public class AdaptionEvents {
 
         if (BossHelper.isBoss(target) && AdaptionConfig.ENABLE_EXISTENCE.get()) {
             noteBossEncounter(data, path);
-            data.bossCombatTicks.merge(path, 1, Integer::sum);
         }
     }
 
