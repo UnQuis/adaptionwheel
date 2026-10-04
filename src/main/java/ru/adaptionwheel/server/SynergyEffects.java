@@ -64,7 +64,7 @@ public final class SynergyEffects {
         STRENGTH.put(id, strengths);
     }
 
-    private static double strengthOf(PlayerAdaption data, Synergies.Synergy synergy) {
+    public static double strengthOf(PlayerAdaption data, Synergies.Synergy synergy) {
         int max = PlayerAdaption.MAX_LEVEL;
         double sum = 0.0;
         int counted = 0;
@@ -117,11 +117,6 @@ public final class SynergyEffects {
     public static double impactRadius(ServerPlayer player, double configured) {
         return isActive(player, Synergies.SKYBREAKER)
                 ? configured * strength(player, Synergies.SKYBREAKER) : configured;
-    }
-
-    public static double impactMinFall(ServerPlayer player, double configured) {
-        return isActive(player, Synergies.SKYBREAKER)
-                ? configured / strength(player, Synergies.SKYBREAKER) : configured;
     }
 
     public static void onHit(ServerPlayer attacker, LivingEntity target, DamageSource source) {

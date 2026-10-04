@@ -55,7 +55,7 @@ public final class Synergies {
 
     public static final Synergy SKYBREAKER = new Synergy("skybreaker",
             List.of(exact(Concepts.ENV_FALL), exact(Concepts.MUTATION_IMPACT)),
-            "Your landing shockwave is far larger and triggers from much lower.");
+            "Your landing shockwave is far larger.");
 
     public static final Synergy UNMAKER = new Synergy("unmaker",
             List.of(exact(Concepts.ENV_VOID), family(Concepts.EXISTENCE_PREFIX)),

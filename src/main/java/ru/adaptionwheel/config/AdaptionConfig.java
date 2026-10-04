@@ -106,6 +106,13 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_FRAME_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_STRENGTH;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_ABERRATION;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_SHAKE_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_SHAKE_STRENGTH;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_FLASH_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_FLASH_FRAMES;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FLASH_MS;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FLASH_STRENGTH;
+    
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
 
@@ -369,8 +376,9 @@ public final class AdaptionConfig {
         ENABLE_MUTATION_IMPACT = s.comment("Impact Mastery: unlocked by Env_FallDamage + Env_Knockback.",
                         "Landing from great heights unleashes a damaging shockwave.")
                 .define("impactMastery", true);
-        IMPACT_STOMP_MIN_FALL = s.comment("Minimum fall distance (blocks) to trigger the Impact shockwave.")
-                .defineInRange("impactMinFallDistance", 6.0, 1.0, 200.0);
+        IMPACT_STOMP_MIN_FALL = s.comment("Minimum fall distance (blocks) to trigger the Impact shockwave.",
+                        "This is a hard floor: no synergy lowers it, so a stomp always means a real fall.")
+                .defineInRange("impactMinFallDistance", 7.0, 1.0, 200.0);
         IMPACT_STOMP_DAMAGE_PER_BLOCK = s.comment("Shockwave damage per block fallen above the threshold.")
                 .defineInRange("impactDamagePerBlock", 2.0, 0.0, 100.0);
         IMPACT_STOMP_RADIUS = s.comment("Shockwave radius in blocks.")
@@ -655,6 +663,42 @@ public final class AdaptionConfig {
                         "of the distance from the centre of the screen, so the middle holds still.",
                         "0 disables it and leaves a plain two-tone frame.")
                 .defineInRange("dimensionImpactAberration", 1.0, 0.0, 4.0);
+        DIMENSION_IMPACT_SHAKE_ENABLED = c.comment("Shake the camera on the same clock as the frame.",
+                        "Shares the panel's envelope exactly, so it cannot outlive it, and 0 turns",
+                        "it off entirely if camera motion bothers you.")
+                .define("dimensionImpactShakeEnabled", true);
+        DIMENSION_IMPACT_SHAKE_STRENGTH = c.comment("Peak camera shake in degrees at full strength.",
+                        "Around 1.5 is a firm punch; past 3 starts to fight the player's aim.")
+                .defineInRange("dimensionImpactShakeStrength", 1.6, 0.0, 6.0);
+        DIMENSION_IMPACT_FLASH_ENABLED = c.comment("Anime flash: alternate white and black over the whole",
+                        "screen at the very start of the frame, on top of the two-tone panel. This is",
+                        "the original mod's own mechanic (its option is called 'flash' and its",
+                        "defaults are 2 frames over 100 ms).",
+                        "",
+                        "The frame count and duration below are ABSOLUTE, not per rendered frame.",
+                        "That distinction is the whole safety question: cycling frames once per",
+                        "rendered frame puts you at 12 colour changes/second at 60 fps, which is in",
+                        "the 3-25 Hz band where flicker provokes photosensitive migraine. 2 frames",
+                        "over 100 ms is 20 fps and is just animation.")
+                .define("dimensionImpactFlashEnabled", true);
+        DIMENSION_IMPACT_FLASH_FRAMES = c.comment("How many flashes the sequence contains. THE RATE IS",
+                        "frames / durationMs and the two are coupled — change one without the other",
+                        "and you get a different effect, not a longer one:",
+                        "  more frames, same duration -> faster, up to a strobe;",
+                        "  fewer frames, longer      -> slower, and it stops being a strobe at all",
+                        "    and becomes a lingering white wash, which reads as a faded screen.",
+                        "The defaults below are exactly 20 fps, the original mod's rate, held for",
+                        "2.5x as long. To double the length, double BOTH numbers.")
+                .defineInRange("dimensionImpactFlashFrames", 5, 1, 24);
+        DIMENSION_IMPACT_FLASH_MS = c.comment("Total length of the flash sequence in ms, so each frame",
+                        "holds durationMs/frames. The original mod used 100 ms for 2 frames, which is",
+                        "the same 20 fps. Keep this well under the frame's 450 ms or the flash stops",
+                        "being punctuation in front of the panel and becomes the event instead.")
+                .defineInRange("dimensionImpactFlashMs", 250.0, 10.0, 400.0);
+        DIMENSION_IMPACT_FLASH_STRENGTH = c.comment("Peak opacity of the alternation. Both halves use it, so",
+                        "0.75 gives a 75% white then 75% black. A weak black half reads as dirt on",
+                        "the screen rather than as an impact.")
+                .defineInRange("dimensionImpactFlashStrength", 0.75, 0.0, 1.0);
         c.pop();
 
         c.pop();
@@ -721,6 +765,18 @@ public final class AdaptionConfig {
         return Math.max(1, (int) Math.round(cost));
     }
 
+    public static int fistKillsForNextLevel(int tier, int currentLevel) {
+        double base = Math.max(1.0, FIST_DAMAGE_FIRST_KILLS.get());
+        double growth = Math.max(1.0, FIST_DAMAGE_KILL_GROWTH.get());
+        double cost = base * Math.pow(growth, Math.max(0, currentLevel - 1))
+                * listValue(FIST_DAMAGE_TIER_KILL_COST, tier, DEFAULT_FIST_DAMAGE_TIER_KILL_COST);
+        return Math.max(1, (int) Math.round(cost));
+    }
+
+    public static float fistDamageTierMultiplier(int tier) {
+        return (float) listValue(FIST_DAMAGE_TIER_MULTIPLIER, tier, DEFAULT_FIST_DAMAGE_TIER_MULTIPLIER);
+    }
+
     public static double defenseHealRatio(int level) {
         return table(DEFENSE_HEAL_RATIO_LEVELS, level, DEFENSE_HEAL_RATIO);
     }
@@ -764,18 +820,6 @@ public final class AdaptionConfig {
             return 0;
         }
         return listValue(config, level - 1, fallback);
-    public static int fistKillsForNextLevel(int tier, int currentLevel) {
-        double base = Math.max(1.0, FIST_DAMAGE_FIRST_KILLS.get());
-        double growth = Math.max(1.0, FIST_DAMAGE_KILL_GROWTH.get());
-        double cost = base * Math.pow(growth, Math.max(0, currentLevel - 1))
-                * listValue(FIST_DAMAGE_TIER_KILL_COST, tier, DEFAULT_FIST_DAMAGE_TIER_KILL_COST);
-        return Math.max(1, (int) Math.round(cost));
-    }
-
-    public static float fistDamageTierMultiplier(int tier) {
-        return (float) listValue(FIST_DAMAGE_TIER_MULTIPLIER, tier, DEFAULT_FIST_DAMAGE_TIER_MULTIPLIER);
-    }
-
     }
 
     private static double listValue(ModConfigSpec.ConfigValue<List<? extends Double>> config, int index, double[] fallback) {

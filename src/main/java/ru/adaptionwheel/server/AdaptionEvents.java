@@ -1274,7 +1274,7 @@ public class AdaptionEvents {
     private static void tickImpactStomp(ServerPlayer player, PlayerAdaption data) {
         boolean grounded = player.onGround();
         float lastFall = data.impactLastFallDistance;
-        double minFall = SynergyEffects.impactMinFall(player, AdaptionConfig.IMPACT_STOMP_MIN_FALL.get());
+        double minFall = AdaptionConfig.IMPACT_STOMP_MIN_FALL.get();
         if (grounded && !data.impactWasOnGround && !player.isInWater() && !player.isInLava()
                 && lastFall >= minFall) {
             triggerImpactShockwave(player, lastFall);
