@@ -326,6 +326,40 @@ All three are on **both** branches and configured, not hard-coded.
     panel, and the hotbar separated by exactly `HOTBAR_GAP`. A slot drawn one row below the panel
     throws nothing and reports nothing, which is the whole reason the offhand slot survived; pure
     layout maths in a drawing routine is where a test earns its keep.
+- **The Adaptation Temple was never broken — its template was 100% air, and nothing said so.**
+  "It doesn't spawn on 1.21.1" reads like worldgen, and the placement genuinely was fine: the
+  `structure_set` (`random_spread` 32/16, very dense), the biome tag, the `template_pool` and the
+  `processors` reference all loaded. The temple was *placed*, 795 blocks of air wide, at the right
+  place, at the right time. Two independent silent paths in `NbtUtils.readBlockState`, and each one
+  returns air without a warning:
+  - **The palette key is branch specific.** 1.21.1 does `tag.contains("Name", 8)`, 26.3 does
+    `tag.read("id", BLOCK_NAME_CODEC)`. The template had been converted from 26.3 with the
+    processor-list JSON rewritten correctly — `"block_state": {"Name": ...}` — but the **NBT
+    palette kept `id`/`properties`**, so every entry missed and every block became air. A file that
+    is one key away from working is also a file that loads cleanly.
+  - **An id that does not exist on this branch is air too.** `minecraft:oxidized_lightning_rod` is
+    not in 1.21.1 — the client jar has exactly **one** lightning rod, and the copper family around
+    it arrived in a later update (26.3 has all eight plus `iron_chain`). So the rod is the one block
+    whose *content* was also cross-branch, and it needed `minecraft:lightning_rod`; the
+    `iron_chain` → `iron_bars` substitution the tool already made was the same fix one block earlier.
+  - Its properties were already right for this branch (`type`, `shape`, `face`, `half`) —
+    `BlockStateProperties.ATTACH_FACE` really is named `face` even though the constant is
+    `ATTACH_FACE`. And an unknown property is a **third** silent path: `readBlockState` does
+    `if (property != null)`, so a stale one is dropped rather than rejected. The template's
+    `facing=up` on the rod came from 26.3, where the rod has a facing, and was being ignored.
+  - **`TempleStructureTests` (2 tests)** pins it by loading the template through the server's own
+    `StructureTemplateManager` and counting: no air, stone bricks present, altar present, rod
+    present. Verified in both directions — with the old file restored they fail with
+    *"the temple template resolved to 795 air blocks"*. 110 gametests pass. **A test that only ever
+    passes proves nothing, so check that it fails on the broken input too.**
+  - Rewriting NBT by hand needs a **type-preserving** reader/writer, and two bugs in a 100-line one
+    were both silent: `d[name()] = payload(...)` in Python evaluates the *value* first, so the name
+    and payload get swapped; and the root tag's own name (`""`, always present) is consumed on read
+    and must be written back, or the whole file collapses to one byte. Prove the round trip is
+    byte-identical before trusting the writer on the repo's file.
+  - `StructureTemplate` **writes** `DataVersion` but never reads it, so 1.21.1's template claiming
+    `5023` (a much newer Minecraft) was harmless — it is now `3955`, which is what
+    `DetectedVersion` reports for this branch. Do not mistake that for the bug; the two air paths above are.
 - **Do not "fix" a mod shader's path from the vanilla decompile — NeoForge patches
   `ShaderInstance`, and it prepends `shaders/core/` itself.** `SHADER` is `adaptionwheel:slash` for a
   file at `assets/adaptionwheel/shaders/core/slash.json`, and the JSON's `"vertex": "adaptionwheel:slash"`
