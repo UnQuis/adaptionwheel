@@ -14,6 +14,7 @@ public abstract class FogColorMixin {
     @Redirect(method = "setupColor", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/renderer/Camera;getFluidInCamera()Lnet/minecraft/world/level/material/FogType;"))
     private FogType adaptionwheel$seaEyeColor(Camera camera) {
-        return SeaEyeFog.effective(camera.getFluidInCamera());
+        FogType reported = camera.getFluidInCamera();
+        return SeaEyeFog.suppresses(reported) ? FogType.NONE : reported;
     }
 }

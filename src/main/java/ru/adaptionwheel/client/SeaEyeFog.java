@@ -10,11 +10,8 @@ public final class SeaEyeFog {
     private SeaEyeFog() {
     }
 
-    public static FogType effective(FogType reported) {
-        if (reported == FogType.NONE || reported == FogType.POWDER_SNOW || !seaEye()) {
-            return reported;
-        }
-        return FogType.NONE;
+    public static boolean suppresses(FogType reported) {
+        return reported != FogType.NONE && reported != FogType.POWDER_SNOW && seaEye();
     }
 
     public static boolean seaEye() {
