@@ -462,8 +462,6 @@ public final class AdaptionConfig {
                 .defineInRange("adaptationsRequired", 450, 1, 1000);
         s.pop();
 
-        s.pop();
-
         s.comment("--- Contact Defense ---").push("contactDefense");
 
         CONTACT_IMMUNITY_LEVEL = s
