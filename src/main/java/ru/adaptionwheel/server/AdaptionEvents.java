@@ -161,6 +161,31 @@ public class AdaptionEvents {
         });
     }
 
+    /**
+     * The one-time environment immunity for a damage category, or null when the category has none.
+     *
+     * <p>This was a seven-arm if-chain, and on this branch it is written out **twice** -- once in
+     * the incoming-damage handler (which cancels) and once in the pre-damage handler (which zeroes
+     * the new damage). Two copies of one rule is how the two halves end up disagreeing, so both now
+     * ask this table. It is public and static so a gametest can enumerate it: the handlers cannot be
+     * tested directly, because a gametest cannot create a player while Curios is installed.
+     */
+    public static String envImmunityConcept(AdaptionCategory category) {
+        if (category == null) {
+            return null;
+        }
+        return switch (category) {
+            case FALL -> Concepts.ENV_FALL;
+            case STARVE -> Concepts.ENV_STARVE;
+            case DROWN -> Concepts.ENV_DROWN;
+            case FIRE -> Concepts.ENV_LAVA;
+            case SUFFOCATE -> Concepts.ENV_SUFFOCATE;
+            case VOID -> Concepts.ENV_VOID;
+            case CONTACT -> Concepts.ENV_THORNS;
+            default -> null;
+        };
+    }
+
     private static String entityPath(EntityType<?> type) {
         Identifier key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
         return key != null ? key.toString() : type.toShortString();
@@ -204,25 +229,8 @@ public class AdaptionEvents {
         DamageSource source = event.getSource();
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        if (category == AdaptionCategory.FALL && data.active(Concepts.ENV_FALL)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.STARVE && data.active(Concepts.ENV_STARVE)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.DROWN && data.active(Concepts.ENV_DROWN)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.FIRE && data.active(Concepts.ENV_LAVA)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.SUFFOCATE && data.active(Concepts.ENV_SUFFOCATE)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.VOID && data.active(Concepts.ENV_VOID)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.CONTACT && data.active(Concepts.ENV_THORNS)) {
+        String immunity = envImmunityConcept(category);
+        if (immunity != null && data.active(immunity)) {
             event.setCanceled(true); return;
         }
 
@@ -276,25 +284,8 @@ public class AdaptionEvents {
 
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        if (category == AdaptionCategory.FALL && data.active(Concepts.ENV_FALL)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.STARVE && data.active(Concepts.ENV_STARVE)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.DROWN && data.active(Concepts.ENV_DROWN)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.FIRE && data.active(Concepts.ENV_LAVA)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.CONTACT && data.active(Concepts.ENV_THORNS)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.SUFFOCATE && data.active(Concepts.ENV_SUFFOCATE)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.VOID && data.active(Concepts.ENV_VOID)) {
+        String immunity = envImmunityConcept(category);
+        if (immunity != null && data.active(immunity)) {
             event.setNewDamage(0); return;
         }
 
@@ -615,8 +606,8 @@ public class AdaptionEvents {
         ServerPlayer player = killerOf(event.getSource());
         if (player == null || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
-        if (dead instanceof net.minecraft.world.entity.monster.Enemy && HardFist.trains(player)) {
-            HardFist.onFistKill(player, data, dead);
+        if (dead instanceof net.minecraft.world.entity.monster.Enemy) {
+            HardFist.onFistKill(player, data, dead, event.getSource());
         }
         if (data.adversityActive || !AdaptionConfig.ENABLE_LOOT.get() || BossHelper.isBoss(dead)) return;
 

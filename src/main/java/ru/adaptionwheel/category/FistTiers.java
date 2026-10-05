@@ -86,6 +86,27 @@ public final class FistTiers {
         return TAGS[tier];
     }
 
+    /**
+     * Whether the bar should split into the previous stage's colour at this point.
+     *
+     * <p>The rule lives here, and not in the HUD, so a gametest can pin it without a client
+     * {@code Font}. It is deliberately narrow: a stage is eight levels and the next begins at one, so
+     * level 1 of a stage whose predecessor is maxed is the single level on which the player has
+     * crossed a material boundary. Every other level returns false -- and that half of the rule is
+     * the part that matters, because a bar that is always two-tone is just a second colour scheme
+     * and marks nothing.
+     *
+     * <p>Both fists use this. They share the stage count, and a rule duplicated across the two would
+     * be one that could eventually disagree about which of them is five stages.
+     *
+     * @param level         the current stage's level, 1-based
+     * @param previousLevel the previous stage's level, or 0 when there is no previous stage
+     * @return true only on the level where a stage hands over to the next
+     */
+    public static boolean showsHandover(int level, int previousLevel) {
+        return level == 1 && previousLevel >= ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
+    }
+
     public static int color(int tier) {
         return COLORS[tier];
     }

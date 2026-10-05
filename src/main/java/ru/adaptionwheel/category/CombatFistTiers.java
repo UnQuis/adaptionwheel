@@ -48,6 +48,17 @@ public final class CombatFistTiers {
         return CONCEPTS[tier];
     }
 
+    /**
+     * Delegates to {@link FistTiers#showsHandover(int, int)} rather than repeating it.
+     *
+     * <p>The punching fist and the breaking fist climb the same five-stage ladder over the same
+     * eight levels, so the handover rule is one rule. A second copy here would be one more thing to
+     * keep in agreement, and nothing about it is punching-fist specific.
+     */
+    public static boolean showsHandover(int level, int previousLevel) {
+        return FistTiers.showsHandover(level, previousLevel);
+    }
+
     public static int color(int tier) {
         return COLORS[tier];
     }

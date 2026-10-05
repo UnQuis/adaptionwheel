@@ -406,8 +406,15 @@ public final class AdaptionConfig {
         FIST_DAMAGE_PER_LEVEL = s.comment("Bonus damage added per level above the first.")
                 .defineInRange("damagePerLevel", 0.75, 0.0, 1000.0);
         FIST_DAMAGE_PER_ADAPTATION = s.comment("The fist also scales with how much the wheel knows: each",
-                        "adaptation adds this fraction of the level bonus (0.04 = +4% per adaptation).")
-                .defineInRange("damagePerAdaptation", 0.04, 0.0, 10.0);
+                        "adaptation adds this fraction of the whole bonus.",
+                        "This used to be 0.04, which made the adapt count almost decorative: even at",
+                        "150 adaptations that is only x7, below Diamond's x8 stage multiplier and less",
+                        "than half of Netherite's x16. So the thing that scales with how much you have",
+                        "adapted was weaker than a single material tier, which is backwards.",
+                        "At 0.15 the curve lands where it should: x10 at 60 adaptations (between",
+                        "Diamond and Netherite) and x16 at 100, i.e. a well-developed wheel reaches",
+                        "Netherite by breadth rather than by 40 bare-handed kills.")
+                .defineInRange("damagePerAdaptation", 0.15, 0.0, 10.0);
         s.pop();
 
         s.comment("--- Fist Mastery (Mutation_Fist) ---").push("fistMastery");
