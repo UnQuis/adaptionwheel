@@ -87,6 +87,40 @@ public class DisableTests {
      * would silently re-enable everything on relog — the mirror of the counter bug, and equally
      * invisible.
      */
+    /**
+     * Switching off a debuff adaptation must let the debuff through again.
+     *
+     * <p>It did not, and the cause is the oldest one in this mod: the denial asked {@code isAdapted}
+     * ("do you have it") where it needed {@code active} ("does it apply"). The panel switch only sets
+     * {@code disabled}, so the row showed off, the effect kept firing, and the player could never
+     * receive the effect they had just un-adapted to.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aDisabledDebuffAdaptationStopsDenyingTheDebuff(GameTestHelper helper) {
+
+        String concept = ru.adaptionwheel.category.Concepts.debuff("minecraft:poison");
+        PlayerAdaption data = new PlayerAdaption(new java.util.HashMap<>(),
+                new java.util.ArrayList<>(), new java.util.ArrayList<>(), new java.util.ArrayList<>(),
+                new java.util.ArrayList<>(), new java.util.HashMap<>(), new java.util.HashMap<>(),
+                0, 0, 0, false, 0f, 0f, false, 0,
+                new ru.adaptionwheel.data.Extras(new java.util.ArrayList<>(),
+                        new java.util.ArrayList<>(), new java.util.HashMap<>()));
+        data.adapted.add(concept);
+
+        helper.assertTrue(data.isAdapted(concept),
+                "the adaptation is owned, which is what the altar and the panel must keep seeing");
+        helper.assertTrue(data.active(concept),
+                "and it applies while it is switched on");
+
+        data.disabled.add(concept);
+        helper.assertTrue(data.isAdapted(concept),
+                "switching it off must not erase the adaptation, or the altar would sell it again");
+        helper.assertTrue(!data.active(concept),
+                "the effect must read false once it is off -- this is what the debuff denial asks,"
+                        + " and it used to ask isAdapted instead, so the switch did nothing");
+        helper.succeed();
+    }
+
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void disabledSurvivesASave(GameTestHelper helper) {
 

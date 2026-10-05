@@ -154,6 +154,50 @@ public class CombatFistTests {
         helper.succeed();
     }
 
+    /**
+     * A maxed stage must hand its kills to the next one, not throw them away.
+     *
+     * <p>Pinned because the row and the accounting disagreed: the row reported the next stage's cost
+     * ("0/6 kills", which is what the player sees and complained about) while {@code onFistKill}
+     * early-returned on the maxed stage and banked nothing. A hundred mobs against a bar that never
+     * moved, and the display was, on paper, correct.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aMaxedStageHandsItsKillsToTheNext(GameTestHelper helper) {
+
+        PlayerAdaption data = empty();
+        data.levels.put(CombatFistTiers.concept(0), PlayerAdaption.MAX_LEVEL);
+        data.invalidateAdaptCount();
+
+        helper.assertTrue(ru.adaptionwheel.server.HardFist.currentTier(data) == 0,
+                "the stage reached is still Wood, which is permanent");
+        helper.assertTrue(ru.adaptionwheel.server.HardFist.trainingTier(data) == 1,
+                "but the kills being trained are Stone's, got tier "
+                        + ru.adaptionwheel.server.HardFist.trainingTier(data));
+
+        // A finished ladder has nothing to hand over to.
+        PlayerAdaption done = empty();
+        for (int t = 0; t < CombatFistTiers.TIER_COUNT; t++) {
+            done.levels.put(CombatFistTiers.concept(t), PlayerAdaption.MAX_LEVEL);
+        }
+        done.invalidateAdaptCount();
+        helper.assertTrue(ru.adaptionwheel.server.HardFist.trainingTier(data) != -1,
+                "an unfinished ladder still has a stage to train");
+        helper.assertTrue(ru.adaptionwheel.server.HardFist.trainingTier(done)
+                        == CombatFistTiers.TIER_COUNT - 1,
+                "Netherite maxed is the end of the ladder, so there is no stage after it, got "
+                        + ru.adaptionwheel.server.HardFist.trainingTier(done));
+
+        // An unfinished stage trains itself.
+        PlayerAdaption mid = empty();
+        mid.levels.put(CombatFistTiers.concept(2), 4);
+        mid.invalidateAdaptCount();
+        helper.assertTrue(ru.adaptionwheel.server.HardFist.trainingTier(mid) == 2,
+                "Iron at level 4 is still being trained, got "
+                        + ru.adaptionwheel.server.HardFist.trainingTier(mid));
+        helper.succeed();
+    }
+
     private static PlayerAdaption empty() {
         return new PlayerAdaption(new HashMap<>(), List.of(), List.of(), List.of(), List.of(),
                 new HashMap<>(), new HashMap<>(), 0, 0, 0, false, 0f, 0f, false, 0, Extras.EMPTY);

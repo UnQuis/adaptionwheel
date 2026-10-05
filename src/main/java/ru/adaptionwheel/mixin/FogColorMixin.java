@@ -12,8 +12,8 @@ import ru.adaptionwheel.client.SeaEyeFog;
 public abstract class FogColorMixin {
 
     @Redirect(method = "setupColor", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/Camera;getFluidInCamera()Lnet/minecraft/world/level/material/FogType;"))
-    private FogType adaptionwheel$seaEyeColor(Camera camera) {
+            target = "Lnet/minecraft/client/Camera;getFluidInCamera()Lnet/minecraft/world/level/material/FogType;"))
+    private static FogType adaptionwheel$seaEyeColor(Camera camera) {
         FogType reported = camera.getFluidInCamera();
         return SeaEyeFog.suppresses(reported) ? FogType.NONE : reported;
     }

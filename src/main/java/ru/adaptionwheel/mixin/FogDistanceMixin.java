@@ -12,8 +12,8 @@ import ru.adaptionwheel.client.SeaEyeFog;
 public abstract class FogDistanceMixin {
 
     @Redirect(method = "setupFog", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/Camera;getFluidInCamera()Lnet/minecraft/world/level/material/FogType;"))
-    private FogType adaptionwheel$seaEyeDistance(Camera camera) {
+            target = "Lnet/minecraft/client/Camera;getFluidInCamera()Lnet/minecraft/world/level/material/FogType;"))
+    private static FogType adaptionwheel$seaEyeDistance(Camera camera) {
         FogType reported = camera.getFluidInCamera();
         return SeaEyeFog.suppresses(reported) ? FogType.NONE : reported;
     }

@@ -332,6 +332,7 @@ public class AdaptionEvents {
             if (bossFromSource != null) {
                 String bossPath = entityPath(bossFromSource.getType());
                 noteBossEncounter(data, bossPath);
+                noteBossHit(player, data, bossPath);
             }
         }
 
@@ -928,7 +929,10 @@ public class AdaptionEvents {
         // about. So the running tasks are pushed on a short cadence while any are running, which is
         // what makes taking damage move the bar straight away instead of a beat later.
         if (!data.tasks.isEmpty() && player.tickCount % TaskProgressPayload.PUSH_EVERY_TICKS == 0) {
-            TaskProgressPayload.send(player, data.tasks, data.bossCombatTicks);
+            // The same filtered view the full sync sends, not the raw map. Sending the raw counters
+            // here is what made the existence row blink: this arrived at 4 Hz with every boss in it
+            // while the 1 Hz sync arrived with only the nearby ones.
+            TaskProgressPayload.send(player, data.tasks, visibleBossProgress(player, data));
         }
 
         if (AdaptionConfig.ENABLE_ENVIRONMENT.get()) {
@@ -1118,6 +1122,77 @@ public class AdaptionEvents {
                 grantExistenceAdaptation(player, data, path);
             }
         }
+    }
+
+    /**
+     * The boss counters the client is allowed to see, and therefore the ones the HUD may draw a row
+     * for. One definition, used by every sender.
+     *
+     * <p>This had to be extracted because two senders disagreed and the row flickered between them.
+     * The counters themselves persist: {@code accumulateBossCombat} stops incrementing a boss that
+     * has left the proximity radius but deliberately does not drop it, because walking away from a
+     * fight should not throw the analysis away. What this filters is only what is *shown* -- an
+     * adapted boss, and a boss that is not here right now, are not displayed.
+     *
+     * <p>The full sync filtered that way while the shorter task push sent the raw map, so at 1 Hz
+     * against 4 Hz the client alternated between a map with the boss in it and one without, and the
+     * existence row blinked on and off. Nothing about the analysis changed; only the two views of it
+     * did. Same failure mode as {@link #envImmunityConcept} being written out twice.
+     */
+    private static Map<String, Integer> visibleBossProgress(ServerPlayer player, PlayerAdaption data) {
+        if (!AdaptionConfig.ENABLE_EXISTENCE.get() || data.bossCombatTicks.isEmpty()) {
+            return java.util.Map.of();
+        }
+        Set<String> nearby = nearbyBossPaths(player);
+        Map<String, Integer> visible = new HashMap<>();
+        for (Map.Entry<String, Integer> entry : data.bossCombatTicks.entrySet()) {
+            String path = entry.getKey();
+            if (data.existenceAdapted.contains(path) || !nearby.contains(path)) continue;
+            int ticks = entry.getValue();
+            if (ticks > 0) {
+                visible.put(path, ticks);
+            }
+        }
+        return visible;
+    }
+
+    /**
+     * A hit on the boss banks a little progress, on top of the passive per-tick accumulation.
+     *
+     * <p>Ported from the original's {@code ReduceCombatTime}, which is the reason a boss bar there
+     * visibly moves when you swing at the boss rather than only drifting on its own:
+     *
+     * <pre>
+     * float scale = (float)requiredFrames / 108000f;
+     * int reduction = (int)((float)Main.rand.Next(6, 61) * scale);
+     * if (reduction &lt; 1) reduction = 1;
+     * </pre>
+     *
+     * <p>108000 frames is 1800 seconds at the original's 60 ticks a second, so at any sane
+     * {@code existenceRequiredSeconds} the multiplier lands below one and every hit banks the floor
+     * of one tick. That is deliberate: the original's own arithmetic makes a hit a nudge, not a
+     * shortcut, and it is kept as a floor rather than "simplified" to a bigger number so the pacing
+     * still matches. Randomised per hit, as there, so the bar does not read as a deterministic
+     * counter, and clamped so a hit can never carry a boss past its total.
+     *
+     * <p>Gated on {@code active}, like every other effect site, so switching the adaptation off stops
+     * banking as well as stopping the denial.
+     */
+    private static void noteBossHit(ServerPlayer player, PlayerAdaption data, String bossPath) {
+        if (!data.active(Concepts.existence(bossPath)) || data.existenceAdapted.contains(bossPath)) {
+            return;
+        }
+        int required = (int) (AdaptionConfig.EXISTENCE_REQUIRED_SECONDS.get() * 20);
+        if (required <= 0) {
+            return;
+        }
+        double scale = (double) required / 108000.0;
+        int reduction = (int) ((float) (6 + player.getRandom().nextInt(55)) * (float) scale);
+        if (reduction < 1) {
+            reduction = 1;
+        }
+        int banked = Math.min(required, data.bossCombatTicks.getOrDefault(bossPath, 0) + reduction);
+        data.bossCombatTicks.put(bossPath, banked);
     }
 
     private static void noteBossEncounter(PlayerAdaption data, String bossPath) {
@@ -1840,7 +1915,11 @@ public class AdaptionEvents {
             MobEffectInstance instance = event.getEffectInstance();
             if (instance != null && !instance.getEffect().value().isBeneficial()) {
                 String concept = Concepts.debuff(effectKey(instance));
-                if (data(player).isAdapted(concept)) {
+                // active(), NOT isAdapted(): the panel switch sets `disabled`, and isAdapted only
+                // answers "do you have it", so the denial kept firing after the adaptation was
+                // switched off and the debuff could still never be received. isAdapted is still
+                // right for the altar, shedding and the panel itself, which must show what is owned.
+                if (data(player).active(concept)) {
                     event.setResult(MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
                 }
             }
@@ -1940,19 +2019,7 @@ public class AdaptionEvents {
 
     public static void syncAdaption(ServerPlayer player, PlayerAdaption data, boolean wearing) {
 
-        Map<String, Integer> existenceProgress = null;
-        if (AdaptionConfig.ENABLE_EXISTENCE.get() && !data.bossCombatTicks.isEmpty()) {
-            Set<String> nearby = nearbyBossPaths(player);
-            for (Map.Entry<String, Integer> entry : data.bossCombatTicks.entrySet()) {
-                String path = entry.getKey();
-                if (data.existenceAdapted.contains(path) || !nearby.contains(path)) continue;
-                int ticks = entry.getValue();
-                if (ticks > 0) {
-                    if (existenceProgress == null) existenceProgress = new HashMap<>();
-                    existenceProgress.put(path, ticks);
-                }
-            }
-        }
+        Map<String, Integer> existenceProgress = visibleBossProgress(player, data);
         AdaptionSyncPayload payload = new AdaptionSyncPayload(
                 wearing,
                 data.adversityActive,
@@ -1985,7 +2052,7 @@ public class AdaptionEvents {
      * immediately; this is the recovery path, and it is why the row no longer depends on it.
      */
     private static int combatFistDone(PlayerAdaption data) {
-        int tier = ru.adaptionwheel.server.HardFist.currentTier(data);
+        int tier = ru.adaptionwheel.server.HardFist.trainingTier(data);
         if (tier < 0) {
             return 0;
         }
@@ -2004,16 +2071,13 @@ public class AdaptionEvents {
      * <p>Only a finished ladder still reports 0, because then there genuinely is nothing left.
      */
     private static int combatFistTotal(PlayerAdaption data) {
-        int tier = ru.adaptionwheel.server.HardFist.currentTier(data);
+        int tier = ru.adaptionwheel.server.HardFist.trainingTier(data);
         if (tier < 0) {
             return 0;
         }
         int level = data.level(ru.adaptionwheel.category.CombatFistTiers.concept(tier));
         if (level >= PlayerAdaption.MAX_LEVEL) {
-            int next = tier + 1;
-            return next < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT
-                    ? AdaptionConfig.fistKillsForNextLevel(next, 0)
-                    : 0;
+            return 0;
         }
         return AdaptionConfig.fistKillsForNextLevel(tier, level);
     }

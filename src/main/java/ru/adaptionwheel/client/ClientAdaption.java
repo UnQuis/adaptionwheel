@@ -6,6 +6,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.data.AdaptionTask;
+import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.network.AdaptionSyncPayload;
 
 import java.util.ArrayList;
@@ -184,6 +185,14 @@ public final class ClientAdaption {
             if (level(ru.adaptionwheel.category.CombatFistTiers.concept(tier)) > 0) {
                 granted = tier;
             }
+        }
+        if (granted >= 0
+                && level(ru.adaptionwheel.category.CombatFistTiers.concept(granted))
+                        >= PlayerAdaption.MAX_LEVEL
+                && granted + 1 < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT) {
+            // The mirror of HardFist.trainingTier: a maxed stage hands the next one the kills, and
+            // the row has to name the stage the server is actually counting towards.
+            return granted + 1;
         }
         return granted;
     }
