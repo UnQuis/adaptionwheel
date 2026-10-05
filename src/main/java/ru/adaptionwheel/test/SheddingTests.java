@@ -5,7 +5,6 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import ru.adaptionwheel.category.Concepts;
-import ru.adaptionwheel.category.WheelTier;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.effect.WildReleaseEffect;
@@ -76,48 +75,4 @@ public class SheddingTests {
         helper.succeed();
     }
 
-    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void aShedThatCostsAFamilyIsRefused(GameTestHelper helper) {
-
-        int threshold = WheelTier.nextThreshold(1);
-        PlayerAdaption lone = empty();
-        lone.levels.put(Concepts.ENV_LAVA, 1);
-
-        for (int i = 1; i < threshold; i++) {
-            lone.levels.put("Filler_" + i, 1);
-        }
-        lone.invalidateAdaptCount();
-        helper.assertTrue(lone.getAdaptCount() == threshold,
-                "test setup: expected exactly " + threshold + " adaptations, got "
-                        + lone.getAdaptCount());
-        int before = WheelTier.forCount(lone.getAdaptCount());
-        helper.assertTrue(before == WheelTier.forCount(threshold - 1) + 1,
-                "test setup: " + threshold + " must be the first count of a new tier");
-
-        helper.assertTrue(lone.levels.containsKey(Concepts.ENV_LAVA),
-                "test setup: the concept being shed must be one the player holds");
-        helper.assertTrue(Shedding.wouldDropTier(lone, Concepts.ENV_LAVA),
-                "shedding the last adaptation of a tier must be detected, holding "
-                        + lone.getAdaptCount() + " at tier " + before);
-
-        PlayerAdaption crowded = empty();
-        crowded.levels.put(Concepts.ENV_LAVA, 1);
-        for (int i = 0; i < threshold + 20; i++) {
-            crowded.levels.put("Filler_" + i, 1);
-        }
-        crowded.invalidateAdaptCount();
-        helper.assertTrue(!Shedding.wouldDropTier(crowded, "Filler_0"),
-                "a shed that leaves the tier intact must be allowed");
-        helper.succeed();
-    }
-
-    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void sheddingNeverDropsBelowTheFloor(GameTestHelper helper) {
-
-        PlayerAdaption lone = empty();
-        lone.levels.put(Concepts.ENV_LAVA, 1);
-        helper.assertTrue(!Shedding.wouldDropTier(lone, Concepts.ENV_LAVA),
-                "tier 0 is the floor; shedding the last adaptation cannot drop below it");
-        helper.succeed();
-    }
 }

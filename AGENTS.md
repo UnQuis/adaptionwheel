@@ -360,6 +360,42 @@ All three are on **both** branches and configured, not hard-coded.
   - `StructureTemplate` **writes** `DataVersion` but never reads it, so 1.21.1's template claiming
     `5023` (a much newer Minecraft) was harmless — it is now `3955`, which is what
     `DetectedVersion` reports for this branch. Do not mistake that for the bug; the two air paths above are.
+- **Unequipping the wheel did not take the effects with it, and the cause is that an attachment is
+  only half of what a worn wheel grants.** `data.reset()` clears the persistence and nothing else, so
+  anything the mod wrote *outside* the attachment simply stayed: **flight** is `Abilities.mayfly`, and
+  `tickFlight` — the only thing that ever grants it — runs *only while the wheel is worn*, so an
+  unequip left nothing able to take it away and the player kept flying, mid-air, indefinitely
+  (unequipping mid-air is also the case that strands them highest, which is why that is the one that
+  gets reported). **Synergy stat bonuses** are attribute modifiers: `SynergyEffects.forget` dropped
+  its four bookkeeping maps but never removed the modifier, and it was called *only on logout*, so the
+  bonus outlived the wheel. Both are revoked by one helper, `AdaptionEvents.revokeWearableState`,
+  called from the unequip branch **and from the wheel-swap branch** — the swap is the same exposure,
+  because `reset()` + `loadFromItem` hands the player a different wheel that may grant neither. It
+  revokes unconditionally rather than "if the concept is still granted": right after `reset()`
+  nothing is, and whatever the new wheel *does* grant is re-applied by the tick loop a tick later, so
+  revoking first is correct and costs one abilities packet.
+- **Wheel tiers were removed, but the wheel above the head kept growing — and the tiers were the
+  problem, not the growth.** The gate was real (`startTask` refused a concept whose family was not
+  yet revealed) and the thresholds were `12 / 35 / 75 / 140 / 240`, while **43 core concepts are
+  available from tier 0**. So tier 1 arrived during routine early play and tier 2 with most of the
+  core done — by which time the player had adapted to nothing that was actually gated. The label was
+  fiction, the gate was harmless. Gone now: `WheelTier`, the `wheelTiers` config, the per-tier
+  `statBonus` (which was +8% HP and +1.6 armour per tier, folded into the adapt-count bonus where it
+  could not be perceived), the HUD tier readout, the tier announcement, `min_tier` on the advancement
+  trigger, the five `tier_*` advancements **and the 23 advancements parented under them**, the
+  shedding refusal that existed only to protect a tier, and the altar's "revealed families sort
+  first". What survives is `1 + 0.55 * adaptCount / 60` on the wheel's scale, capped at 1.55, with a
+  grey-to-gold tint — smooth, no thresholds, nothing to be told about, and it needs no packet because
+  it is derived from `WheelData.adaptCount` off the item's own component. **Deleting the 5 tier
+  advancements meant rewiring 23 others**, since a missing parent drops its whole subtree with one
+  `ERROR Couldn't load advancements` line and no per-file reason; the rewire was verified to leave
+  nothing parented to a deleted tier and no unresolvable parent.
+- **The punching fist's HUD row is now drawn unconditionally**, like the breaking fist's. It used to
+  be gated on `combatFistProgressTotal > 0`, so a player who had never killed anything bare-handed saw
+  **no row at all** and therefore never learned the punch was trainable — a row that only appears once
+  you already know about it is not information. It reads `LOCKED - bare-handed kills` before the first
+  kill, and the meter now says **kills** rather than blocks (`Row.unit()`), because the breaking fist
+  counts blocks and the punching fist counts kills and both used to say "blocks".
 - **Do not "fix" a mod shader's path from the vanilla decompile — NeoForge patches
   `ShaderInstance`, and it prepends `shaders/core/` itself.** `SHADER` is `adaptionwheel:slash` for a
   file at `assets/adaptionwheel/shaders/core/slash.json`, and the JSON's `"vertex": "adaptionwheel:slash"`

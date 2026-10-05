@@ -48,12 +48,15 @@ public class WheelRenderer {
         float partialTick = event.getPartialTick();
         float height = entity.getBbHeight() + 0.45f;
 
-        int tier = tierFor(player);
         float wheelSize = (float) (double) AdaptionConfig.WHEEL_SIZE.get();
         float scale = wheelSize * PX_PER_BLOCK / MODEL_RADIUS_PX;
 
-        scale *= 1.0F + 0.12F * tier;
-        int tint = ru.adaptionwheel.category.WheelTier.color(tier);
+        // Growth is a smooth function of the adaptation count rather than a step per named tier:
+        // the wheel visibly fills out as the player adapts, with no thresholds to cross and
+        // nothing to be told about. Capped so a very late wheel cannot grow off the screen.
+        float growth = 1.0F + 0.55F * (adaptCountFor(player) / (float) WHEEL_GROWTH_REFERENCE);
+        scale *= Math.min(growth, MAX_GROWTH);
+        int tint = tintFor(adaptCountFor(player));
 
         float time = player.level().getGameTime() + partialTick;
         float bob = Mth.sin(time * BOB_SPEED) * BOB_AMPLITUDE;
@@ -77,9 +80,10 @@ public class WheelRenderer {
         poseStack.popPose();
     }
 
-    private static int tierFor(Player player) {
+    /** The wearer's adaptation count, read the same way for every player a client draws. */
+    private static int adaptCountFor(Player player) {
         if (player.isLocalPlayer()) {
-            return ru.adaptionwheel.category.WheelTier.forCount(ClientAdaption.adaptedCount);
+            return ClientAdaption.adaptedCount;
         }
 
         return CuriosApi.getCuriosInventory(player)
@@ -87,13 +91,26 @@ public class WheelRenderer {
                 .map(top.theillusivec4.curios.api.SlotResult::stack)
                 .map(stack -> stack.get(ModDataComponents.WHEEL_DATA.get()))
                 .map(ru.adaptionwheel.data.WheelData::adaptCount)
-                .map(ru.adaptionwheel.category.WheelTier::forCount)
                 .orElse(0);
+    }
+
+    /** Cool grey at nothing adapted, warming towards gold as the wheel fills out. */
+    private static int tintFor(int adaptCount) {
+        float t = Math.min(1.0F, adaptCount / (float) WHEEL_GROWTH_REFERENCE);
+        int r = (int) (0x4A + (0xFF - 0x4A) * t);
+        int g = (int) (0x4A + (0xD7 - 0x4A) * t);
+        int b = (int) (0x4A + (0x5C - 0x4A) * t);
+        return 0xFF000000 | r << 16 | g << 8 | b;
     }
 
     private static int tintWithAlpha(int rgb, int alpha) {
         return (alpha & 0xFF) << 24 | (rgb & 0x00FFFFFF);
     }
+
+    /** Adaptations at which the wheel has visibly filled out. */
+    private static final int WHEEL_GROWTH_REFERENCE = 60;
+    /** Upper bound on growth, so a very late wheel stays on screen. */
+    private static final float MAX_GROWTH = 1.55F;
 
     private static final java.util.Map<java.util.UUID, long[]> WEARING_CACHE = new java.util.HashMap<>();
     private static final long CACHE_TTL_TICKS = 10;

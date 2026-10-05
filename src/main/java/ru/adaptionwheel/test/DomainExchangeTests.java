@@ -45,7 +45,7 @@ public class DomainExchangeTests {
                 "the stone was left with no price list, so it would open and show nothing at all");
         for (Item item : DomainExchange.offerings()) {
             DomainExchange.Recipe recipe = DomainExchange.recipeFor(item);
-            List<String> pool = DomainExchange.candidates(empty(), 0, recipe);
+            List<String> pool = DomainExchange.candidates(empty(), recipe);
             helper.assertTrue(!pool.isEmpty(),
                     "the recipe for " + item + " offers nothing at all. Either a selector names a"
                             + " concept that does not exist, or it names a family whose concepts are"
@@ -57,13 +57,13 @@ public class DomainExchangeTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void anItemNarrowsRatherThanNames(GameTestHelper helper) {
         DomainExchange.Recipe feather = DomainExchange.recipeFor(Items.FEATHER);
-        List<String> levitation = DomainExchange.candidates(empty(), 0, feather);
+        List<String> levitation = DomainExchange.candidates(empty(), feather);
 
         helper.assertTrue(levitation.contains(ru.adaptionwheel.category.Concepts.debuff(net.minecraft.world.effect.MobEffects.LEVITATION)),
                 "a feather must buy levitation, got " + levitation);
 
         DomainExchange.Recipe star = DomainExchange.recipeFor(Items.NETHER_STAR);
-        List<String> damageTypes = DomainExchange.candidates(empty(), 0, star);
+        List<String> damageTypes = DomainExchange.candidates(empty(), star);
         helper.assertTrue(damageTypes.size() > 1,
                 "a nether star narrows to the damage-type family, so it must offer a choice rather"
                         + " than one answer");
@@ -79,11 +79,11 @@ public class DomainExchangeTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theStoneNeverSellsWhatTheWheelAlreadyHas(GameTestHelper helper) {
         DomainExchange.Recipe star = DomainExchange.recipeFor(Items.NETHER_STAR);
-        List<String> all = DomainExchange.candidates(empty(), 0, star);
+        List<String> all = DomainExchange.candidates(empty(), star);
         String bought = all.get(0);
-        helper.assertTrue(!DomainExchange.candidates(holding(bought), 0, star).contains(bought),
+        helper.assertTrue(!DomainExchange.candidates(holding(bought), star).contains(bought),
                 "an adaptation already held must not be on offer -- it would cost items for nothing");
-        helper.assertTrue(!DomainExchange.candidates(levelled(bought, 3), 0, star).contains(bought),
+        helper.assertTrue(!DomainExchange.candidates(levelled(bought, 3), star).contains(bought),
                 "a partially levelled adaptation must not be on offer either; the stone sells whole"
                         + " concepts, not the next rung");
         helper.succeed();
@@ -147,11 +147,11 @@ public class DomainExchangeTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theDeapestPriceTracksThePool(GameTestHelper helper) {
 
-        List<String> cheap = DomainExchange.candidates(empty(), 0,
+        List<String> cheap = DomainExchange.candidates(empty(),
                 DomainExchange.recipeFor(Items.FEATHER));
         helper.assertTrue(DomainExchange.dearestPrice(cheap) == 1,
                 "levitation is one level and must read as one");
-        List<String> broad = DomainExchange.candidates(empty(), 0,
+        List<String> broad = DomainExchange.candidates(empty(),
                 DomainExchange.recipeFor(Items.NETHER_STAR));
         helper.assertTrue(DomainExchange.dearestPrice(broad) == 2,
                 "damage types are two levels and must read as two");
@@ -165,7 +165,7 @@ public class DomainExchangeTests {
 
         DomainExchange.register(Items.REDSTONE, 1, "ADBERSITY", "Type_FIRE");
         try {
-            List<String> pool = DomainExchange.candidates(empty(), 0, DomainExchange.recipeFor(Items.REDSTONE));
+            List<String> pool = DomainExchange.candidates(empty(), DomainExchange.recipeFor(Items.REDSTONE));
             helper.assertTrue(!pool.contains(Concepts.ADVERSITY),
                     "the stone must never be a way to acquire adversity");
             helper.assertTrue(pool.contains("Type_FIRE"),
@@ -181,14 +181,14 @@ public class DomainExchangeTests {
 
         DomainExchange.Recipe star = DomainExchange.recipeFor(Items.NETHER_STAR);
         PlayerAdaption data = empty();
-        List<String> pool = DomainExchange.candidates(data, 0, star);
+        List<String> pool = DomainExchange.candidates(data, star);
         helper.assertTrue(pool.size() > 1, "this needs a pool with more than one entry to mean"
                 + " anything");
 
         for (int i = 1; i < pool.size(); i++) {
             String previous = pool.get(i - 1);
             String current = pool.get(i);
-            helper.assertTrue(compare(previous, current, 0) <= 0,
+            helper.assertTrue(compare(previous, current) <= 0,
                     "pool must be sorted, but " + previous + " came before " + current
                             + " out of order");
         }
@@ -196,13 +196,8 @@ public class DomainExchangeTests {
         helper.succeed();
     }
 
-    private static int compare(String a, String b, int tier) {
-        int revealed = Integer.compare(
-                ru.adaptionwheel.category.WheelTier.familyUnlocked(b, tier) ? 0 : 1,
-                ru.adaptionwheel.category.WheelTier.familyUnlocked(a, tier) ? 0 : 1);
-        if (revealed != 0) {
-            return revealed;
-        }
+    /** Mirrors DomainExchange.orderingFor(): domain name, then concept name. */
+    private static int compare(String a, String b) {
         int domain = DomainExchange.domainOf(a).name().compareTo(DomainExchange.domainOf(b).name());
         return domain != 0 ? domain : a.compareTo(b);
     }
@@ -263,7 +258,7 @@ public class DomainExchangeTests {
                 "an empty slot is not an offering");
         helper.assertTrue(DomainExchange.recipeFor(new net.minecraft.world.item.ItemStack(Items.DIRT)) == null,
                 "dirt is not an offering, and must read as null rather than as an empty recipe");
-        helper.assertTrue(DomainExchange.candidates(empty(), 0, null).isEmpty(),
+        helper.assertTrue(DomainExchange.candidates(empty(), null).isEmpty(),
                 "a null recipe must give an empty pool, not a crash");
         helper.succeed();
     }

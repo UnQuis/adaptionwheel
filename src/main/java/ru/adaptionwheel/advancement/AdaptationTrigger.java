@@ -4,7 +4,6 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.advancements.CriterionTrigger;
 import net.minecraft.advancements.critereon.SimpleCriterionTrigger;
-import ru.adaptionwheel.category.WheelTier;
 import ru.adaptionwheel.data.PlayerAdaption;
 
 import java.util.Optional;
@@ -36,7 +35,6 @@ public class AdaptationTrigger extends SimpleCriterionTrigger<AdaptationTrigger.
     public record Instance(Optional<String> concept,
                            Optional<Integer> minLevel,
                            Optional<Integer> minAdaptCount,
-                           Optional<Integer> minTier,
                            Optional<Integer> minSheds,
                            Optional<Boolean> anySynergy,
                            Optional<Boolean> anyResonance) implements SimpleInstance {
@@ -45,7 +43,6 @@ public class AdaptationTrigger extends SimpleCriterionTrigger<AdaptationTrigger.
                 Codec.STRING.optionalFieldOf("concept").forGetter(Instance::concept),
                 Codec.INT.optionalFieldOf("min_level").forGetter(Instance::minLevel),
                 Codec.INT.optionalFieldOf("min_adapt_count").forGetter(Instance::minAdaptCount),
-                Codec.INT.optionalFieldOf("min_tier").forGetter(Instance::minTier),
                 Codec.INT.optionalFieldOf("min_sheds").forGetter(Instance::minSheds),
                 Codec.BOOL.optionalFieldOf("any_synergy").forGetter(Instance::anySynergy),
                 Codec.BOOL.optionalFieldOf("any_resonance").forGetter(Instance::anyResonance)
@@ -54,9 +51,6 @@ public class AdaptationTrigger extends SimpleCriterionTrigger<AdaptationTrigger.
         public boolean matches(net.minecraft.server.level.ServerPlayer player,
                                 PlayerAdaption data) {
             if (minAdaptCount.isPresent() && data.getAdaptCount() < minAdaptCount.get()) {
-                return false;
-            }
-            if (minTier.isPresent() && WheelTier.forCount(data.getAdaptCount()) < minTier.get()) {
                 return false;
             }
             if (concept.isPresent() && !holds(data, concept.get())) {

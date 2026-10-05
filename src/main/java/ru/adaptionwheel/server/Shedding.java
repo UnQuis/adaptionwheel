@@ -6,7 +6,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import ru.adaptionwheel.category.Concepts;
-import ru.adaptionwheel.category.WheelTier;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.effect.ModEffects;
@@ -24,9 +23,7 @@ public final class Shedding {
         NOT_HELD,
 
         STILL_ANALYSING,
-        DURING_ADVERSITY,
-
-        WOULD_DROP_TIER
+        DURING_ADVERSITY
     }
 
     public static Refusal canShed(ServerPlayer player, PlayerAdaption data, String concept) {
@@ -41,17 +38,7 @@ public final class Shedding {
 
             return isAnalysing(data, concept) ? Refusal.STILL_ANALYSING : Refusal.NOT_HELD;
         }
-        if (AdaptionConfig.SHEDDING_PROTECT_TIER.get() && wouldDropTier(data, concept)) {
-            return Refusal.WOULD_DROP_TIER;
-        }
         return Refusal.OK;
-    }
-
-    public static boolean wouldDropTier(PlayerAdaption data, String concept) {
-        int before = WheelTier.forCount(data.getAdaptCount());
-        int contributed = data.isAdapted(concept) || data.level(concept) > 0 ? 1 : 0;
-        int after = WheelTier.forCount(Math.max(0, data.getAdaptCount() - contributed));
-        return after < before;
     }
 
     public static Refusal shed(ServerPlayer player, PlayerAdaption data, String concept) {

@@ -47,11 +47,22 @@ public final class SynergyEffects {
 
     private static final Map<UUID, Long> LAST_ON_FIRE = new HashMap<>();
 
-    public static void forget(UUID id) {
+    /**
+     * Drops everything this class remembers about a player, including the stat bonus it applied.
+     *
+     * <p>Forgetting the bookkeeping is not enough on its own: the swim-speed bonus lives in an
+     * attribute modifier, not in the attachment, so an unequipped player kept it until they logged
+     * out. Same shape as flight's {@code mayfly} — see {@link FlightAbility}. The one modifier this
+     * class installs is named here rather than inferred, so adding a second one without revoking it
+     * is a visible omission rather than a silent one.
+     */
+    public static void forget(ServerPlayer player) {
+        UUID id = player.getUUID();
         ACTIVE.remove(id);
         STRENGTH.remove(id);
         CHAINED.remove(id);
         LAST_ON_FIRE.remove(id);
+        player.getAttribute(NeoForgeMod.SWIM_SPEED).removeModifier(WALTZ_SWIM_SPEED);
     }
 
     public static void refresh(ServerPlayer player, PlayerAdaption data) {

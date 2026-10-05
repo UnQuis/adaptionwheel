@@ -749,7 +749,8 @@ public class AdaptionEvents {
 
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
-        UUID id = event.getEntity().getUUID();
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        UUID id = player.getUUID();
         PENDING_RESPAWN_HEALTH.remove(id);
         PENDING_RESPAWN_ARMED.remove(id);
         PROXIMITY_HEAT_CACHE.remove(id);
@@ -760,7 +761,7 @@ public class AdaptionEvents {
         DIMENSION_SLASH_LAST.remove(id);
         FistMastery.forget(id);
         HardFist.forget(id);
-        SynergyEffects.forget(id);
+        SynergyEffects.forget(player);
     }
 
     @SubscribeEvent
@@ -835,6 +836,7 @@ public class AdaptionEvents {
                 }
             }
             data.reset();
+            revokeWearableState(player);
             FistMastery.forget(player.getUUID());
         HardFist.forget(player.getUUID());
             PENDING_RESPAWN_HEALTH.remove(player.getUUID());
@@ -848,6 +850,10 @@ public class AdaptionEvents {
             if (equipped != null && data.equippedStack != null && equipped != data.equippedStack) {
                 saveToStack(data.equippedStack, data);
                 data.reset();
+                // The new wheel may grant neither flight nor the synergies the old one did, so the
+                // state that lives outside the attachment has to be taken back here too. Whatever
+                // the new wheel does grant is re-applied by the tick loop on its next pass.
+                revokeWearableState(player);
                 loadFromItem(player, data);
                 applyStats(player, data);
                 sync(player, data, true);
@@ -1029,7 +1035,6 @@ public class AdaptionEvents {
         }
         restorePendingRespawnHealth(player);
 
-        announceWheelTier(player, data);
         SynergyEffects.refresh(player, data);
         SynergyEffects.tickPassive(player);
 
@@ -1460,11 +1465,6 @@ public class AdaptionEvents {
         if (data.adversityActive || !data.isEnabled(concept) || data.isAdapted(concept)
                 || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
 
-        if (AdaptionConfig.WHEEL_TIERS_ENABLED.get()
-                && !ru.adaptionwheel.category.WheelTier.familyUnlocked(
-                        concept, ru.adaptionwheel.category.WheelTier.forCount(data.getAdaptCount()))) {
-            return;
-        }
         if (data.tasks.size() >= AdaptionConfig.MAX_SIMULTANEOUS_ADAPTATIONS.get()) return;
         for (AdaptionTask task : data.tasks) {
             if (task.concept.equals(concept)) return;
@@ -1824,47 +1824,45 @@ public class AdaptionEvents {
         }
     }
 
-    private static void announceWheelTier(ServerPlayer player, PlayerAdaption data) {
-        if (!AdaptionConfig.WHEEL_TIERS_ENABLED.get() || !wearingWheel(player)) {
-            return;
+    /**
+     * Takes back every grant that does not live in {@link PlayerAdaption}, so losing the wheel
+     * loses the effects too.
+     *
+     * <p>{@code data.reset()} cannot do this, and that is the trap: the attachment is only half of
+     * what a worn wheel grants. Two grants sit outside it and both outlived the wheel.
+     *
+     * <ul>
+     *   <li><b>Flight</b> is {@code Abilities.mayfly}, and the loop that grants it
+     *       ({@code tickFlight}) only runs while the wheel is worn. So an unequip left nothing able
+     *       to take it away, and the player kept flying, mid-air, indefinitely. Unequipping mid-air
+     *       is also the case that strands them highest, which is why it is the one that gets
+     *       reported.</li>
+     *   <li><b>Synergy stat bonuses</b> are attribute modifiers installed by
+     *       {@code SynergyEffects}. Its {@code forget} dropped the bookkeeping maps but not the
+     *       modifier, so the bonus survived an unequip and lasted until logout.</li>
+     * </ul>
+     *
+     * <p>Both are revoked unconditionally rather than "if the concept is still granted", because
+     * right after {@code reset()} nothing is: the concepts may just as well live on a different
+     * wheel, in which case the tick loop re-applies them a tick later. Revoking first is therefore
+     * both correct and cheap — {@link FlightAbility#apply} reports whether anything actually
+     * changed, so an abilities packet goes out only on a real transition.
+     */
+    private static void revokeWearableState(ServerPlayer player) {
+        if (FlightAbility.apply(player.getAbilities(), false)) {
+            player.onUpdateAbilities();
         }
-        int tier = ru.adaptionwheel.category.WheelTier.forCount(data.getAdaptCount());
-        if (tier == data.lastTierAnnounced) {
-            return;
-        }
-
-        data.lastTierAnnounced = tier;
-        if (tier <= 0) {
-            return;
-        }
-        int next = ru.adaptionwheel.category.WheelTier.nextThreshold(tier);
-        player.displayClientMessage(net.minecraft.network.chat.Component
-                .translatable("adaptionwheel.msg.wheel_tier",
-                        Component.translatable(ru.adaptionwheel.category.WheelTier.nameKey(tier)))
-                .withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD), false);
-        if (next > 0) {
-            player.displayClientMessage(net.minecraft.network.chat.Component
-                    .translatable("adaptionwheel.msg.wheel_tier_next", next)
-                    .withStyle(ChatFormatting.GRAY), false);
-        }
-        player.level().playSound(null, player.blockPosition(), ModSounds.REF.get(),
-                SoundSource.PLAYERS, 0.7f, 1.6f);
-        spawnWheelParticles(player, data);
-        sync(player, data, true);
+        SynergyEffects.forget(player);
     }
 
     private static void applyStats(ServerPlayer player, PlayerAdaption data) {
         int count = data.getAdaptCount();
 
-        int tier = AdaptionConfig.WHEEL_TIERS_ENABLED.get()
-                ? ru.adaptionwheel.category.WheelTier.forCount(count) : 0;
-        double tierBonus = ru.adaptionwheel.category.WheelTier.statBonus(tier);
-
         applyStat(player.getAttribute(Attributes.MAX_HEALTH), HP_MODIFIER,
-                (count * AdaptionConfig.BONUS_HP_PCT.get() / 100.0) + tierBonus,
+                count * AdaptionConfig.BONUS_HP_PCT.get() / 100.0,
                 AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
         applyStat(player.getAttribute(Attributes.ARMOR), ARMOR_MODIFIER,
-                count * AdaptionConfig.BONUS_ARMOR_FLAT.get() + (float) (tierBonus * 20.0),
+                count * AdaptionConfig.BONUS_ARMOR_FLAT.get(),
                 AttributeModifier.Operation.ADD_VALUE);
 
         boolean liquid = data.isEnabled(Concepts.ENV_LIQUID) && data.active(Concepts.ENV_LIQUID);
