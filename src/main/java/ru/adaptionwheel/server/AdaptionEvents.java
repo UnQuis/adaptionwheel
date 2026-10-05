@@ -938,30 +938,30 @@ public class AdaptionEvents {
         applyEnvEffects(player, data);
         applySurfaceEffects(player, data);
 
-        if (!data.isAdapted(Concepts.MUTATION_THERMAL)
+        if (!data.active(Concepts.MUTATION_THERMAL)
                 && data.level(Concepts.type(AdaptionCategory.FIRE)) >= PlayerAdaption.MAX_LEVEL
                 && data.active(Concepts.ENV_LAVA)) {
             grantComboMutation(player, data, Concepts.MUTATION_THERMAL);
-        } else if (data.isAdapted(Concepts.MUTATION_THERMAL)) {
+        } else if (data.active(Concepts.MUTATION_THERMAL)) {
             tickThermalRegeneration(player, data);
         }
         if (AdaptionConfig.ENABLE_MUTATION_AQUATIC.get()) {
-            if (!data.isAdapted(Concepts.MUTATION_AQUATIC)
+            if (!data.active(Concepts.MUTATION_AQUATIC)
                     && data.active(Concepts.ENV_LIQUID) && data.active(Concepts.ENV_DROWN)) {
                 grantComboMutation(player, data, Concepts.MUTATION_AQUATIC);
             }
         }
         if (AdaptionConfig.ENABLE_MUTATION_IMPACT.get()) {
-            if (!data.isAdapted(Concepts.MUTATION_IMPACT)
+            if (!data.active(Concepts.MUTATION_IMPACT)
                     && data.active(Concepts.ENV_FALL) && data.active(Concepts.ENV_KNOCKBACK)) {
                 grantComboMutation(player, data, Concepts.MUTATION_IMPACT);
-            } else if (data.isAdapted(Concepts.MUTATION_IMPACT)) {
+            } else if (data.active(Concepts.MUTATION_IMPACT)) {
                 tickImpactStomp(player, data);
             }
         }
 
         if (AdaptionConfig.ENABLE_MUTATION_SEA_EYE.get()
-                && !data.isAdapted(Concepts.MUTATION_SEA_EYE)
+                && !data.active(Concepts.MUTATION_SEA_EYE)
                 && data.active(Concepts.ENV_LIQUID)
                 && data.active(Concepts.ENV_DROWN)
                 && data.active(Concepts.ENV_LAVA)) {
@@ -972,14 +972,14 @@ public class AdaptionEvents {
         }
 
         if (AdaptionConfig.ENABLE_INVENTORY_ADAPTATION.get()
-                && !data.isAdapted(Concepts.ENV_INVENTORY)
+                && !data.active(Concepts.ENV_INVENTORY)
                 && CacheService.inventoryIsFull(player)) {
             startTask(player, data, Concepts.ENV_INVENTORY,
                     (int) (AdaptionConfig.INVENTORY_ADAPTATION_SECONDS.get() * 20));
         }
 
         if (AdaptionConfig.DIMENSION_DESTROY_ENABLED.get()
-                && !data.isAdapted(Concepts.DIMENSION_DESTROY)
+                && !data.active(Concepts.DIMENSION_DESTROY)
                 && data.getAdaptCount() > AdaptionConfig.DIMENSION_DESTROY_REQUIRED.get()) {
             grantComboMutation(player, data, Concepts.DIMENSION_DESTROY);
         }
@@ -1197,14 +1197,14 @@ public class AdaptionEvents {
     }
 
     private static void tickFlight(ServerPlayer player, PlayerAdaption data) {
-        if (!data.isAdapted(Concepts.MUTATION_FLIGHT)
+        if (!data.active(Concepts.MUTATION_FLIGHT)
                 && player.getY() >= AdaptionConfig.FLIGHT_ALTITUDE.get()
                 && data.level(Concepts.contact(FLIGHT_MOB)) >= PlayerAdaption.MAX_LEVEL
                 && data.isAdapted(Concepts.debuff(FLIGHT_LEVITATION))) {
             grantComboMutation(player, data, Concepts.MUTATION_FLIGHT);
             return;
         }
-        if (!data.isAdapted(Concepts.MUTATION_FLIGHT) || player.isCreative() || player.isSpectator()) {
+        if (!data.active(Concepts.MUTATION_FLIGHT) || player.isCreative() || player.isSpectator()) {
             return;
         }
         if (data.isEnabled(Concepts.MUTATION_FLIGHT)) {
@@ -1403,7 +1403,7 @@ public class AdaptionEvents {
     }
 
     private static void applySurfaceEffects(ServerPlayer player, PlayerAdaption data) {
-        if (!data.isAdapted(Concepts.ENV_LAVA) || !player.isInLava()) return;
+        if (!data.active(Concepts.ENV_LAVA) || !player.isInLava()) return;
         double waterEff = player.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY)
                 * (player.onGround() ? 1.0 : 0.5);
         double f4 = player.isSprinting() ? 0.9 : 0.8;
@@ -1776,7 +1776,7 @@ public class AdaptionEvents {
             return;
         }
         PlayerAdaption data = data(player);
-        if (data.isAdapted(Concepts.ENV_KNOCKBACK)) {
+        if (data.active(Concepts.ENV_KNOCKBACK)) {
 
             event.setCanceled(true);
         } else if (AdaptionConfig.ENABLE_ENVIRONMENT.get() && !data.adversityActive) {
@@ -1875,8 +1875,7 @@ public class AdaptionEvents {
                 liquid ? 0.8 : 0.0, AttributeModifier.Operation.ADD_VALUE);
 
         boolean aquatic = AdaptionConfig.ENABLE_MUTATION_AQUATIC.get()
-                && data.isEnabled(Concepts.MUTATION_AQUATIC)
-                && data.isAdapted(Concepts.MUTATION_AQUATIC);
+                && data.active(Concepts.MUTATION_AQUATIC);
         applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), AQUATIC_SWIM_SPEED_MODIFIER,
                 aquatic ? AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get() : 0.0, AttributeModifier.Operation.ADD_VALUE);
         applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), AQUATIC_SWIM_EFFICIENCY_MODIFIER,
@@ -1947,9 +1946,40 @@ public class AdaptionEvents {
                 FistMastery.instabreakStance(player),
                 FistMastery.tierProgress(player.getUUID(), data),
                 fistProgressTotal(data),
+                combatFistDone(data),
+                combatFistTotal(data),
                 new ArrayList<>(data.disabled)
         );
         AdaptionSyncPayload.sendTo(player, payload);
+    }
+
+    /**
+     * Kills banked toward the punching fist's next level, for the 1 Hz sync.
+     *
+     * <p>These used to travel only on {@code CombatFistProgressPayload}, which is sent when a kill
+     * lands. So on relogin the mirror held zero and the row came back as a full bar until the player
+     * killed something. The per-kill payload stays, because it is what makes a kill show up
+     * immediately; this is the recovery path, and it is why the row no longer depends on it.
+     */
+    private static int combatFistDone(PlayerAdaption data) {
+        int tier = ru.adaptionwheel.server.HardFist.currentTier(data);
+        if (tier < 0) {
+            return 0;
+        }
+        return data.progress.getOrDefault(ru.adaptionwheel.data.Extras.punchingKey(tier), 0);
+    }
+
+    /** 0 means "nothing banked", which for a maxed stage is also true -- see {@link #combatFistTotal}. */
+    private static int combatFistTotal(PlayerAdaption data) {
+        int tier = ru.adaptionwheel.server.HardFist.currentTier(data);
+        if (tier < 0) {
+            return 0;
+        }
+        int level = data.level(ru.adaptionwheel.category.CombatFistTiers.concept(tier));
+        if (level >= PlayerAdaption.MAX_LEVEL) {
+            return 0;
+        }
+        return AdaptionConfig.fistKillsForNextLevel(tier, level);
     }
 
     private static int fistProgressTotal(PlayerAdaption data) {

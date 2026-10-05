@@ -106,6 +106,11 @@ public final class ClientAdaption {
         instabreakActive = payload.instabreakActive();
         fistProgressDone = payload.fistProgressDone();
         fistProgressTotal = payload.fistProgressTotal();
+        combatFistProgressDone = payload.combatFistDone();
+        combatFistProgressTotal = payload.combatFistTotal();
+        // The stage comes from the levels map, not the payload, so it survives a relog even if a
+        // build ever stops sending it: a stage is granted once and never withdrawn.
+        combatFistProgressTier = combatFistTier();
         syncedAtGameTime = currentGameTime();
     }
 

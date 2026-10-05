@@ -3,7 +3,6 @@ package ru.adaptionwheel.client;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import ru.adaptionwheel.data.PlayerAdaption;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -86,19 +85,23 @@ public class AdaptionHud {
                     ClientAdaption.fistProgressTotal, suffix));
         }
 
-        // Always drawn, exactly like the breaking fist's row above. It used to be conditional on
-        // progress existing, which meant a player who had never killed anything bare-handed saw
-        // no row at all -- and therefore never learned the punch was trainable. A row that only
-        // appears once you already know about it is not information.
+        // The row appears only once the punch is trainable -- the first bare-handed hostile kill --
+        // and then stays for good. The gate is `combatFistTier()`, derived from the synced LEVELS
+        // map, not from the per-kill progress fields: those travel on `CombatFistProgressPayload`,
+        // which is only sent when a kill lands and is cleared on logout, so gating on them would
+        // make the row vanish again on every relogin after the player had already unlocked it.
+        // Deriving it from levels also means "unlocked" is the same condition the server used,
+        // rather than a second one that can disagree with it.
         {
-            int tier = Math.max(0, ClientAdaption.combatFistProgressTier);
-            tier = Math.min(tier, ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT - 1);
-            String suffix = ClientAdaption.combatFistProgressTotal <= 0
-                    ? "LOCKED - bare-handed kills"
-                    : tierKillsSuffix(tier);
-            rows.add(new Row(ru.adaptionwheel.category.CombatFistTiers.concept(tier),
-                    combatFistProgress(), false, ClientAdaption.combatFistProgressDone,
-                    ClientAdaption.combatFistProgressTotal, suffix));
+            int trained = ClientAdaption.combatFistTier();
+            if (trained >= 0) {
+                int tier = Math.min(trained, ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT - 1);
+                boolean maxed = ClientAdaption.combatFistProgressTotal <= 0;
+                rows.add(new Row(ru.adaptionwheel.category.CombatFistTiers.concept(tier),
+                        maxed ? 1f : combatFistProgress(), false,
+                        ClientAdaption.combatFistProgressDone,
+                        ClientAdaption.combatFistProgressTotal, maxed ? "MAX" : tierKillsSuffix(tier)));
+            }
         }
         rows.sort(Comparator.comparingInt(r -> priority(r.concept)));
 
@@ -229,13 +232,9 @@ public class AdaptionHud {
     }
 
     /** "3/7 kills" for the current stage, so the row says what is left rather than only a bar. */
+    /** "3/7 kills", so the row says what is left rather than showing only a bar. */
     private static String tierKillsSuffix(int tier) {
-        int done = ClientAdaption.combatFistProgressDone;
-        int total = ClientAdaption.combatFistProgressTotal;
-        if (total <= 0) {
-            return null;
-        }
-        return done + "/" + total + (done >= PlayerAdaption.MAX_LEVEL ? " MAX" : "");
+        return ClientAdaption.combatFistProgressDone + "/" + ClientAdaption.combatFistProgressTotal;
     }
 
     private static float combatFistProgress() {

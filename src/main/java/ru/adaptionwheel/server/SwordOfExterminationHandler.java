@@ -94,7 +94,7 @@ public final class SwordOfExterminationHandler {
             return;
         }
         PlayerAdaption data = player.getData(AttachmentTypes.ADAPTION);
-        if (!data.isAdapted(ru.adaptionwheel.category.Concepts.DIMENSION_DESTROY)) {
+        if (!data.active(ru.adaptionwheel.category.Concepts.DIMENSION_DESTROY)) {
             return;
         }
         long now = player.level().getGameTime();
@@ -113,6 +113,7 @@ public final class SwordOfExterminationHandler {
         }
         player.level().playSound(null, player.blockPosition(),
                 ModSounds.SWING.get(), SoundSource.PLAYERS, 1.2f, 0.6f);
+        ru.adaptionwheel.network.RiftImpactPayload.send(player);
 
         player.displayClientMessage(net.minecraft.network.chat.Component.literal("DESTROY THE DIMENSION")
                 .withStyle(net.minecraft.ChatFormatting.BLACK, net.minecraft.ChatFormatting.BOLD), true);

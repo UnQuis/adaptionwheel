@@ -30,6 +30,8 @@ public record AdaptionSyncPayload(
         boolean instabreakActive,
         int fistProgressDone,
         int fistProgressTotal,
+        int combatFistDone,
+        int combatFistTotal,
         List<String> disabled
 ) implements CustomPacketPayload {
 
@@ -73,6 +75,8 @@ public record AdaptionSyncPayload(
                 buf.writeBoolean(p.instabreakActive);
                 buf.writeVarInt(p.fistProgressDone);
                 buf.writeVarInt(p.fistProgressTotal);
+                buf.writeVarInt(p.combatFistDone);
+                buf.writeVarInt(p.combatFistTotal);
                 buf.writeVarInt(p.disabled.size());
                 for (String concept : p.disabled) {
                     buf.writeUtf(concept);
@@ -114,6 +118,8 @@ public record AdaptionSyncPayload(
                 boolean instabreakActive = buf.readBoolean();
                 int fistProgressDone = buf.readVarInt();
                 int fistProgressTotal = buf.readVarInt();
+                int combatFistDone = buf.readVarInt();
+                int combatFistTotal = buf.readVarInt();
                 List<String> disabled = new ArrayList<>();
                 int disabledCount = buf.readVarInt();
                 for (int i = 0; i < disabledCount; i++) {
@@ -121,7 +127,8 @@ public record AdaptionSyncPayload(
                 }
                 return new AdaptionSyncPayload(wearing, adversity, count, advTimer, advCooldown,
                         rotation, tasks, levels, adapted, history, existenceProgress, existenceThreshold,
-                        instabreakActive, fistProgressDone, fistProgressTotal, disabled);
+                        instabreakActive, fistProgressDone, fistProgressTotal,
+                        combatFistDone, combatFistTotal, disabled);
             }
     );
 

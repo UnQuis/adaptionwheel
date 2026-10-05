@@ -428,6 +428,31 @@ All three are on **both** branches and configured, not hard-coded.
   unchanged, **no speech cut** — a threshold low enough to reach the quietest syllables would take
   them too. Measured with `silencedetect` on a decoded WAV rather than by ear, and the same trim is
   applied to both branches because the file is shared.
+- **The off switch was a no-op for eight adaptations, and the cause is that `isAdapted` and `active`
+  are a line apart and both return `boolean`.** `isAdapted` answers "do you HAVE this"; `active`
+  answers "does it currently apply". An effect site that asks the first one keeps granting the
+  effect while the panel shows the switch off. All eight were one-token mistakes: `FistMastery`
+  (disabling `Mutation_Fist` left the breaking fist working), `SkillIssueHandler` (homing arrows),
+  `SwordOfExterminationHandler` (rifts kept firing), the impact stomp, thermal regen, aquatic stats,
+  lava swim, knockback immunity — plus **six grant sites** where a disabled mutation was granted
+  again the moment its requirements were met, flight included (`tickFlight` re-granted itself and
+  then read the grant as satisfied). Every one compiles, passes every existing test, and produces a
+  switch that does nothing. `isAdapted` is still correct in ~9 places and the distinction is load
+  bearing: the altar, shedding and the panel all read it, so it must keep answering "have it" —
+  which is why a switch must not erase the adaptation. **`DisableTests` (4 tests)** pins the two
+  accessors disagreeing, that a level survives being switched off (re-enabling must not drop the
+  player back to 0), and that the disabled set round trips a save — its first version asserted a
+  codec was non-null, which passes even if the set were dropped from the record, so it was rewritten
+  as a real round trip. 109 gametests.
+- **The punching fist's HUD row appears on the first bare-handed kill and then stays forever.** The
+  gate is `ClientAdaption.combatFistTier()`, derived from the synced `LEVELS` map — **not** from
+  `combatFistProgressTier`, which arrives on `CombatFistProgressPayload` and is cleared on logout, so
+  gating on it would make the row vanish again on every relog. Deriving it from levels also makes
+  "unlocked" the same condition the server used instead of a second one that can disagree. That
+  exposed a gap: the punching fist's counters were **never in the 1 Hz sync at all** (the breaking
+  fist's were), so after a relog the row came back with an empty bar until the player killed
+  something. `AdaptionSyncPayload` now carries `combatFistDone`/`combatFistTotal` as the recovery
+  path; the per-kill payload stays because that is what makes a kill show up immediately.
 - **Do not "fix" a mod shader's path from the vanilla decompile — NeoForge patches
   `ShaderInstance`, and it prepends `shaders/core/` itself.** `SHADER` is `adaptionwheel:slash` for a
   file at `assets/adaptionwheel/shaders/core/slash.json`, and the JSON's `"vertex": "adaptionwheel:slash"`

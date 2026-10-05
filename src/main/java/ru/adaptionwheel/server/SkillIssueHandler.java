@@ -46,7 +46,7 @@ public final class SkillIssueHandler {
         }
         if (!AdaptionConfig.SKILL_ISSUE_ENABLED.get()
                 || !AdaptionEvents.isWearingWheel(shooter)
-                || !AdaptionEvents.dataOf(shooter).isAdapted(Concepts.COMBAT_SKILL_ISSUE)) {
+                || !AdaptionEvents.dataOf(shooter).active(Concepts.COMBAT_SKILL_ISSUE)) {
             return;
         }
 
