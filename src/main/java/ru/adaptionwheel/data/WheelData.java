@@ -49,8 +49,22 @@ public record WheelData(
         );
     }
 
+    /**
+     * Merges this wheel's data into the player attachment, taking the higher level of each concept.
+     *
+     * <p>This deliberately does <b>not</b> migrate this record's own collections first, even though it
+     * used to. {@code LegacyConcepts.migrate} renames keys <i>in place</i>, and a {@code WheelData}
+     * that came off a Data Component is not required to hold mutable ones -- so that line threw
+     * {@code UnsupportedOperationException} out of {@code ImmutableMap.remove} on the equip tick and
+     * killed the world, every time a player put the wheel on. The migration was redundant anyway:
+     * everything merged below lands in {@code data}, which is migrated at the end of this method, so
+     * renaming the source first and the destination afterwards is the same work done twice.
+     *
+     * <p>It is a merge and never a replace. A replace is what silently destroyed an adaptation
+     * granted while the wheel was off: it lived only in the attachment, the equip transition wiped
+     * the attachment and copied the item's data over it, and the grant was gone with nothing logged.
+     */
     public void loadInto(PlayerAdaption data) {
-        LegacyConcepts.migrate(levels, adapted, history);
         levels.forEach((concept, level) -> data.levels.merge(concept, level, Math::max));
         data.adapted.addAll(adapted);
         data.existenceAdapted.addAll(existenceAdapted);
