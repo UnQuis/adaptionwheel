@@ -76,6 +76,52 @@ public class CombatFistTests {
     }
 
     /**
+     * The two-tone bar is a marker for crossing a material boundary, not a second colour scheme.
+     *
+     * <p>The request was explicitly "half one colour, half another, but ONLY when the player passes
+     * 8 -&gt; 1 stage — this must NOT work always, only on that kind of level". So the half of the
+     * rule that is easy to get wrong is the {@code false} half: this walks every level of every
+     * stage and asserts that exactly one of them splits.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void barSplitsOnlyOnTheHandoverLevel(GameTestHelper helper) {
+
+        int splits = 0;
+        for (int tier = 1; tier < CombatFistTiers.TIER_COUNT; tier++) {
+            int previousMaxed = PlayerAdaption.MAX_LEVEL;
+            for (int level = 0; level <= PlayerAdaption.MAX_LEVEL; level++) {
+                boolean split = FistTiers.showsHandover(level, previousMaxed);
+                if (split) {
+                    helper.assertTrue(level == 1,
+                            "stage " + tier + " split the bar at level " + level
+                                    + "; only the handover level may split");
+                    helper.assertTrue(CombatFistTiers.showsHandover(level, previousMaxed),
+                            "the punching fist must agree with the breaking fist about the handover");
+                    splits++;
+                }
+            }
+        }
+        helper.assertTrue(splits == CombatFistTiers.TIER_COUNT - 1,
+                "expected exactly one split per stage after the first (" + (CombatFistTiers.TIER_COUNT - 1)
+                        + "), got " + splits);
+
+        // Level 1 only splits once the stage below is actually finished.
+        for (int level = 0; level <= PlayerAdaption.MAX_LEVEL; level++) {
+            for (int previous = 0; previous <= PlayerAdaption.MAX_LEVEL; previous++) {
+                boolean expected = level == 1 && previous >= PlayerAdaption.MAX_LEVEL;
+                helper.assertTrue(FistTiers.showsHandover(level, previous) == expected,
+                        "level " + level + " with the previous stage at " + previous
+                                + " should " + (expected ? "" : "not ") + "split the bar");
+            }
+        }
+
+        // The first stage has no predecessor, so nothing to hand over from.
+        helper.assertTrue(!FistTiers.showsHandover(1, 0),
+                "wood at level 1 is not a handover, there is nothing before it");
+        helper.succeed();
+    }
+
+    /**
      * The adapt-count bonus has to be worth something at the top end.
      *
      * <p>At the old 0.04, 150 adaptations gave x7 while the Diamond stage multiplier alone is x8 —

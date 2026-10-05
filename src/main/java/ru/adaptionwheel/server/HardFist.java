@@ -61,7 +61,6 @@ public final class HardFist {
         return data.levelOrZero(CombatFistTiers.concept(tier)) >= PlayerAdaption.MAX_LEVEL;
     }
 
-    /** Nothing in the hand that adds attack damage: a fist, not a sword. */
     /**
      * Whether this kill trains the punching fist.
      *

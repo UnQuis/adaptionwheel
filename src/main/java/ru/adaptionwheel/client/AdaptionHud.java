@@ -180,7 +180,7 @@ public class AdaptionHud {
             int half = BAR_WIDTH / 2;
             graphics.fill(15, y + 24, 15 + half, y + 24 + BAR_HEIGHT,
                     withAlpha(row.handedOverFrom, opacity * 55 / 100));
-            graphics.fill(15 + half, y + 24, 15 + barW, y + 24 + BAR_HEIGHT,
+            graphics.fill(15 + half, y + 24, 15 + BAR_WIDTH, y + 24 + BAR_HEIGHT,
                     withAlpha(color, opacity * 90 / 100));
         } else {
             graphics.fill(15, y + 24, 15 + barW, y + 24 + BAR_HEIGHT, withAlpha(color, opacity * 90 / 100));
@@ -256,7 +256,13 @@ public class AdaptionHud {
         return Math.min(1f, (float) ClientAdaption.fistProgressDone / total);
     }
 
-    /** "3/7 kills" for the current stage, so the row says what is left rather than only a bar. */
+    /**
+     * The next stage's concept key, or null when this concept is the last stage.
+     *
+     * <p>Reached at the cap the tag has to name somewhere to go: a stage tops out at 8, so
+     * "Lv.8 &gt; 9" was a level the game can never reach. Naming the stage that takes over at
+     * level 1 is what makes the ladder read as a ladder.
+     */
     private static String nextStageName(String concept) {
         for (int t = 0; t < ru.adaptionwheel.category.FistTiers.TIER_COUNT; t++) {
             if (concept.equals(ru.adaptionwheel.category.FistTiers.concept(t)) && t + 1 < ru.adaptionwheel.category.FistTiers.TIER_COUNT) {
@@ -286,14 +292,14 @@ public class AdaptionHud {
     private static int handedOverColour(int level, int tier,
                                         java.util.function.IntFunction<String> concept,
                                         java.util.function.IntFunction<Integer> colour) {
-        if (level != 1 || tier <= 0) {
+        if (tier <= 0) {
             return 0;
         }
-        String previous = concept.apply(tier - 1);
-        if (ClientAdaption.level(previous) < PlayerAdaption.MAX_LEVEL) {
-            return 0;
-        }
-        return colour.apply(tier - 1);
+        // The rule is in FistTiers, not here, because a gametest cannot call a method that needs a
+        // client Font -- and the "only on the handover level" half of it is the whole requirement.
+        boolean handover = ru.adaptionwheel.category.FistTiers.showsHandover(level,
+                ClientAdaption.level(concept.apply(tier - 1)));
+        return handover ? colour.apply(tier - 1) : 0;
     }
 
     /** "3/7 kills", so the row says what is left rather than showing only a bar. */
