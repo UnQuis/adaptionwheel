@@ -78,46 +78,54 @@ public class CombatFistTests {
     /**
      * The two-tone bar is a marker for crossing a material boundary, not a second colour scheme.
      *
-     * <p>The request was explicitly "half one colour, half another, but ONLY when the player passes
-     * 8 -&gt; 1 stage — this must NOT work always, only on that kind of level". So the half of the
-     * rule that is easy to get wrong is the {@code false} half: this walks every level of every
-     * stage and asserts that exactly one of them splits.
+     * <p>The request was "half one colour, half another, but ONLY when the player passes 8 -&gt; 1
+     * stage -- this must NOT work always, only on that kind of level". So the half of the rule that is
+     * easy to get wrong is the {@code false} half, and this checks all of it exhaustively rather than
+     * by example.
+     *
+     * <p>It also covers <b>both</b> ends of the boundary, because they are the same event from
+     * opposite sides. Gating on the arrival side alone left the row reading
+     * {@code Lv.MAX &gt; Stone Lv.1} in one flat colour on the very tick it announces a new material,
+     * which is what a player actually sees and complained about.
      */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void barSplitsOnlyOnTheHandoverLevel(GameTestHelper helper) {
+    public static void barSplitsOnlyAtTheHandover(GameTestHelper helper) {
 
-        int splits = 0;
-        for (int tier = 1; tier < CombatFistTiers.TIER_COUNT; tier++) {
-            int previousMaxed = PlayerAdaption.MAX_LEVEL;
-            for (int level = 0; level <= PlayerAdaption.MAX_LEVEL; level++) {
-                boolean split = FistTiers.showsHandover(level, previousMaxed);
-                if (split) {
-                    helper.assertTrue(level == 1,
-                            "stage " + tier + " split the bar at level " + level
-                                    + "; only the handover level may split");
-                    helper.assertTrue(CombatFistTiers.showsHandover(level, previousMaxed),
-                            "the punching fist must agree with the breaking fist about the handover");
-                    splits++;
+        // Levels 2..7 of every stage, in every combination of neighbours, must never split.
+        for (int level = 2; level < PlayerAdaption.MAX_LEVEL; level++) {
+            for (boolean previousMaxed : new boolean[] {false, true}) {
+                for (boolean nextUntrained : new boolean[] {false, true}) {
+                    helper.assertTrue(!FistTiers.showsHandover(level, previousMaxed, nextUntrained),
+                            "level " + level + " split the bar (previousMaxed=" + previousMaxed
+                                    + ", nextUntrained=" + nextUntrained + "); only the two ends of"
+                                    + " the 8 -> 1 boundary may split");
                 }
             }
         }
-        helper.assertTrue(splits == CombatFistTiers.TIER_COUNT - 1,
-                "expected exactly one split per stage after the first (" + (CombatFistTiers.TIER_COUNT - 1)
-                        + "), got " + splits);
 
-        // Level 1 only splits once the stage below is actually finished.
-        for (int level = 0; level <= PlayerAdaption.MAX_LEVEL; level++) {
-            for (int previous = 0; previous <= PlayerAdaption.MAX_LEVEL; previous++) {
-                boolean expected = level == 1 && previous >= PlayerAdaption.MAX_LEVEL;
-                helper.assertTrue(FistTiers.showsHandover(level, previous) == expected,
-                        "level " + level + " with the previous stage at " + previous
-                                + " should " + (expected ? "" : "not ") + "split the bar");
-            }
+        // Arrival: level 1 of a stage whose predecessor is maxed.
+        helper.assertTrue(FistTiers.showsHandover(1, true, false),
+                "level 1 right after maxing the previous stage is the arrival side and must split");
+        helper.assertTrue(!FistTiers.showsHandover(1, false, true),
+                "level 1 of the very first stage is not a handover, there is nothing before it");
+
+        // Departure: level 8 of a stage whose successor is untouched.
+        helper.assertTrue(FistTiers.showsHandover(PlayerAdaption.MAX_LEVEL, false, true),
+                "level 8 with the next stage untouched is the departure side and must split, or the"
+                        + " row announces a new material in one flat colour");
+        helper.assertTrue(!FistTiers.showsHandover(PlayerAdaption.MAX_LEVEL, true, false),
+                "a finished ladder has no next stage to hand over to and must not split");
+
+        // Both fists agree, and exactly one stage in a full row is ever mid-handover.
+        int splits = 0;
+        for (int tier = 1; tier < CombatFistTiers.TIER_COUNT; tier++) {
+            helper.assertTrue(CombatFistTiers.showsHandover(1, true, false)
+                            == FistTiers.showsHandover(1, true, false),
+                    "the two fists must agree about the handover");
+            splits += CombatFistTiers.showsHandover(1, true, false) ? 1 : 0;
         }
-
-        // The first stage has no predecessor, so nothing to hand over from.
-        helper.assertTrue(!FistTiers.showsHandover(1, 0),
-                "wood at level 1 is not a handover, there is nothing before it");
+        helper.assertTrue(splits == CombatFistTiers.TIER_COUNT - 1,
+                "expected one arrival per stage after the first, got " + splits);
         helper.succeed();
     }
 

@@ -90,22 +90,31 @@ public final class FistTiers {
      * Whether the bar should split into the previous stage's colour at this point.
      *
      * <p>The rule lives here, and not in the HUD, so a gametest can pin it without a client
-     * {@code Font}. It is deliberately narrow: a stage is eight levels and the next begins at one, so
-     * level 1 of a stage whose predecessor is maxed is the single level on which the player has
-     * crossed a material boundary. Every other level returns false -- and that half of the rule is
-     * the part that matters, because a bar that is always two-tone is just a second colour scheme
-     * and marks nothing.
+     * {@code Font}. It is deliberately narrow, and it covers <b>both sides of the boundary</b>,
+     * because both sides are the same event seen from opposite ends:
+     *
+     * <ul>
+     *   <li>level 1 of a stage whose predecessor is maxed -- you have just arrived;
+     *   <li>level 8 of a stage whose successor is untouched -- you are about to leave.
+     * </ul>
+     *
+     * <p>Gating on the first alone left the row reading {@code Lv.MAX > Stone Lv.1} in one flat
+     * colour on the very tick it announces a new material, which is the moment the split is for.
+     * Every level between 2 and 7 still returns false, and that is the half of the rule that
+     * matters: a bar that is always two-tone is just a second colour scheme and marks nothing.
      *
      * <p>Both fists use this. They share the stage count (pinned by {@code CombatFistTests}), and a
      * rule duplicated across the two would be one that could eventually disagree about which of
      * them is five stages.
      *
-     * @param level         the current stage's level, 1-based
-     * @param previousLevel the previous stage's level, or 0 when there is no previous stage
-     * @return true only on the level where a stage hands over to the next
+     * @param level          the current stage's level, 1-based
+     * @param previousMaxed  whether the previous stage is at the cap
+     * @param nextUntrained  whether the next stage has no levels yet
+     * @return true only where a stage hands over to the next
      */
-    public static boolean showsHandover(int level, int previousLevel) {
-        return level == 1 && previousLevel >= ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
+    public static boolean showsHandover(int level, boolean previousMaxed, boolean nextUntrained) {
+        return (level == 1 && previousMaxed)
+                || (level >= ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL && nextUntrained);
     }
 
     public static int color(int tier) {

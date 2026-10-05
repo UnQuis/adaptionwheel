@@ -150,7 +150,9 @@ public class AdaptionHud {
             // that next stage instead of inventing a ninth level.
             if (level >= PlayerAdaption.MAX_LEVEL) {
                 String next = nextStageName(row.concept);
-                tag = next == null ? " [Lv.MAX]" : " [Lv.MAX > " + next + " Lv.1]";
+                // Resolved, not printed: the key used to reach the HUD verbatim as Combat_FistStone.
+                tag = next == null ? " [Lv.MAX]"
+                        : " [Lv.MAX > " + Concepts.chatName(next).getString() + " Lv.1]";
             } else {
                 tag = " [Lv." + level + " > " + (level + 1) + "]";
             }
@@ -174,12 +176,12 @@ public class AdaptionHud {
                 graphics.fill(15 + x, y + 24, 15 + x + 1, y + 24 + BAR_HEIGHT,
                         withAlpha(segColor, opacity * 90 / 100));
             }
-        } else if (row.handedOverFrom != 0) {
+        } else if (row.splitColour != 0) {
             // Two-tone, and only here: the player has just crossed a material boundary, so half the
             // bar is the stage they finished and half is the one they are training.
             int half = BAR_WIDTH / 2;
             graphics.fill(15, y + 24, 15 + half, y + 24 + BAR_HEIGHT,
-                    withAlpha(row.handedOverFrom, opacity * 55 / 100));
+                    withAlpha(row.splitColour, opacity * 55 / 100));
             graphics.fill(15 + half, y + 24, 15 + BAR_WIDTH, y + 24 + BAR_HEIGHT,
                     withAlpha(color, opacity * 90 / 100));
         } else {
@@ -228,7 +230,7 @@ public class AdaptionHud {
     }
 
     private record Row(String concept, float progress, boolean rainbow, int blocksDone, int blocksTotal,
-                       String suffix, int handedOverFrom) {
+                       String suffix, int splitColour) {
 
         private static Row of(String concept, float progress) {
             return new Row(concept, progress, false, 0, 0, null, 0);
@@ -264,9 +266,11 @@ public class AdaptionHud {
      * level 1 is what makes the ladder read as a ladder.
      */
     private static String nextStageName(String concept) {
+        // Returns the concept key, NOT a name. The tag resolves it through the same display-name
+        // path as the row itself; printing the key put a literal "Combat_FistStone" on the HUD.
         for (int t = 0; t < ru.adaptionwheel.category.FistTiers.TIER_COUNT; t++) {
             if (concept.equals(ru.adaptionwheel.category.FistTiers.concept(t)) && t + 1 < ru.adaptionwheel.category.FistTiers.TIER_COUNT) {
-                return ru.adaptionwheel.category.CombatFistTiers.concept(t + 1);
+                return ru.adaptionwheel.category.FistTiers.concept(t + 1);
             }
             if (concept.equals(ru.adaptionwheel.category.CombatFistTiers.concept(t)) && t + 1 < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT) {
                 return ru.adaptionwheel.category.CombatFistTiers.concept(t + 1);
@@ -276,30 +280,38 @@ public class AdaptionHud {
     }
 
     /**
-     * The previous stage's colour, but only on the level where a stage actually hands over.
+     * The colour of the other half of the bar, but only where a stage actually hands over.
      *
-     * <p>A stage tops out at 8 and the next begins at 1, so level 1 of a stage that has a predecessor
-     * is the only moment the player has crossed a material boundary. That is the moment the bar
-     * goes two-tone: half in what you just finished, half in what you are now. At every other level
-     * this returns 0 and the bar is a single colour, because a permanent split would just be a
-     * second colour scheme rather than a marker of anything.
+     * <p>A stage tops out at 8 and the next begins at 1, so both ends of that boundary are the same
+     * event seen from opposite sides: level 1 of a stage whose predecessor is maxed (you have just
+     * arrived) and level 8 of a stage whose successor is untouched (you are about to leave). Gating
+     * on the first alone left the row reading "Lv.MAX &gt; Stone Lv.1" in one flat colour on the very
+     * tick it announces a new material, which is the moment the split exists for. Levels 2 to 7 never
+     * split, because a bar that is always two-tone is just a second colour scheme.
      *
-     * <p>The level is read raw, not through {@code levelOrZero}: switching a stage off must not make
-     * it look like a handover happened.
+     * <p>Which half is the "other" one flips with the side: on arrival the row is the new stage and
+     * the other half is what was just finished; on departure the row is the finished stage and the
+     * other half is what comes next. The bar always paints the row's own colour on the right, so only
+     * the left half has to be worked out.
      *
-     * @return the previous stage's colour, or 0 when no split applies
+     * <p>Levels are read raw, not through {@code levelOrZero}: switching a stage off must not make it
+     * look like a handover happened.
+     *
+     * @return the colour of the other half, or 0 when no split applies
      */
     private static int handedOverColour(int level, int tier,
                                         java.util.function.IntFunction<String> concept,
                                         java.util.function.IntFunction<Integer> colour) {
-        if (tier <= 0) {
+        int count = ru.adaptionwheel.category.FistTiers.TIER_COUNT;
+        boolean previousMaxed = tier > 0
+                && ClientAdaption.level(concept.apply(tier - 1)) >= PlayerAdaption.MAX_LEVEL;
+        boolean nextUntrained = tier + 1 < count && ClientAdaption.level(concept.apply(tier + 1)) == 0;
+        // The rule is in FistTiers, not here, because a gametest cannot call a method that needs a
+        // client Font -- and the "only at the handover" half of it is the whole requirement.
+        if (!ru.adaptionwheel.category.FistTiers.showsHandover(level, previousMaxed, nextUntrained)) {
             return 0;
         }
-        // The rule is in FistTiers, not here, because a gametest cannot call a method that needs a
-        // client Font -- and the "only on the handover level" half of it is the whole requirement.
-        boolean handover = ru.adaptionwheel.category.FistTiers.showsHandover(level,
-                ClientAdaption.level(concept.apply(tier - 1)));
-        return handover ? colour.apply(tier - 1) : 0;
+        return colour.apply(previousMaxed && level == 1 ? tier - 1 : tier + 1);
     }
 
     /** "3/7 kills", so the row says what is left rather than showing only a bar. */

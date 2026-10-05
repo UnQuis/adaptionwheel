@@ -144,6 +144,48 @@ public class WheelLoadTests {
         helper.succeed();
     }
 
+    /**
+     * A boss analysis in progress has to survive the wheel leaving the player's hands.
+     *
+     * <p>Reported as: died fighting a Warden, picked the wheel back up, and the analysis had lost its
+     * progress. The cause is structural. The equip transition clears {@code bossCombatTicks} before it
+     * merges the item's data in -- correct for the running analyses, which the wheel does carry --
+     * but the wheel carried nothing to give back, because {@code WheelData} had no field for the boss
+     * counters at all. So the clear was pure loss, on both equip and unequip, and nothing said so.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void bossAnalysisProgressSurvivesTheWheel(GameTestHelper helper) {
+
+        PlayerAdaption data = mutable();
+        data.bossCombatTicks.put("minecraft:warden", 240);
+
+        WheelData wd = WheelData.fromPlayer(data);
+        helper.assertTrue(wd.existenceProgress().getOrDefault("minecraft:warden", 0) == 240,
+                "the wheel must carry the boss counters, got " + wd.existenceProgress());
+
+        // The round trip the item actually makes, through the codec.
+        var encoded = WheelData.CODEC.encodeStart(NbtOps.INSTANCE, wd)
+                .getOrThrow(msg -> new IllegalStateException(msg));
+        WheelData decoded = WheelData.CODEC.parse(NbtOps.INSTANCE, encoded)
+                .getOrThrow(msg -> new IllegalStateException(msg));
+
+        // What the equip transition does: clear, then merge the item back in.
+        PlayerAdaption reloaded = mutable();
+        reloaded.bossCombatTicks.clear();
+        decoded.loadInto(reloaded);
+
+        helper.assertTrue(reloaded.bossCombatTicks.getOrDefault("minecraft:warden", 0) == 240,
+                "a boss analysis must survive leaving and re-equipping the wheel, got "
+                        + reloaded.bossCombatTicks);
+
+        // A hand-over must not walk it backwards either.
+        reloaded.bossCombatTicks.put("minecraft:warden", 500);
+        decoded.loadInto(reloaded);
+        helper.assertTrue(reloaded.bossCombatTicks.get("minecraft:warden") == 500,
+                "loading must take the higher count, got " + reloaded.bossCombatTicks);
+        helper.succeed();
+    }
+
     /** Mutable on purpose: {@code loadInto} and {@code migrate} both write into the player data. */
     private static PlayerAdaption mutable() {
         return new PlayerAdaption(new HashMap<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(),

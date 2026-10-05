@@ -1992,7 +1992,17 @@ public class AdaptionEvents {
         return data.progress.getOrDefault(ru.adaptionwheel.data.Extras.punchingKey(tier), 0);
     }
 
-    /** 0 means "nothing banked", which for a maxed stage is also true -- see {@link #combatFistTotal}. */
+    /**
+     * What the player still has to bank, as "done of total".
+     *
+     * <p>This used to return 0 for a maxed stage, and 0 is what the HUD reads as "MAX", so the row
+     * said {@code 100.0% MAX} and stopped there -- which is exactly the row that needs to say most:
+     * the ladder has just handed over and the player has no idea what the next material costs. It
+     * now reports the <i>next</i> stage's first level instead, so the row reads {@code 0/1 kills}
+     * against the stage it is about to train.
+     *
+     * <p>Only a finished ladder still reports 0, because then there genuinely is nothing left.
+     */
     private static int combatFistTotal(PlayerAdaption data) {
         int tier = ru.adaptionwheel.server.HardFist.currentTier(data);
         if (tier < 0) {
@@ -2000,7 +2010,10 @@ public class AdaptionEvents {
         }
         int level = data.level(ru.adaptionwheel.category.CombatFistTiers.concept(tier));
         if (level >= PlayerAdaption.MAX_LEVEL) {
-            return 0;
+            int next = tier + 1;
+            return next < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT
+                    ? AdaptionConfig.fistKillsForNextLevel(next, 0)
+                    : 0;
         }
         return AdaptionConfig.fistKillsForNextLevel(tier, level);
     }

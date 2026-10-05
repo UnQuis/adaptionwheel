@@ -266,7 +266,8 @@ public final class FistGameTests {
             java.util.Map<String, Integer> levels) {
         var wheel = new ru.adaptionwheel.data.WheelData(
                 new java.util.HashMap<>(levels), java.util.List.of(), java.util.List.of(),
-                new java.util.HashMap<>(), java.util.List.of(), java.util.List.of());
+                new java.util.HashMap<>(), java.util.List.of(), java.util.List.of(),
+                new java.util.HashMap<>());
         var data = new ru.adaptionwheel.data.PlayerAdaption(
                 new java.util.HashMap<>(), java.util.List.of(), java.util.List.of(),
                 java.util.List.of(), java.util.List.of(), new java.util.HashMap<>(),
