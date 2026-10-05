@@ -8,7 +8,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import ru.adaptionwheel.block.ModBlocks;
 import ru.adaptionwheel.category.Concepts;
-import ru.adaptionwheel.category.WheelTier;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.server.AdaptionEvents;
 import ru.adaptionwheel.server.AltarOfferings;
@@ -43,7 +42,7 @@ public class ResonanceAltarMenu extends TradeMenu {
 
         DomainExchange.Recipe recipe = DomainExchange.recipeFor(offering);
         if (recipe != null) {
-            pool.addAll(DomainExchange.candidates(fed, WheelTier.forCount(fed.getAdaptCount()), recipe));
+            pool.addAll(DomainExchange.candidates(fed, recipe));
         }
 
         for (String mob : AltarOfferings.mobsFor(offering, serverOf(player))) {

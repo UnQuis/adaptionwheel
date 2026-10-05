@@ -12,7 +12,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import ru.adaptionwheel.category.Concepts;
-import ru.adaptionwheel.category.WheelTier;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.item.ModItems;
 import ru.adaptionwheel.network.TradeSyncPayload;

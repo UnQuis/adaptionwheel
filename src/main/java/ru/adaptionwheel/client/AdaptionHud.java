@@ -5,6 +5,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import ru.adaptionwheel.data.PlayerAdaption;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
@@ -52,18 +53,9 @@ public class AdaptionHud {
                 graphics.guiHeight() * 0.35f + AdaptionConfig.HUD_OFFSET_Y.get());
         graphics.pose().scale(scale, scale);
 
-        int wheelTier = ru.adaptionwheel.category.WheelTier.forCount(ClientAdaption.adaptedCount);
-        int nextTier = ru.adaptionwheel.category.WheelTier.nextThreshold(wheelTier);
-        String header = ">>> " + Component.translatable(
-                ru.adaptionwheel.category.WheelTier.nameKey(wheelTier)).getString()
-                .toUpperCase(java.util.Locale.ROOT) + "  " + wheelTier + "/"
-                + ru.adaptionwheel.category.WheelTier.maxTier();
-        if (nextTier > 0) {
-            header += "  (" + ClientAdaption.adaptedCount + "/" + nextTier + ")";
-        }
+        String header = ">>> ADAPTED  " + ClientAdaption.adaptedCount;
         graphics.text(font, Component.literal(header), 0, 0,
-                withAlpha(ru.adaptionwheel.category.WheelTier.color(wheelTier),
-                        Math.min(100, opacity * 150 / 100)), true);
+                withAlpha(HEADER_COLOR, Math.min(100, opacity * 150 / 100)), true);
         graphics.text(font, Component.literal("ADAPTATION_ANALYSIS"), 0, font.lineHeight,
                 withAlpha(HEADER_COLOR, Math.min(100, opacity * 150 / 100)), true);
 
@@ -93,11 +85,19 @@ public class AdaptionHud {
                     ClientAdaption.fistProgressTotal, suffix));
         }
 
-        if (hasCombatFistRow()) {
-            int tier = ClientAdaption.combatFistProgressTier;
+        // Always drawn, exactly like the breaking fist's row above. It used to be conditional on
+        // progress existing, which meant a player who had never killed anything bare-handed saw no
+        // row at all -- and therefore never learned the punch was trainable. A row that only appears
+        // once you already know about it is not information.
+        {
+            int tier = Math.max(0, ClientAdaption.combatFistProgressTier);
+            tier = Math.min(tier, ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT - 1);
+            String suffix = ClientAdaption.combatFistProgressTotal <= 0
+                    ? "LOCKED - bare-handed kills"
+                    : tierKillsSuffix(tier);
             rows.add(new Row(ru.adaptionwheel.category.CombatFistTiers.concept(tier),
                     combatFistProgress(), false, ClientAdaption.combatFistProgressDone,
-                    ClientAdaption.combatFistProgressTotal, null));
+                    ClientAdaption.combatFistProgressTotal, suffix));
         }
         rows.sort(Comparator.comparingInt(r -> priority(r.concept)));
 
@@ -135,7 +135,7 @@ public class AdaptionHud {
             tag = " [Lv." + level + " > " + (level + 1) + "]";
         }
         String meter = row.blocksTotal > 0
-                ? row.blocksDone + "/" + row.blocksTotal + " blocks"
+                ? row.blocksDone + "/" + row.blocksTotal + " " + row.unit()
                 : String.format("%.1f%%", row.progress * 100f);
         String suffix = row.suffix == null ? "" : " " + row.suffix;
         if (off) {
@@ -208,16 +208,25 @@ public class AdaptionHud {
         private static Row of(String concept, float progress, boolean rainbow) {
             return new Row(concept, progress, rainbow, 0, 0, null);
         }
+
+        /** What the counter measures: the breaking fist counts blocks, the punching fist kills. */
+        String unit() {
+            return concept != null && concept.startsWith("Combat_Fist") ? "kills" : "blocks";
+        }
     }
 
     private static boolean hasFistRow() {
         return ClientAdaption.fistProgressTotal > 0 && ClientAdaption.fistTier() >= 0;
     }
 
-    private static boolean hasCombatFistRow() {
-        return ClientAdaption.combatFistProgressTotal > 0
-                && ClientAdaption.combatFistProgressTier >= 0
-                && ClientAdaption.combatFistProgressTier < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT;
+    /** "3/7" for the current stage, so the row says what is left rather than only a bar. */
+    private static String tierKillsSuffix(int tier) {
+        int total = ClientAdaption.combatFistProgressTotal;
+        if (total <= 0) {
+            return null;
+        }
+        int done = ClientAdaption.combatFistProgressDone;
+        return done + "/" + total + (done >= PlayerAdaption.MAX_LEVEL ? " MAX" : "");
     }
 
     private static float combatFistProgress() {

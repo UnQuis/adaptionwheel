@@ -21,13 +21,11 @@ public final class AdaptionConfig {
 
     private static final double[] DEFAULT_FIST_DAMAGE_TIER_MULTIPLIER = {1.0, 2.0, 4.0, 8.0, 16.0};
 
-    public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_TIERS_ENABLED;
 
     public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_ENABLED;
     public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_BASE_TICKS;
     public static final ModConfigSpec.ConfigValue<Integer> SHEDDING_RELEASE_TICKS_PER_LEVEL;
     public static final ModConfigSpec.ConfigValue<Double> SHEDDING_REATTACH_TIMER_FACTOR;
-    public static final ModConfigSpec.ConfigValue<Boolean> SHEDDING_PROTECT_TIER;
 
     public static final ModConfigSpec.ConfigValue<Boolean> BRAZIER_HEAL_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> BRAZIER_HEAL_PER_SECOND;
@@ -250,14 +248,6 @@ public final class AdaptionConfig {
 
         s.pop();
 
-        s.comment("--- Wheel Awakening ---").push("wheelTiers");
-        WHEEL_TIERS_ENABLED = s.comment("The wheel has tiers of its own, reached by holding more",
-                        "adaptations. Each tier REVEALS another family of adaptations -- Contact,",
-                        "Offense, Plunder, Existence -- so what the wheel can adapt to grows.",
-                        "A tier never takes anything away and never costs anything: the wheel is",
-                        "meant to be omnipotent, so a later tier is only ever a larger one.")
-                .define("enabled", true);
-        s.pop();
 
         s.comment("--- Shedding ---").push("shedding");
         SHEDDING_ENABLED = s.comment("A player may deliberately shed (give up) one of their adaptations",
@@ -276,11 +266,6 @@ public final class AdaptionConfig {
                         "concept costs the second time, as a fraction. 0.35 means it re-adapts in",
                         "about a third of the time; 1.0 would make shedding pointless.")
                 .defineInRange("reattachTimerFactor", 0.35D, 0.05D, 1.0D);
-        SHEDDING_PROTECT_TIER = s.comment("Refuse a shed that would drop the player's wheel tier.",
-                        "Without this, shedding the last adaptation of a family re-locks that whole",
-                        "family -- taking something away, which this mod does not do. The refusal is",
-                        "reported as a message, not silently.")
-                .define("protectTier", true);
         s.pop();
 
         s.comment("--- Ritual Blocks ---").push("ritual");

@@ -37,6 +37,9 @@ public class WheelRenderer {
     private static final ContextKey<Boolean> WEARING_WHEEL =
             new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "wearing_wheel"));
 
+    private static final ContextKey<Integer> ADAPT_COUNT =
+            new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "adapt_count"));
+
     private static final ContextKey<Float> WORLD_TIME =
             new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "world_time"));
 
@@ -53,6 +56,7 @@ public class WheelRenderer {
                 if (wearing) {
 
                     state.setRenderData(WORLD_TIME, player.level().getGameTime() + state.partialTick);
+                    state.setRenderData(ADAPT_COUNT, adaptCountFor(player));
                 }
             }
         });
@@ -75,6 +79,16 @@ public class WheelRenderer {
         float height = state.boundingBoxHeight + 0.45f;
         float wheelSize = (float) (double) AdaptionConfig.WHEEL_SIZE.get();
         float scale = wheelSize * PX_PER_BLOCK / MODEL_RADIUS_PX;
+
+        // Growth is a smooth function of the adaptation count rather than a step per named tier:
+        // the wheel visibly fills out as the player adapts, with no thresholds to cross and nothing
+        // to be told about. Capped so a very late wheel cannot grow off the screen.
+        Integer storedCount = state.getRenderData(ADAPT_COUNT);
+        int adaptCount = storedCount != null ? storedCount : 0;
+        float growth = 1.0F + 0.55F * (adaptCount / (float) WHEEL_GROWTH_REFERENCE);
+        scale *= Math.min(growth, MAX_GROWTH);
+        int tint = tintFor(adaptCount);
+
         float bob = Mth.sin(time * BOB_SPEED) * BOB_AMPLITUDE;
 
         poseStack.pushPose();
@@ -89,9 +103,40 @@ public class WheelRenderer {
 
         collector.submitModelPart(rootPart, poseStack,
                 RenderTypes.entityCutout(DharmaChakraModel.TEXTURE),
-                LightCoordsUtil.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, null, 0xF3FFFFFF);
+                LightCoordsUtil.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, null, 0xF3000000 | tint);
 
         poseStack.popPose();
+    }
+
+    /** Adaptations at which the wheel has visibly filled out. */
+    private static final int WHEEL_GROWTH_REFERENCE = 60;
+    /** Upper bound on growth, so a very late wheel stays on screen. */
+    private static final float MAX_GROWTH = 1.55F;
+
+    /**
+     * The wearer's adaptation count, read the same way for every player a client draws.
+     *
+     * <p>Goes through {@link WheelSlots#findWorn} rather than Curios directly, because this branch
+     * can run without Curios: the wheel then lives in the offhand or the inventory, and reaching for
+     * the Curios API unconditionally would draw every remote player's wheel at its base size.
+     */
+    private static int adaptCountFor(Player player) {
+        if (player.isLocalPlayer()) {
+            return ClientAdaption.adaptedCount;
+        }
+        return WheelSlots.findWorn(player)
+                .map(stack -> stack.get(ru.adaptionwheel.data.ModDataComponents.WHEEL_DATA.get()))
+                .map(ru.adaptionwheel.data.WheelData::adaptCount)
+                .orElse(0);
+    }
+
+    /** Cool grey at nothing adapted, warming towards gold as the wheel fills out. */
+    private static int tintFor(int adaptCount) {
+        float t = Math.min(1.0F, adaptCount / (float) WHEEL_GROWTH_REFERENCE);
+        int r = (int) (0x4A + (0xFF - 0x4A) * t);
+        int g = (int) (0x4A + (0xD7 - 0x4A) * t);
+        int b = (int) (0x4A + (0x5C - 0x4A) * t);
+        return 0xFF000000 | r << 16 | g << 8 | b;
     }
 
     private static final java.util.Map<java.util.UUID, long[]> WEARING_CACHE = new java.util.HashMap<>();

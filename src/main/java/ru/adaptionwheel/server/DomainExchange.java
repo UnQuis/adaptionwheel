@@ -8,7 +8,6 @@ import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.adapt.AdaptationDomain;
 import ru.adaptionwheel.adapt.AdaptationRegistry;
 import ru.adaptionwheel.category.Concepts;
-import ru.adaptionwheel.category.WheelTier;
 import ru.adaptionwheel.data.PlayerAdaption;
 
 import java.util.ArrayList;
@@ -109,7 +108,7 @@ public final class DomainExchange {
         return List.copyOf(BY_ITEM.keySet());
     }
 
-    public static List<String> candidates(PlayerAdaption data, int tier, Recipe recipe) {
+    public static List<String> candidates(PlayerAdaption data, Recipe recipe) {
         if (recipe == null) {
             return List.of();
         }
@@ -129,7 +128,7 @@ public final class DomainExchange {
             }
         }
         pool.remove(Concepts.ADVERSITY);
-        pool.sort(orderingFor(tier));
+        pool.sort(orderingFor());
         return List.copyOf(pool);
     }
 
@@ -137,10 +136,9 @@ public final class DomainExchange {
         return data.isAdapted(concept) || data.level(concept) > 0;
     }
 
-    private static Comparator<String> orderingFor(int tier) {
+    private static Comparator<String> orderingFor() {
         return Comparator
-                .<String>comparingInt(concept -> WheelTier.familyUnlocked(concept, tier) ? 0 : 1)
-                .thenComparing(DomainExchange::domainNameOf)
+                .comparing(DomainExchange::domainNameOf)
                 .thenComparing(Comparator.naturalOrder());
     }
 
