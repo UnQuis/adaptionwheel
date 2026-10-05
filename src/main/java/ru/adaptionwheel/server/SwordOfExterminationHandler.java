@@ -94,7 +94,7 @@ public final class SwordOfExterminationHandler {
             return;
         }
         PlayerAdaption data = player.getData(AttachmentTypes.ADAPTION);
-        if (!data.isAdapted(ru.adaptionwheel.category.Concepts.DIMENSION_DESTROY)) {
+        if (!data.active(ru.adaptionwheel.category.Concepts.DIMENSION_DESTROY)) {
             return;
         }
         long now = player.level().getGameTime();

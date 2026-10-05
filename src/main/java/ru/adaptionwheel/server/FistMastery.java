@@ -31,7 +31,7 @@ public final class FistMastery {
     }
 
     public static int currentTier(PlayerAdaption data) {
-        if (!data.isAdapted(Concepts.MUTATION_FIST)) {
+        if (!data.active(Concepts.MUTATION_FIST)) {
             return -1;
         }
         return FistTiers.reachTier(tier -> data.level(FistTiers.concept(tier)));
