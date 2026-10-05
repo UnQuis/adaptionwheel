@@ -32,6 +32,14 @@ public final class LegacyConcepts {
         migrate(data.levels, data.adapted, data.history);
     }
 
+    /**
+     * Renames legacy keys <b>in place</b>, so the collections must be mutable.
+     *
+     * <p>That constraint has already broken once: this was called on a {@code WheelData}'s own
+     * collections, which arrived from a Data Component as an immutable map, and the unconditional
+     * {@code levels.remove(...)} threw on every equip. Only call it with collections you own and
+     * intend to change.
+     */
     public static void migrate(Map<String, Integer> levels, Collection<String> adapted, Collection<String> history) {
 
         // There was no copper tier: copper owns no tool band, so a literal ladder had a rung that
