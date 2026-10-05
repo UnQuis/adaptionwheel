@@ -24,6 +24,7 @@ import net.neoforged.neoforge.common.NeoForgeMod;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.category.AdaptionCategory;
 import ru.adaptionwheel.category.Synergies;
+import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.PlayerAdaption;
 
@@ -117,7 +118,13 @@ public final class SynergyEffects {
 
     public static void tickPassive(ServerPlayer player) {
         double swim = 0.0;
-        if (isActive(player, Synergies.DROWNED_WALTZ) && player.isInWater()) {
+        // The air refill is gated on the Drowning adaptation as well as on the synergy. The synergy
+        // is derived from the wheel's contents, so it happily survives the player switching the
+        // adaptation off -- and a synergy that refills your air every tick is drowning immunity by
+        // another name. This is the second of two gates for that one effect; the first is the
+        // damage cancellation in AdaptionEvents.
+        if (isActive(player, Synergies.DROWNED_WALTZ) && player.isInWater()
+                && AdaptionEvents.dataOf(player).active(Concepts.ENV_DROWN)) {
             player.setAirSupply(player.getMaxAirSupply());
             swim = (AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get() + 1.5)
                     * strength(player, Synergies.DROWNED_WALTZ);
