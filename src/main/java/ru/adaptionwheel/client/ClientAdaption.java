@@ -125,6 +125,17 @@ public final class ClientAdaption {
         return isEnabled(concept) && isAdapted(concept);
     }
 
+    /**
+     * The stored level regardless of the off switch.
+     *
+     * <p>Exists so "have I unlocked this" can be asked without also asking "is it switched on". The
+     * HUD row is the one caller that needs the split: the switch stops the effect, it does not
+     * un-discover the stage.
+     */
+    public static int level(String concept) {
+        return LEVELS.getOrDefault(concept, 0);
+    }
+
     public static int levelOrZero(String concept) {
         return isEnabled(concept) ? LEVELS.getOrDefault(concept, 0) : 0;
     }
@@ -186,7 +197,10 @@ public final class ClientAdaption {
         }
         int granted = -1;
         for (int tier = 0; tier < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT; tier++) {
-            if (levelOrZero(ru.adaptionwheel.category.CombatFistTiers.concept(tier)) > 0) {
+            // level(), NOT levelOrZero(): this asks whether the stage was EVER unlocked, which is
+            // permanent, so it must not consult the off switch. Every effect site asks active();
+            // this one deliberately does not.
+            if (level(ru.adaptionwheel.category.CombatFistTiers.concept(tier)) > 0) {
                 granted = tier;
             }
         }
