@@ -13,7 +13,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import ru.adaptionwheel.category.Concepts;
-import ru.adaptionwheel.category.WheelTier;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.item.ModItems;
 import ru.adaptionwheel.network.TradeSyncPayload;
