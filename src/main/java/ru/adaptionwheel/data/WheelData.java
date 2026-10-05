@@ -14,7 +14,8 @@ public record WheelData(
         List<String> existenceAdapted,
         Map<String, Integer> killCounts,
         List<String> history,
-        List<AdaptionTask> tasks
+        List<AdaptionTask> tasks,
+        Map<String, Integer> existenceProgress
 ) {
     public static final Codec<WheelData> CODEC = RecordCodecBuilder.create(inst -> inst.group(
             Codec.unboundedMap(Codec.STRING, Codec.INT)
@@ -28,11 +29,14 @@ public record WheelData(
             Codec.STRING.listOf()
                     .optionalFieldOf("history", new ArrayList<>()).forGetter(WheelData::history),
             AdaptionTask.CODEC.listOf()
-                    .optionalFieldOf("tasks", new ArrayList<>()).forGetter(WheelData::tasks)
+                    .optionalFieldOf("tasks", new ArrayList<>()).forGetter(WheelData::tasks),
+            Codec.unboundedMap(Codec.STRING, Codec.INT)
+                    .optionalFieldOf("existenceProgress", new HashMap<>())
+                    .forGetter(WheelData::existenceProgress)
     ).apply(inst, WheelData::new));
 
     public static final WheelData EMPTY = new WheelData(
-            Map.of(), List.of(), List.of(), Map.of(), List.of(), List.of());
+            Map.of(), List.of(), List.of(), Map.of(), List.of(), List.of(), Map.of());
 
     public int adaptCount() {
         return adapted.size() + (int) levels.values().stream().filter(l -> l > 0).count();
@@ -45,7 +49,8 @@ public record WheelData(
                 new ArrayList<>(data.existenceAdapted),
                 new HashMap<>(data.killCounts),
                 new ArrayList<>(data.history),
-                new ArrayList<>(data.tasks)
+                new ArrayList<>(data.tasks),
+                new HashMap<>(data.bossCombatTicks)
         );
     }
 
@@ -86,6 +91,12 @@ public record WheelData(
                 data.tasks.add(task);
             }
         }
+        // The boss counters travel with the wheel for the same reason the running analyses do, and
+        // the bug this fixes is the same shape: the equip transition clears bossCombatTicks before
+        // merging the item's data in, and the item had nothing to give back, so dying mid-fight and
+        // picking the wheel up silently threw away how far the analysis had got. Taken as the higher
+        // count, like every other number here.
+        existenceProgress.forEach((boss, ticks) -> data.bossCombatTicks.merge(boss, ticks, Math::max));
         data.invalidateAdaptCount();
         LegacyConcepts.migrate(data);
     }

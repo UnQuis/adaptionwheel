@@ -173,13 +173,25 @@ public final class ClientAdaption {
         return currentGameTime();
     }
 
+    /**
+     * How far a boss analysis has banked, straight from the last push.
+     *
+     * <p>Deliberately NOT extrapolated, unlike {@link #taskProgress(AdaptionTask)}. An analysis counts
+     * down at a constant rate whatever the player does, so adding the elapsed ticks predicts it
+     * correctly between syncs. These counters do not: {@code accumulateBossCombat} only ticks them
+     * while the boss is inside the proximity radius. Extrapolating therefore assumes a rate the server
+     * does not have, so the moment the player walked away from -- or killed -- the boss, the bar kept
+     * climbing on its own until it crossed the threshold, the row hid itself, and the two payloads
+     * resetting the shared clock at different rates made it flicker across that boundary.
+     *
+     * <p>A counter with no rate has nothing to extrapolate from, so it is read as sent.
+     */
     public static float existenceProgress(String bossPath) {
         Integer ticks = EXISTENCE_PROGRESS.get(bossPath);
         if (ticks == null || existenceThreshold <= 0) {
             return 0f;
         }
-        int current = ticks + progressElapsedTicks();
-        return Math.min(1f, (float) current / existenceThreshold);
+        return Math.min(1f, (float) ticks / existenceThreshold);
     }
 
     private static int progressElapsedTicks() {
