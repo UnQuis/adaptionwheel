@@ -130,7 +130,7 @@ public final class FistMastery {
             tryUnlock(player, data, state);
             return;
         }
-        int level = data.level(FistTiers.concept(tier));
+        int level = data.levelOrZero(FistTiers.concept(tier));
         if (level >= PlayerAdaption.MAX_LEVEL) {
             return;
         }
@@ -186,7 +186,7 @@ public final class FistMastery {
     }
 
     private static void tryUnlock(ServerPlayer player, PlayerAdaption data, BlockState state) {
-        if (data.level(Concepts.MINE_LABOR) < PlayerAdaption.MAX_LEVEL) {
+        if (data.levelOrZero(Concepts.MINE_LABOR) < PlayerAdaption.MAX_LEVEL) {
             return;
         }
         if (FistTiers.tierOf(state) != 1) {

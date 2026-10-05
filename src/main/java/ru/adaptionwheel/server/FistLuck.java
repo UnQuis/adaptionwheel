@@ -34,7 +34,10 @@ public final class FistLuck {
             return;
         }
         PlayerAdaption data = AdaptionEvents.dataOf(player);
-        int multiplier = FistTiers.luckMultiplier(FistMastery.currentTier(data));
+        // currentTier answers "which stage did the player reach", which is permanent, so the
+        // switch is applied here instead: luck is an effect and must stop when the fist is off.
+        int multiplier = FistTiers.luckMultiplier(data.active(FistTiers.concept(
+                FistMastery.currentTier(data))) ? FistMastery.currentTier(data) : -1);
         if (multiplier <= 1 || event.getDrops().isEmpty()) {
             return;
         }

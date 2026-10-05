@@ -453,6 +453,27 @@ All three are on **both** branches and configured, not hard-coded.
   fist's were), so after a relog the row came back with an empty bar until the player killed
   something. `AdaptionSyncPayload` now carries `combatFistDone`/`combatFistTotal` as the recovery
   path; the per-kill payload stays because that is what makes a kill show up immediately.
+- **Two panel rows were both labelled "Starvation", "Drowning", "Suffocation" and "The Void" — one
+  immunity and one resistance — and only the immunity one is gated.** `Env_Starve` cancels starve
+  damage and refills the hunger bar; `Type_Starve` is a *damage reduction* in the generic loop.
+  Turning off "Starvation" did nothing because the player turned off the wrong row, or because the
+  reduction kept applying. All four pairs are now **"X immunity" / "X resistance"** in both
+  languages, and an audit over every registered concept confirms **no duplicate display names
+  remain**. Worth knowing that the check is cheap and mechanical: resolve every key the panel can
+  list through `Concepts.displayName` and look for collisions — a mod with two mechanisms for one
+  hazard will otherwise ship two identical labels.
+- **Eight more effect sites read `data.level(...)` where they needed `levelOrZero`**, on top of the
+  `isAdapted` sites already fixed: contact immunity, explosion resistance, the Chaos Guardian
+  resistance, injury regen, reflection strength, and the block/kill counters for both fists. The
+  counters mattered most — the bar filled **invisibly** while the adaptation was off and the level
+  landed the moment it was switched back on.
+- **`currentTier` had to be split, and it is the one place the two accessors genuinely disagree.**
+  It answers "which stage did the player ever reach", which is permanent, so it stays on the raw
+  level — otherwise switching off `Fist_Wood` makes the row vanish, which is exactly the bug already
+  fixed for the punching fist. The two *effects* that consume it (`FistLuck`'s drop luck and
+  `SurfaceAdaptations`' break speed) now apply the switch themselves. **A helper that answers
+  "have I unlocked this" and a helper that answers "does it apply" cannot both be one method** when
+  the row and the effect need different answers.
 - **Do not "fix" a mod shader's path from the vanilla decompile — NeoForge patches
   `ShaderInstance`, and it prepends `shaders/core/` itself.** `SHADER` is `adaptionwheel:slash` for a
   file at `assets/adaptionwheel/shaders/core/slash.json`, and the JSON's `"vertex": "adaptionwheel:slash"`

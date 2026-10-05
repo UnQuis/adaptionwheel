@@ -77,6 +77,19 @@ public class AdaptationScreen extends Screen {
 
     private List<String> lastConcepts = List.of();
 
+    /** Search text, matched against display names, concept keys and descriptions. */
+    private String search = "";
+    private boolean searchFocused;
+    /** Caret position inside {@link #search}, as a character offset. */
+    private int searchCaret;
+    /** Anchor for shift-click selection; null when there is none. */
+    private String selectionAnchor;
+
+    private static final int SEARCH_H = 9;
+    private static final int SEARCH_W = 132;
+    /** Room reserved to the right of the field for the match counter. */
+    private static final int MATCH_W = 34;
+
     private int panelX;
     private int basePanelY;
     private int panelY;
@@ -157,6 +170,112 @@ public class AdaptationScreen extends Screen {
     }
 
     @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (searchFocused) {
+            boolean control = (modifiers & GLFW_MOD_CONTROL) != 0;
+            switch (keyCode) {
+                case GLFW_KEY_ENTER, GLFW_KEY_KP_ENTER -> {
+                    searchFocused = false;
+                    return true;
+                }
+                case GLFW_KEY_ESCAPE -> {
+                    // Escape clears a non-empty search first, and only then gives up the field,
+                    // so one key does the obvious thing at each step instead of always closing.
+                    if (!search.isEmpty()) {
+                        search = "";
+                        searchCaret = 0;
+                        refreshEntries();
+                    } else {
+                        searchFocused = false;
+                    }
+                    return true;
+                }
+                case GLFW_KEY_BACKSPACE -> {
+                    if (searchCaret > 0) {
+                        search = search.substring(0, searchCaret - 1) + search.substring(searchCaret);
+                        searchCaret--;
+                        refreshEntries();
+                    }
+                    return true;
+                }
+                case GLFW_KEY_DELETE -> {
+                    if (searchCaret < search.length()) {
+                        search = search.substring(0, searchCaret) + search.substring(searchCaret + 1);
+                        refreshEntries();
+                    }
+                    return true;
+                }
+                case GLFW_KEY_LEFT -> {
+                    searchCaret = Math.max(0, searchCaret - 1);
+                    return true;
+                }
+                case GLFW_KEY_RIGHT -> {
+                    searchCaret = Math.min(search.length(), searchCaret + 1);
+                    return true;
+                }
+                case GLFW_KEY_HOME -> {
+                    searchCaret = 0;
+                    return true;
+                }
+                case GLFW_KEY_END -> {
+                    searchCaret = search.length();
+                    return true;
+                }
+                case GLFW_KEY_V -> {
+                    if (control) {
+                        String clip = net.minecraft.client.Minecraft.getInstance().keyboardHandler.getClipboard();
+                        if (clip != null && !clip.isEmpty()) {
+                            search = search.substring(0, searchCaret) + clip + search.substring(searchCaret);
+                            searchCaret += clip.length();
+                            refreshEntries();
+                        }
+                        return true;
+                    }
+                    break;
+                }
+                case GLFW_KEY_A -> {
+                    if (control) {
+                        search = "";
+                        searchCaret = 0;
+                        refreshEntries();
+                        return true;
+                    }
+                    break;
+                }
+                default -> { }
+            }
+            // Any other key while the field has focus belongs to the field, so the screen does not
+            // also act on it. Without this the number keys and the movement keys leak through.
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        if (searchFocused && !Character.isISOControl(codePoint)) {
+            search = search.substring(0, searchCaret) + codePoint + search.substring(searchCaret);
+            searchCaret++;
+            refreshEntries();
+            return true;
+        }
+        return super.charTyped(codePoint, modifiers);
+    }
+
+    private static final int GLFW_MOD_CONTROL = org.lwjgl.glfw.GLFW.GLFW_MOD_CONTROL;
+    private static final int GLFW_KEY_ENTER = org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER;
+    private static final int GLFW_KEY_KP_ENTER = org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER;
+    private static final int GLFW_KEY_ESCAPE = org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE;
+    private static final int GLFW_KEY_BACKSPACE = org.lwjgl.glfw.GLFW.GLFW_KEY_BACKSPACE;
+    private static final int GLFW_KEY_DELETE = org.lwjgl.glfw.GLFW.GLFW_KEY_DELETE;
+    private static final int GLFW_KEY_LEFT = org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT;
+    private static final int GLFW_KEY_RIGHT = org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT;
+    private static final int GLFW_KEY_HOME = org.lwjgl.glfw.GLFW.GLFW_KEY_HOME;
+    private static final int GLFW_KEY_END = org.lwjgl.glfw.GLFW.GLFW_KEY_END;
+    private static final int GLFW_KEY_A = org.lwjgl.glfw.GLFW.GLFW_KEY_A;
+    private static final int GLFW_KEY_V = org.lwjgl.glfw.GLFW.GLFW_KEY_V;
+
+    @Override
     public boolean isPauseScreen() {
         return false;
     }
@@ -196,8 +315,12 @@ public class AdaptationScreen extends Screen {
     private void refreshEntries() {
         visibleEntries.clear();
         descriptionCache.clear();
+        String needle = search.strip().toLowerCase(java.util.Locale.ROOT);
         for (String concept : collectConcepts()) {
             if (selectedTab != null && AdaptationRegistrySafe.domainOf(concept) != selectedTab) {
+                continue;
+            }
+            if (!needle.isEmpty() && !matches(concept, needle)) {
                 continue;
             }
             visibleEntries.add(concept);
@@ -206,6 +329,42 @@ public class AdaptationScreen extends Screen {
                 .comparingInt((String c) -> AdaptationRegistrySafe.domainOf(c).ordinal())
                 .thenComparing(c -> Concepts.displayName(c).getString(), String.CASE_INSENSITIVE_ORDER));
         clampScroll();
+    }
+
+    /**
+     * Matches the display name, the concept key and the description.
+     *
+     * <p>All three, because the player does not know which of them they are looking for: "drown"
+     * is in the name and the key, but a description like "you cannot suffocate" is not. Matching
+     * every whitespace-separated word rather than the whole string means "fall boss" finds things
+     * that mention both, in either order.
+     */
+    private boolean matches(String concept, String needle) {
+        StringBuilder haystack = new StringBuilder();
+        haystack.append(Concepts.displayName(concept).getString()).append(' ');
+        haystack.append(concept).append(' ');
+        haystack.append(conceptDescription(concept));
+        String text = haystack.toString().toLowerCase(java.util.Locale.ROOT);
+        for (String word : needle.split("\\s+")) {
+            if (!word.isEmpty() && !text.contains(word)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String conceptDescription(String concept) {
+        List<FormattedCharSequence> lines = descriptionCache.computeIfAbsent(concept,
+                k -> {
+                    Component text = Component.translatableWithFallback("adaptionwheel.desc." + k, "");
+                    return text.getString().isEmpty() ? List.<FormattedCharSequence>of()
+                            : this.font.split(text, Math.max(40, panelW - 46));
+                });
+        StringBuilder sb = new StringBuilder();
+        for (FormattedCharSequence line : lines) {
+            sb.append(line).append(' ');
+        }
+        return sb.toString();
     }
 
     private double maxScroll() {
@@ -260,6 +419,21 @@ public class AdaptationScreen extends Screen {
     public boolean mouseClicked(double mx, double my, int button) {
         double mouseX = mx;
         double mouseY = my;
+
+        // The search field takes the click before any row, so typing into it never toggles an
+        // adaptation underneath. Returning true unconditionally on failure is what the container
+        // screens do, and it is what made a dead click look like the game ate it.
+        int[] box = searchHitbox();
+        if (mouseX >= box[0] && mouseX < box[0] + box[2]
+                && mouseY >= box[1] && mouseY < box[1] + box[3]) {
+            if (button == 0) {
+                searchFocused = true;
+                searchCaret = caretAt(search, mouseX - box[0] - 2);
+                return true;
+            }
+        } else if (button == 0) {
+            searchFocused = false;
+        }
 
         if (button == 0) {
             for (String concept : visibleEntries) {
@@ -345,6 +519,7 @@ public class AdaptationScreen extends Screen {
         panel(g, panelX, panelY, panelW, panelH, PANEL_BODY);
         renderHeader(g);
         renderSynergyChips(g);
+        renderSearch(g, mouseX, mouseY);
         renderTabs(g, mouseX, mouseY);
         renderList(g, mouseX, mouseY, now);
         renderScrollbar(g, mouseX, mouseY);
@@ -424,6 +599,88 @@ public class AdaptationScreen extends Screen {
         return labels;
     }
 
+    private void renderSearch(GuiGraphics g, int mouseX, int mouseY) {
+        int[] box = searchHitbox();
+        int x = box[0];
+        int y = box[1];
+        boolean hovered = mouseX >= x && mouseX < x + SEARCH_W && mouseY >= y && mouseY < y + SEARCH_H;
+
+        // A sunken well, so it reads as an input rather than a label.
+        g.fill(x - 1, y - 1, x + SEARCH_W + 1, y + SEARCH_H + 1, 0xFF373737);
+        g.fill(x, y, x + SEARCH_W, y + SEARCH_H, hovered ? 0xFFA8A8A8 : 0xFF8B8B8B);
+
+        String shown = search.isEmpty() && !searchFocused ? "" : search;
+        g.enableScissor(x, y, x + SEARCH_W, y + SEARCH_H);
+        String visible = shown.length() > 26 ? shown.substring(0, 26) : shown;
+        int textColour = search.isEmpty() ? 0xFF6B6B6B : 0x1A1A1A;
+        if (search.isEmpty()) {
+            g.drawString(this.font, Component.translatable("adaptionwheel.gui.search_hint"),
+                    x + 2, y + 1, textColour, false);
+        } else {
+            g.drawString(this.font, visible, x + 2, y + 1, 0x1A1A1A, false);
+        }
+        if (searchFocused && (System.currentTimeMillis() / 500L) % 2L == 0L) {
+            int cx = x + 2 + this.font.width(visible.substring(0, Math.min(searchCaret, visible.length())));
+            g.fill(cx, y + 1, cx + 1, y + SEARCH_H - 1, 0x1A1A1A);
+        }
+        g.disableScissor();
+
+        int hits = search.strip().isEmpty() ? 0 : countMatches();
+        if (hits > 0) {
+            g.drawString(this.font, hits + " / " + allInTab(),
+                    x + SEARCH_W + 4, y + 1, 0x3A3A3A, false);
+        }
+    }
+
+    private int allInTab() {
+        int n = 0;
+        for (String concept : collectConcepts()) {
+            if (selectedTab == null || AdaptationRegistrySafe.domainOf(concept) == selectedTab) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private int countMatches() {
+        return visibleEntries.size();
+    }
+
+    /**
+     * Character index nearest an x offset.
+     *
+     * <p>{@code Font.plainSubstrByWidth} returns a String, not an index, so it cannot answer this.
+     * Walking the characters is also what a click actually needs: it snaps to a boundary rather
+     * than to whatever width happens to be under the cursor.
+     */
+    private int caretAt(String text, double offsetX) {
+        if (offsetX <= 0) {
+            return 0;
+        }
+        int index = text.length();
+        for (int i = 1; i <= text.length(); i++) {
+            if (this.font.width(text.substring(0, i)) > offsetX) {
+                return i - 1;
+            }
+        }
+        return index;
+    }
+
+    /**
+     * Right-aligned, and BELOW the adaptation count rather than beside it.
+     *
+     * <p>The count badge already owns the top-right corner, so a field on the same row overlaps it
+     * and the match counter has nowhere to go. Moving the field down one line is the smallest
+     * change that keeps both readable; the alternative, shifting the count left, would leave the
+     * title and the count fighting over the middle of the header.
+     */
+    private int[] searchHitbox() {
+        int y = panelY + PAD + this.font.lineHeight
+                + Math.max(0, (this.font.lineHeight - SEARCH_H) / 2);
+        int x = panelX + panelW - PAD - SEARCH_W - MATCH_W;
+        return new int[] {x, y, SEARCH_W, SEARCH_H};
+    }
+
     private void renderTabs(GuiGraphics g, int mouseX, int mouseY) {
         tabHitboxes.clear();
         List<Component> labels = tabLabels();
@@ -456,8 +713,8 @@ public class AdaptationScreen extends Screen {
 
     private void renderList(GuiGraphics g, int mouseX, int mouseY, long now) {
 
-        int wellX = panelX + PAD;
-        int wellW = panelW - PAD * 2;
+        int wellX = listX - 4;
+        int wellW = panelX + panelW - PAD - wellX;
         inset(g, wellX, listY - 2, wellW, listH + 4, WELL_BODY);
 
         if (visibleEntries.isEmpty()) {
@@ -644,12 +901,18 @@ public class AdaptationScreen extends Screen {
 
     private void renderFooter(GuiGraphics g) {
         int y = footerY();
-        g.drawString(this.font, Component.translatable("adaptionwheel.gui.footer_scroll"),
-                panelX + PAD, y, TEXT_DIM, false);
+        int right = panelX + panelW - PAD;
         if (!visibleEntries.isEmpty()) {
             String shown = visibleEntries.size() + "";
-            g.drawString(this.font, shown, panelX + panelW - PAD - this.font.width(shown), y, TEXT_DIM, false);
+            g.drawString(this.font, shown, right - this.font.width(shown), y, TEXT_DIM, false);
+            right -= this.font.width(shown) + 6;
         }
+        String hint = Component.translatable("adaptionwheel.gui.footer_scroll").getString();
+        int room = right - (panelX + PAD);
+        if (this.font.width(hint) > room) {
+            hint = this.font.plainSubstrByWidth(hint, room);
+        }
+        g.drawString(this.font, hint, panelX + PAD, y, TEXT_DIM, false);
     }
 
     private void panel(GuiGraphics g, int x, int y, int w, int h, int body) {

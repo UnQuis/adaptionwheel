@@ -54,7 +54,7 @@ public final class HardFist {
     }
 
     public static boolean isMaxed(PlayerAdaption data, int tier) {
-        return data.level(CombatFistTiers.concept(tier)) >= PlayerAdaption.MAX_LEVEL;
+        return data.levelOrZero(CombatFistTiers.concept(tier)) >= PlayerAdaption.MAX_LEVEL;
     }
 
     /** Nothing in the hand that adds attack damage: a fist, not a sword. */
@@ -102,7 +102,7 @@ public final class HardFist {
             return;
         }
         String concept = CombatFistTiers.concept(tier);
-        int level = data.level(concept);
+        int level = data.levelOrZero(concept);
         if (level >= PlayerAdaption.MAX_LEVEL) {
             return;
         }

@@ -231,7 +231,7 @@ public class AdaptionEvents {
             Entity direct = source.getDirectEntity();
             if (direct instanceof LivingEntity livingDirect) {
                 String mobPath = entityPath(livingDirect.getType());
-                int contactLevel = data.level(Concepts.contact(mobPath));
+                int contactLevel = data.levelOrZero(Concepts.contact(mobPath));
                 if (contactLevel >= immunityLevel) {
                     event.setCanceled(true); return;
                 }
@@ -345,7 +345,7 @@ public class AdaptionEvents {
 
         int bestLevel = 0;
         for (String concept : concepts) {
-            bestLevel = Math.max(bestLevel, data.level(concept));
+            bestLevel = Math.max(bestLevel, data.levelOrZero(concept));
         }
         if (bestLevel >= 5) {
             double ratio = AdaptionConfig.defenseHealRatio(bestLevel) / 100.0;
@@ -487,12 +487,12 @@ public class AdaptionEvents {
 
         float reduction = 0f;
         int bestLevel = 0;
-        int explosionLevel = data.level(Concepts.type(AdaptionCategory.EXPLOSION));
+        int explosionLevel = data.levelOrZero(Concepts.type(AdaptionCategory.EXPLOSION));
         if (explosionLevel > 0) {
             reduction += (float) (AdaptionConfig.defenseReduction(explosionLevel) / 100.0);
             bestLevel = explosionLevel;
         }
-        int contactLevel = data.level(Concepts.contact(DraconicCompat.GUARDIAN_ID));
+        int contactLevel = data.levelOrZero(Concepts.contact(DraconicCompat.GUARDIAN_ID));
         if (contactLevel > 0) {
             reduction = Math.max(reduction, (float) (AdaptionConfig.contactProtection(contactLevel) / 100.0));
             bestLevel = Math.max(bestLevel, contactLevel);
@@ -1003,7 +1003,7 @@ public class AdaptionEvents {
         }
 
         double hpPct = AdaptionConfig.REGEN_HP_THRESHOLD.get() / 100.0;
-        int injureLevel = data.level(Concepts.SELF_DAMAGE);
+        int injureLevel = data.levelOrZero(Concepts.SELF_DAMAGE);
         if (player.getHealth() <= player.getMaxHealth() * hpPct) {
             if (injureLevel < PlayerAdaption.MAX_LEVEL) {
                 startTask(player, data, Concepts.SELF_DAMAGE, (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20));

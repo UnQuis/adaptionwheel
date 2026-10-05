@@ -92,8 +92,12 @@ public final class SurfaceAdaptations {
         if (!(player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)) {
             return -1;
         }
-        return ru.adaptionwheel.server.FistMastery.currentTier(
-                ru.adaptionwheel.server.AdaptionEvents.dataOf(serverPlayer));
+        // Same split as FistLuck: currentTier is the permanent "which stage was reached" question,
+        // and this is an effect, so the switch is applied here. Without it the breaking speed kept
+        // working with the fist switched off, which is what made the row look broken.
+        var data = ru.adaptionwheel.server.AdaptionEvents.dataOf(serverPlayer);
+        int tier = ru.adaptionwheel.server.FistMastery.currentTier(data);
+        return tier >= 0 && data.active(ru.adaptionwheel.category.FistTiers.concept(tier)) ? tier : -1;
     }
 
     public static int fistLevel(Player player, int tier) {
