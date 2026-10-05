@@ -396,6 +396,38 @@ All three are on **both** branches and configured, not hard-coded.
   you already know about it is not information. It reads `LOCKED - bare-handed kills` before the first
   kill, and the meter now says **kills** rather than blocks (`Row.unit()`), because the breaking fist
   counts blocks and the punching fist counts kills and both used to say "blocks".
+- **The fist counters reset on every rejoin, and the save was never lost — the counter was never in
+  one.** "Netherite fist 20/166 blocks, log out, log back in, 0/166." `TIER_PROGRESS` (breaking) and
+  `KILL_PROGRESS` (punching) were **static UUID-keyed maps**, and `forget()` clears those on logout,
+  so each was correct for exactly one session and gone by the next. What made it read as *data loss*
+  rather than as a resettable counter is the thing sitting next to it in the HUD: the level being
+  counted toward **is** persisted, so the row showed a saved level beside an unsaved bar. A derived
+  value the player can only earn by mining 166 blocks is not "derived" in the sense that justifies
+  throwing it away. Both now live in `PlayerAdaption.progress`, a `Map<String,Integer>` on the
+  `Extras` record — which is where it has to go, because `RecordCodecBuilder.group` caps at 16
+  components and `PlayerAdaption` was already at the limit. Keyed per tier and per stage
+  (`Extras.miningKey` / `punchingKey`) so the two fists cannot overwrite each other, and cleared by
+  `reset()` so a wiped wheel is not one block from a level again. **Runtime-only stance (instabreak)
+  and the UUID caches stay static** — those are genuinely derived and cheap to recompute; a counter
+  is not.
+- **`ProgressPersistenceTests` (4 tests)** covers the round trip, that the two fists use different
+  keys, that `Extras` written before the field existed still parses **and comes back empty** (a
+  default would silently award a level nobody mined for), and that `reset()` clears it. The
+  round-trip test was **checked in both directions** — with the codec getter broken it fails — since
+  a persistence test that passes either way is the one bug class that is invisible by construction.
+  Written against `Extras.CODEC` rather than a hand-written literal for the whole record: the first
+  attempt reported `No key adapted` for an unrelated missing field, which says nothing about the
+  field under test.
+- **Running analyses do NOT have this bug.** Tasks are in the persisted codec on **both** the
+  attachment and the wheel item, and `onPlayerLogin` touches none of them, so a half-finished
+  analysis resumes where it left off. Worth stating because "progress resets" invites the assumption
+  that everything does.
+- **The adaptation voice lagged the adaptation by ~200 ms because the recording opens with 330 ms of
+  silence.** The older file had 24 ms. The sound was playing on time and starting late, so no amount
+  of looking at the sound-playing call would have found it. Trimmed to 2.015 s at `-45dB`, peak
+  unchanged, **no speech cut** — a threshold low enough to reach the quietest syllables would take
+  them too. Measured with `silencedetect` on a decoded WAV rather than by ear, and the same trim is
+  applied to both branches because the file is shared.
 - **Do not "fix" a mod shader's path from the vanilla decompile — NeoForge patches
   `ShaderInstance`, and it prepends `shaders/core/` itself.** `SHADER` is `adaptionwheel:slash` for a
   file at `assets/adaptionwheel/shaders/core/slash.json`, and the JSON's `"vertex": "adaptionwheel:slash"`
