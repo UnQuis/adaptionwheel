@@ -198,6 +198,43 @@ public class CombatFistTests {
         helper.succeed();
     }
 
+    /**
+     * Every stage must resolve to its own material colour.
+     *
+     * <p>Only Wood ever did. The lookup was {@code startsWith(CombatFistTiers.CONCEPTS[0])}, i.e.
+     * against the whole word {@code "Combat_FistWood"}, so Stone, Iron, Diamond and Netherite all
+     * missed it and fell through to the generic combat colour -- red. Iron and Stone therefore drew
+     * red text on a red bar while the split halves beside them used the correct tier table, so the
+     * row contradicted itself: two colours for the same stage on one line.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void everyStageHasItsOwnMaterialColour(GameTestHelper helper) {
+
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (int t = 0; t < CombatFistTiers.TIER_COUNT; t++) {
+            String concept = CombatFistTiers.concept(t);
+            int resolved = ru.adaptionwheel.category.Concepts.color(concept);
+            int expected = CombatFistTiers.color(t);
+            helper.assertTrue(resolved == expected,
+                    concept + " resolved to " + Integer.toHexString(resolved)
+                            + " instead of its material colour " + Integer.toHexString(expected)
+                            + "; anything equal to the generic combat colour means the lookup missed"
+                            + " this stage");
+            seen.add(resolved);
+
+            // The breaking fist's ladder must resolve the same way, or the two rows disagree.
+            int breaking = ru.adaptionwheel.category.Concepts.color(
+                    ru.adaptionwheel.category.FistTiers.concept(t));
+            helper.assertTrue(breaking == ru.adaptionwheel.category.FistTiers.color(t),
+                    "the breaking fist's " + ru.adaptionwheel.category.FistTiers.concept(t)
+                            + " resolved to " + Integer.toHexString(breaking));
+        }
+        helper.assertTrue(seen.size() == CombatFistTiers.TIER_COUNT,
+                "five stages but only " + seen.size() + " distinct colours, so two materials look"
+                        + " identical and the split cannot show a change");
+        helper.succeed();
+    }
+
     private static PlayerAdaption empty() {
         return new PlayerAdaption(new HashMap<>(), List.of(), List.of(), List.of(), List.of(),
                 new HashMap<>(), new HashMap<>(), 0, 0, 0, false, 0f, 0f, false, 0, Extras.EMPTY);
