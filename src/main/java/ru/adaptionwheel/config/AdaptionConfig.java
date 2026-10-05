@@ -660,12 +660,15 @@ public final class AdaptionConfig {
                         "the original mod's own mechanic (its option is called 'flash' and its",
                         "defaults are 2 frames over 100 ms).",
                         "",
-                        "The frame count and duration below are ABSOLUTE, not per rendered frame.",
-                        "That distinction is the whole safety question: cycling frames once per",
-                        "rendered frame puts you at 12 colour changes/second at 60 fps, which is in",
-                        "the 3-25 Hz band where flicker provokes photosensitive migraine. 2 frames",
-                        "over 100 ms is 20 fps and is just animation.")
-                .define("dimensionImpactFlashEnabled", true);
+                        "OFF by default. What it draws is a FULL-SCREEN white/black alternation,",
+                        "and at the defaults below that is 5 full-field luminance reversals in",
+                        "250 ms = 20 Hz, squarely inside the 3-25 Hz band where flicker provokes",
+                        "photosensitive migraine. Frames and Ms are COUPLED through frames/Ms:",
+                        "changing one alone does not lengthen the effect, it changes which effect",
+                        "you get. To keep the flash but drop the strobe, set frames = 1 -- the",
+                        "index is then always 0, so it is a single white pulse with no alternation",
+                        "at all, whatever Ms says. Any value above 1 alternates.")
+                .define("dimensionImpactFlashEnabled", false);
         DIMENSION_IMPACT_FLASH_FRAMES = c.comment("How many flashes the sequence contains. THE RATE IS",
                         "frames / durationMs and the two are coupled — change one without the other",
                         "and you get a different effect, not a longer one:",
