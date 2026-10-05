@@ -57,6 +57,7 @@ import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.data.WheelData;
 import ru.adaptionwheel.item.ModItems;
 import ru.adaptionwheel.network.AdaptionSyncPayload;
+import ru.adaptionwheel.network.TaskProgressPayload;
 import ru.adaptionwheel.sound.ModSounds;
 
 import java.util.ArrayList;
@@ -918,6 +919,16 @@ public class AdaptionEvents {
                 it.remove();
                 completeTask(player, data, task.concept);
             }
+        }
+
+        // The analyses do not wait for the 1 Hz sync to be believed. Their countdown is already
+        // smooth on the client, because it extrapolates between syncs, but a task's timer also moves
+        // in jumps -- startOrAccelerate's accelerate branch subtracts from it on every point of damage,
+        // and a completed task vanishes -- and extrapolation cannot invent a jump it was never told
+        // about. So the running tasks are pushed on a short cadence while any are running, which is
+        // what makes taking damage move the bar straight away instead of a beat later.
+        if (!data.tasks.isEmpty() && player.tickCount % TaskProgressPayload.PUSH_EVERY_TICKS == 0) {
+            TaskProgressPayload.send(player, data.tasks, data.bossCombatTicks);
         }
 
         if (AdaptionConfig.ENABLE_ENVIRONMENT.get()) {
