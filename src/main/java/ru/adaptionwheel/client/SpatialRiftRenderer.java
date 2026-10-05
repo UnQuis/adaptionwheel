@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import ru.adaptionwheel.entity.SpatialRiftProjectile;
@@ -19,7 +20,9 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile> {
 
     @Override
     public ResourceLocation getTextureLocation(SpatialRiftProjectile entity) {
-        return FlyingSlashRenderer.BLADE_TEXTURE;
+        // Never sampled: the blade is procedural. EntityRenderer declares this method but nothing
+        // in the dispatch path calls it, and there is no longer a sprite to point at.
+        return MissingTextureAtlasSprite.getLocation();
     }
 
     @Override
@@ -31,7 +34,7 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile> {
 
         poseStack.pushPose();
         poseStack.mulPose(this.entityRenderDispatcher.camera.rotation());
-        FlyingSlashRenderer.render(poseStack, buffers, entity.getDeltaMovement(), entity.getRoll(), age,
+        FlyingSlashRenderer.render(poseStack, entity.getDeltaMovement(), entity.getRoll(), age,
                 9.0f, 7.5f, BLADE_VIOLET, GLOW_VIOLET, fade);
         poseStack.popPose();
         super.render(entity, entityYaw, partialTick, poseStack, buffers, light);

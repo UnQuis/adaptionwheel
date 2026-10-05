@@ -95,6 +95,13 @@ public class AdaptionWheel {
         }
 
         @SubscribeEvent
+        public static void onRegisterShaders(
+                net.neoforged.neoforge.client.event.RegisterShadersEvent event) {
+
+            ru.adaptionwheel.client.DimensionImpactFX.register(event);
+        }
+
+        @SubscribeEvent
         public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {
             if (isTab(event.getTabKey(), "functional_blocks")) {
 
