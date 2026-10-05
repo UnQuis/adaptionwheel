@@ -26,7 +26,6 @@ public final class FistMastery {
 
     private static final Map<UUID, Boolean> INSTABREAK_STANCE = new HashMap<>();
 
-    private static final Map<UUID, Integer> TIER_PROGRESS = new HashMap<>();
 
     private FistMastery() {
     }
@@ -67,13 +66,19 @@ public final class FistMastery {
         return AdaptionConfig.fistBlocksForNextLevel(tier, level);
     }
 
-    public static int tierProgress(UUID id) {
-        return TIER_PROGRESS.getOrDefault(id, 0);
+    /**
+     * Blocks earned toward the tier's next level.
+     *
+     * <p>Lives in {@link PlayerAdaption#progress} rather than in a static map, because it is
+     * something the player earned: a static map is cleared on logout, so the counter read "0/166"
+     * again on every rejoin.
+     */
+    public static int tierProgress(UUID id, PlayerAdaption data) {
+        return data.progress.getOrDefault(ru.adaptionwheel.data.Extras.miningKey(currentTier(data)), 0);
     }
 
     public static void forget(UUID id) {
         INSTABREAK_STANCE.remove(id);
-        TIER_PROGRESS.remove(id);
     }
 
     public static void setInstabreak(ServerPlayer player, boolean active) {
@@ -143,12 +148,14 @@ public final class FistMastery {
             return;
         }
         int need = AdaptionConfig.fistBlocksForNextLevel(tier, level);
-        int have = TIER_PROGRESS.merge(player.getUUID(), 1, Integer::sum);
+        String key = ru.adaptionwheel.data.Extras.miningKey(tier);
+        int have = data.progress.getOrDefault(key, 0) + 1;
         if (have < need) {
+            data.progress.put(key, have);
             pushProgress(player, have, need);
             return;
         }
-        TIER_PROGRESS.put(player.getUUID(), 0);
+        data.progress.remove(key);
         AdaptionEvents.completeTask(player, data, FistTiers.concept(tier));
 
         if (level + 1 >= PlayerAdaption.MAX_LEVEL) {

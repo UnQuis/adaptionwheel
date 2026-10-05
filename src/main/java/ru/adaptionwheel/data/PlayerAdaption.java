@@ -35,7 +35,8 @@ public class PlayerAdaption {
             Codec.BOOL.optionalFieldOf("wasWearing", false).forGetter(d -> d.wasWearing),
             Codec.INT.optionalFieldOf("shedCount", 0).forGetter(d -> d.shedCount),
             Extras.CODEC.optionalFieldOf("extras", Extras.EMPTY)
-                    .forGetter(d -> new Extras(new ArrayList<>(d.disabled), new ArrayList<>(d.cache)))
+                    .forGetter(d -> new Extras(new ArrayList<>(d.disabled), new ArrayList<>(d.cache),
+                            Map.copyOf(d.progress)))
     ).apply(inst, PlayerAdaption::new));
 
     public static final Codec<PlayerAdaption> CODEC = MAP_CODEC.codec();
@@ -49,6 +50,14 @@ public class PlayerAdaption {
     public final Set<String> disabled = new HashSet<>();
 
     public final List<net.minecraft.world.item.ItemStack> cache = new ArrayList<>();
+
+    /**
+     * Earned-but-not-yet-spent progress toward the next level, keyed by {@link Extras} helpers.
+     *
+     * <p>Persisted rather than held in a static map, because it is something the player earned and
+     * would otherwise lose on every rejoin. Cleared by {@link #reset()} along with everything else.
+     */
+    public final Map<String, Integer> progress = new HashMap<>();
 
     public final Map<String, Integer> killCounts = new HashMap<>();
 
@@ -100,6 +109,7 @@ public class PlayerAdaption {
         this.bossCombatTicks.putAll(existenceProgress);
         this.disabled.addAll(extras.disabled());
         this.cache.addAll(extras.cache());
+        this.progress.putAll(extras.progress());
         this.healingTimer = healingTimer;
         this.adversityCooldownTimer = adversityCooldownTimer;
         this.adversityTimer = adversityTimer;
@@ -169,6 +179,7 @@ public class PlayerAdaption {
         killCounts.clear();
         bossCombatTicks.clear();
         disabled.clear();
+        progress.clear();
         cache.clear();
         healingTimer = 0;
         adversityCooldownTimer = 0;
@@ -181,6 +192,8 @@ public class PlayerAdaption {
     public void copyFrom(PlayerAdaption other) {
         levels.clear();
         levels.putAll(other.levels);
+        progress.clear();
+        progress.putAll(other.progress);
         adapted.clear();
         adapted.addAll(other.adapted);
         tasks.clear();

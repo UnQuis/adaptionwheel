@@ -11,9 +11,6 @@ import ru.adaptionwheel.category.FistTiers;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.PlayerAdaption;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 /**
  * The punching fist: five material stages, walked by killing what you are punching.
@@ -25,17 +22,18 @@ import java.util.UUID;
  */
 public final class HardFist {
 
-    private static final Map<UUID, Integer> KILL_PROGRESS = new HashMap<>();
 
     private HardFist() {
     }
 
-    public static void forget(UUID id) {
-        KILL_PROGRESS.remove(id);
-    }
-
-    public static int killProgress(UUID id) {
-        return KILL_PROGRESS.getOrDefault(id, 0);
+    /**
+     * Kept so the unequip and logout paths stay symmetrical with {@link FistMastery#forget}.
+     *
+     * <p>The kill counter itself is not dropped: it lives in {@code PlayerAdaption#progress}, which
+     * persists. It used to be a static map this method cleared, so the punching fist's "3/7 kills"
+     * read as "0/7" on every rejoin.
+     */
+    public static void forget(java.util.UUID id) {
     }
 
     public static boolean enabled() {
@@ -103,12 +101,16 @@ public final class HardFist {
             return;
         }
         int need = AdaptionConfig.fistKillsForNextLevel(tier, level);
-        int have = KILL_PROGRESS.merge(player.getUUID(), 1, Integer::sum);
+        // Persisted, not a static map: these are kills the player earned, and a static map is
+        // cleared on logout, so the row reset to 0 on every rejoin.
+        String key = ru.adaptionwheel.data.Extras.punchingKey(tier);
+        int have = data.progress.getOrDefault(key, 0) + 1;
         if (have < need) {
+            data.progress.put(key, have);
             pushProgress(player, have, need, tier);
             return;
         }
-        KILL_PROGRESS.put(player.getUUID(), 0);
+        data.progress.remove(key);
         AdaptionEvents.completeTask(player, data, concept);
         if (level + 1 >= PlayerAdaption.MAX_LEVEL) {
             announceStageUp(player, tier);

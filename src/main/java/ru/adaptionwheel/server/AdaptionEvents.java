@@ -1903,7 +1903,7 @@ public class AdaptionEvents {
                 existenceProgress != null ? existenceProgress : java.util.Map.of(),
                 (int) (AdaptionConfig.EXISTENCE_REQUIRED_SECONDS.get() * 20),
                 ru.adaptionwheel.server.FistMastery.instabreakStance(player),
-                ru.adaptionwheel.server.FistMastery.tierProgress(player.getUUID()),
+                ru.adaptionwheel.server.FistMastery.tierProgress(player.getUUID(), data),
                 ru.adaptionwheel.server.FistMastery.fistProgressTotal(data),
                 new ArrayList<>(data.disabled)
         );
