@@ -142,6 +142,35 @@ public class AdaptionEvents {
         return data(serverPlayer).isAdapted(concept);
     }
 
+    /**
+     * Which environment adaptation makes a damage category harmless, or null for none.
+     *
+     * <p>This was a seven-line if-chain, and a chain is exactly the shape that produced the bug this
+     * replaces: a chain of {@code category == X && data.active(...)} reads like a gate but is seven
+     * independent gates, so one wrong accessor in one arm is invisible to review and to every other
+     * test. As a single table the whole mapping can be enumerated from a test, which is the only way
+     * to be sure a category was not simply forgotten.
+     *
+     * <p>Note the four categories that are NOT here: {@code DROWN} also has a second grant in
+     * {@code SynergyEffects}, which refills air and is drowning immunity by another name. One effect
+     * with two grants is the shape that hid behind the chain.
+     */
+    public static String envImmunityConcept(AdaptionCategory category) {
+        if (category == null) {
+            return null;
+        }
+        return switch (category) {
+            case FALL -> Concepts.ENV_FALL;
+            case STARVE -> Concepts.ENV_STARVE;
+            case DROWN -> Concepts.ENV_DROWN;
+            case FIRE -> Concepts.ENV_LAVA;
+            case SUFFOCATE -> Concepts.ENV_SUFFOCATE;
+            case VOID -> Concepts.ENV_VOID;
+            case CONTACT -> Concepts.ENV_THORNS;
+            default -> null;
+        };
+    }
+
     private static void saveToItem(Player player, PlayerAdaption data) {
         getWheelStack(player).ifPresent(stack -> saveToStack(stack, data));
     }
@@ -204,25 +233,8 @@ public class AdaptionEvents {
         DamageSource source = event.getSource();
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        if (category == AdaptionCategory.FALL && data.active(Concepts.ENV_FALL)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.STARVE && data.active(Concepts.ENV_STARVE)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.DROWN && data.active(Concepts.ENV_DROWN)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.FIRE && data.active(Concepts.ENV_LAVA)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.SUFFOCATE && data.active(Concepts.ENV_SUFFOCATE)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.VOID && data.active(Concepts.ENV_VOID)) {
-            event.setCanceled(true); return;
-        }
-        if (category == AdaptionCategory.CONTACT && data.active(Concepts.ENV_THORNS)) {
+        String immunity = envImmunityConcept(category);
+        if (immunity != null && data.active(immunity)) {
             event.setCanceled(true); return;
         }
 
@@ -631,8 +643,8 @@ public class AdaptionEvents {
         ServerPlayer player = killerOf(event.getSource());
         if (player == null || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
-        if (dead instanceof net.minecraft.world.entity.monster.Enemy && HardFist.trains(player)) {
-            HardFist.onFistKill(player, data, dead);
+        if (dead instanceof net.minecraft.world.entity.monster.Enemy) {
+            HardFist.onFistKill(player, data, dead, event.getSource());
         }
         if (data.adversityActive || !AdaptionConfig.ENABLE_LOOT.get() || BossHelper.isBoss(dead)) return;
 

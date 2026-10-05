@@ -6,12 +6,16 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import ru.adaptionwheel.category.CombatFistTiers;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.FistTiers;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.PlayerAdaption;
+import ru.adaptionwheel.item.SwordOfExterminationItem;
 
 
 /**
@@ -58,8 +62,36 @@ public final class HardFist {
     }
 
     /** Nothing in the hand that adds attack damage: a fist, not a sword. */
-    public static boolean trains(ServerPlayer player) {
-        return enabled() && !FistTiers.dealsExtraAttackDamage(player.getMainHandItem());
+    /**
+     * Whether this kill trains the punching fist.
+     *
+     * <p>Decided from the **damage source**, not from what is in the hand at the moment of death.
+     * Asking the hand was wrong in both directions: a bow carries no {@code ATTACK_DAMAGE} modifier,
+     * so a bow kill counted as bare-handed, and the item in hand at death is not necessarily the
+     * item that swung.
+     *
+     * <p>Ranged never counts — a bow, a crossbow, the Extermination Sword's cursed slash and the
+     * Dimension Destroy rifts all arrive with a projectile as the direct entity. The Extermination
+     * Sword is the one exception and it has to be named, because it is literally a piece of
+     * Mahoraga: it counts when swung in **positive-energy mode** only, and its own cursed mode is
+     * excluded twice over, since that mode's damage comes from the projectile the melee check has
+     * already rejected.
+     */
+    public static boolean trains(ServerPlayer player, DamageSource source) {
+        if (!enabled()) {
+            return false;
+        }
+        if (source.getDirectEntity() != null && !(source.getDirectEntity() instanceof Player)) {
+            return false;
+        }
+        ItemStack held = player.getMainHandItem();
+        if (held.getItem() instanceof SwordOfExterminationItem sword
+                && !SwordOfExterminationItem.isCursed(held)) {
+            return true;
+        }
+        // Anything else that adds attack damage in the hand is a weapon: axe, sword, trident.
+        // A fish has none and counts, which is the intended behaviour.
+        return !FistTiers.dealsExtraAttackDamage(held);
     }
 
     /**
@@ -92,8 +124,13 @@ public final class HardFist {
         return total * perAdaptation;
     }
 
-    public static void onFistKill(ServerPlayer player, PlayerAdaption data, LivingEntity dead) {
-        if (data.adversityActive || !trains(player)) {
+    /**
+     * Awards a kill. The bare-handed gate lives here and nowhere else, so there is one place that
+     * decides whether a kill counts rather than one per caller.
+     */
+    public static void onFistKill(ServerPlayer player, PlayerAdaption data, LivingEntity dead,
+                                  DamageSource source) {
+        if (data.adversityActive || !trains(player, source)) {
             return;
         }
         int tier = currentTier(data);

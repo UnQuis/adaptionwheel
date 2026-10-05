@@ -1,6 +1,7 @@
 package ru.adaptionwheel.client;
 
 import net.minecraft.client.Minecraft;
+import ru.adaptionwheel.data.PlayerAdaption;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -82,7 +83,11 @@ public class AdaptionHud {
             String suffix = luck > 1 ? " - LUCK x" + luck : null;
             rows.add(new Row(ru.adaptionwheel.category.FistTiers.concept(tier),
                     fistProgress(), false, ClientAdaption.fistProgressDone,
-                    ClientAdaption.fistProgressTotal, suffix));
+                    ClientAdaption.fistProgressTotal, suffix,
+                    handedOverColour(ClientAdaption.level(
+                            ru.adaptionwheel.category.FistTiers.concept(tier)), tier,
+                            ru.adaptionwheel.category.FistTiers::concept,
+                            ru.adaptionwheel.category.FistTiers::color)));
         }
 
         // The row appears only once the punch is trainable -- the first bare-handed hostile kill --
@@ -100,7 +105,11 @@ public class AdaptionHud {
                 rows.add(new Row(ru.adaptionwheel.category.CombatFistTiers.concept(tier),
                         maxed ? 1f : combatFistProgress(), false,
                         ClientAdaption.combatFistProgressDone,
-                        ClientAdaption.combatFistProgressTotal, maxed ? "MAX" : tierKillsSuffix(tier)));
+                        ClientAdaption.combatFistProgressTotal, maxed ? "MAX" : tierKillsSuffix(tier),
+                        handedOverColour(ClientAdaption.level(
+                                ru.adaptionwheel.category.CombatFistTiers.concept(tier)), tier,
+                                ru.adaptionwheel.category.CombatFistTiers::concept,
+                                ru.adaptionwheel.category.CombatFistTiers::color)));
             }
         }
         rows.sort(Comparator.comparingInt(r -> priority(r.concept)));
@@ -136,7 +145,15 @@ public class AdaptionHud {
             tag = " [NEW]";
         } else {
             int level = ClientAdaption.LEVELS.getOrDefault(row.concept, 0);
-            tag = " [Lv." + level + " > " + (level + 1) + "]";
+            // A stage tops out at 8 and the next starts at 1, so "Lv.8 > 9" was never a real state:
+            // maxing a stage hands over to the next material at level 1. So at the cap the tag names
+            // that next stage instead of inventing a ninth level.
+            if (level >= PlayerAdaption.MAX_LEVEL) {
+                String next = nextStageName(row.concept);
+                tag = next == null ? " [Lv.MAX]" : " [Lv.MAX > " + next + " Lv.1]";
+            } else {
+                tag = " [Lv." + level + " > " + (level + 1) + "]";
+            }
         }
         if (off) {
             tag = " [OFF]";
@@ -157,6 +174,14 @@ public class AdaptionHud {
                 graphics.fill(15 + x, y + 24, 15 + x + 1, y + 24 + BAR_HEIGHT,
                         withAlpha(segColor, opacity * 90 / 100));
             }
+        } else if (row.handedOverFrom != 0) {
+            // Two-tone, and only here: the player has just crossed a material boundary, so half the
+            // bar is the stage they finished and half is the one they are training.
+            int half = BAR_WIDTH / 2;
+            graphics.fill(15, y + 24, 15 + half, y + 24 + BAR_HEIGHT,
+                    withAlpha(row.handedOverFrom, opacity * 55 / 100));
+            graphics.fill(15 + half, y + 24, 15 + barW, y + 24 + BAR_HEIGHT,
+                    withAlpha(color, opacity * 90 / 100));
         } else {
             graphics.fill(15, y + 24, 15 + barW, y + 24 + BAR_HEIGHT, withAlpha(color, opacity * 90 / 100));
         }
@@ -203,14 +228,14 @@ public class AdaptionHud {
     }
 
     private record Row(String concept, float progress, boolean rainbow, int blocksDone, int blocksTotal,
-                       String suffix) {
+                       String suffix, int handedOverFrom) {
 
         private static Row of(String concept, float progress) {
-            return new Row(concept, progress, false, 0, 0, null);
+            return new Row(concept, progress, false, 0, 0, null, 0);
         }
 
         private static Row of(String concept, float progress, boolean rainbow) {
-            return new Row(concept, progress, rainbow, 0, 0, null);
+            return new Row(concept, progress, rainbow, 0, 0, null, 0);
         }
 
         /** What the counter measures: the breaking fist counts blocks, the punching fist kills. */
@@ -232,6 +257,45 @@ public class AdaptionHud {
     }
 
     /** "3/7 kills" for the current stage, so the row says what is left rather than only a bar. */
+    private static String nextStageName(String concept) {
+        for (int t = 0; t < ru.adaptionwheel.category.FistTiers.TIER_COUNT; t++) {
+            if (concept.equals(ru.adaptionwheel.category.FistTiers.concept(t)) && t + 1 < ru.adaptionwheel.category.FistTiers.TIER_COUNT) {
+                return ru.adaptionwheel.category.CombatFistTiers.concept(t + 1);
+            }
+            if (concept.equals(ru.adaptionwheel.category.CombatFistTiers.concept(t)) && t + 1 < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT) {
+                return ru.adaptionwheel.category.CombatFistTiers.concept(t + 1);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The previous stage's colour, but only on the level where a stage actually hands over.
+     *
+     * <p>A stage tops out at 8 and the next begins at 1, so level 1 of a stage that has a predecessor
+     * is the only moment the player has crossed a material boundary. That is the moment the bar
+     * goes two-tone: half in what you just finished, half in what you are now. At every other level
+     * this returns 0 and the bar is a single colour, because a permanent split would just be a
+     * second colour scheme rather than a marker of anything.
+     *
+     * <p>The level is read raw, not through {@code levelOrZero}: switching a stage off must not make
+     * it look like a handover happened.
+     *
+     * @return the previous stage's colour, or 0 when no split applies
+     */
+    private static int handedOverColour(int level, int tier,
+                                        java.util.function.IntFunction<String> concept,
+                                        java.util.function.IntFunction<Integer> colour) {
+        if (level != 1 || tier <= 0) {
+            return 0;
+        }
+        String previous = concept.apply(tier - 1);
+        if (ClientAdaption.level(previous) < PlayerAdaption.MAX_LEVEL) {
+            return 0;
+        }
+        return colour.apply(tier - 1);
+    }
+
     /** "3/7 kills", so the row says what is left rather than showing only a bar. */
     private static String tierKillsSuffix(int tier) {
         return ClientAdaption.combatFistProgressDone + "/" + ClientAdaption.combatFistProgressTotal;

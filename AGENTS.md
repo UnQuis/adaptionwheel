@@ -474,6 +474,35 @@ All three are on **both** branches and configured, not hard-coded.
   `SurfaceAdaptations`' break speed) now apply the switch themselves. **A helper that answers
   "have I unlocked this" and a helper that answers "does it apply" cannot both be one method** when
   the row and the effect need different answers.
+- **The punching fist was a five-stage ladder that read as one flat grind, for three separate
+  reasons.** The ladder was always there (Wood > Stone > Iron > Diamond > Netherite, eight levels
+  each), but (1) the tag rendered `Lv.8 > 9` -- a level the game cannot reach, because maxing a stage
+  hands over to the next material at **level 1**; (2) the bar never showed that handover, so a new
+  material looked identical to more of the same; and (3) **`damagePerAdaptation` was `0.04`, so the
+  adapt count was decorative** -- 150 adaptations gave x7 while the *Diamond stage multiplier alone*
+  is x8, and Netherite is x16. The thing that scales with how much you have adapted was weaker than
+  one material tier, which is backwards. Now `0.15`: x10 at 60 adaptations, x16 at 100, so a
+  well-developed wheel reaches Netherite by **breadth** rather than by forty bare-handed kills.
+- **The bar goes two-tone only on the level where a stage actually hands over.** Half in the stage
+  you just finished, half in the one you are training, gated on `level == 1` **and** the previous
+  stage being maxed -- so it is a marker for crossing a material boundary and nothing else. Making it
+  permanent would just have been a second colour scheme. Same rule on both fists, since they share
+  the stage count (pinned by a test, because "stage N" meaning two different materials depending on
+  which row you read is its own bug).
+- **The bare-handed gate was reading the wrong thing entirely.** `HardFist.trains` asked what was in
+  the **hand at the moment of death**, not what dealt the damage -- so a bow, which carries no
+  `ATTACK_DAMAGE` modifier, counted as bare-handed, and the item in hand at death is not necessarily
+  the item that swung. It now takes the **`DamageSource`**: anything with a projectile as its direct
+  entity is rejected (bow, crossbow, the sword's cursed slash, the Dimension Destroy rifts), a hand
+  or a fish counts, and the Extermination Sword counts **only in positive-energy mode**. That sword
+  is named explicitly because it is literally a piece of Mahoraga and is the one exception; its
+  cursed mode is excluded twice over, since that damage arrives as the projectile the melee check
+  has already rejected. The gate lives in `onFistKill` and nowhere else, so there is one place that
+  decides whether a kill counts.
+- **`CombatFistTests` (3 tests)** pins the five stages of eight, that adjacent stages have different
+  colours, that maxing wood and having stone at 1 reports Stone while wood still reads as maxed, and
+  that 100 adaptations reach the Netherite multiplier -- the last one is a guard on the config
+  default, which is the part most likely to be quietly reverted.
 - **Do not "fix" a mod shader's path from the vanilla decompile — NeoForge patches
   `ShaderInstance`, and it prepends `shaders/core/` itself.** `SHADER` is `adaptionwheel:slash` for a
   file at `assets/adaptionwheel/shaders/core/slash.json`, and the JSON's `"vertex": "adaptionwheel:slash"`
