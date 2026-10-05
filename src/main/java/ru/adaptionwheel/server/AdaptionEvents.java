@@ -1945,7 +1945,7 @@ public class AdaptionEvents {
                 existenceProgress != null ? existenceProgress : java.util.Map.of(),
                 (int) (AdaptionConfig.EXISTENCE_REQUIRED_SECONDS.get() * 20),
                 FistMastery.instabreakStance(player),
-                FistMastery.tierProgress(player.getUUID()),
+                FistMastery.tierProgress(player.getUUID(), data),
                 fistProgressTotal(data),
                 new ArrayList<>(data.disabled)
         );
