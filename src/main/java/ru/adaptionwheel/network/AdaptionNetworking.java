@@ -17,6 +17,8 @@ public class AdaptionNetworking {
                 (payload, context) -> context.enqueueWork(() -> ClientAdaption.onSync(payload)));
         registrar.playToClient(FistProgressPayload.TYPE, FistProgressPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> FistProgressPayload.apply(payload)));
+        registrar.playToClient(TaskProgressPayload.TYPE, TaskProgressPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> TaskProgressPayload.apply(payload)));
         registrar.playToClient(CombatFistProgressPayload.TYPE, CombatFistProgressPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> CombatFistProgressPayload.apply(payload)));
         registrar.playToClient(TradeSyncPayload.TYPE, TradeSyncPayload.STREAM_CODEC,

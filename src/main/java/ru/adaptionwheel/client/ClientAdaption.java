@@ -50,6 +50,16 @@ public final class ClientAdaption {
     public static int existenceThreshold;
 
     private static long syncedAtGameTime;
+    /**
+     * The clock the task bars extrapolate from, deliberately NOT {@link #syncedAtGameTime}.
+     *
+     * <p>Adversity and the analyses are both smoothed by subtracting the ticks elapsed since their
+     * last update, but they are updated by different packets at different rates. Sharing one clock
+     * means whichever payload arrives resets both, and whichever field that payload did not carry
+     * jumps backwards -- a task-only push would have sent the adversity bar back up to a full second.
+     * Two clocks, each advanced only by the payload that carries that field.
+     */
+    private static long tasksSyncedAtGameTime;
 
     public static long adversityTriggeredAtGameTime = Long.MIN_VALUE;
 
@@ -77,6 +87,8 @@ public final class ClientAdaption {
         combatFistProgressTotal = 0;
         combatFistProgressTier = -1;
         adversityTriggeredAtGameTime = Long.MIN_VALUE;
+        syncedAtGameTime = currentGameTime();
+        tasksSyncedAtGameTime = syncedAtGameTime;
     }
 
     public static void onSync(AdaptionSyncPayload payload) {
@@ -111,6 +123,7 @@ public final class ClientAdaption {
         // build ever stops sending it: a stage is granted once and never withdrawn.
         combatFistProgressTier = combatFistTier();
         syncedAtGameTime = currentGameTime();
+        tasksSyncedAtGameTime = syncedAtGameTime;
     }
 
     public static boolean isEnabled(String concept) {
@@ -170,7 +183,21 @@ public final class ClientAdaption {
     }
 
     private static int progressElapsedTicks() {
-        return adversityActive ? 0 : elapsedTicksSinceSync();
+        long current = currentGameTime();
+        return adversityActive ? 0 : (int) Math.max(0L, current - tasksSyncedAtGameTime);
+    }
+
+    /**
+     * Applies a tasks-only push: the running analyses and the boss counters, both of which this mod
+     * smooths by extrapolation, so it advances their clock and nothing else.
+     */
+    public static void applyTaskProgress(List<AdaptionTask> tasks,
+                                         java.util.Map<String, Integer> existenceProgress) {
+        TASKS.clear();
+        TASKS.addAll(tasks);
+        EXISTENCE_PROGRESS.clear();
+        EXISTENCE_PROGRESS.putAll(existenceProgress);
+        tasksSyncedAtGameTime = currentGameTime();
     }
 
     private static int elapsedTicksSinceSync() {
