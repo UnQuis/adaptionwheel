@@ -59,7 +59,7 @@ public final class FlyingSlashRenderer {
     private static final float TAPER = 1.35f;
 
     /** Cells along the blade, then across it. */
-    private static final int SEGMENTS_X = 48;
+    private static final int SEGMENTS_X = 32;
     private static final int SEGMENTS_Y = 6;
 
     private FlyingSlashRenderer() {
@@ -117,23 +117,58 @@ public final class FlyingSlashRenderer {
         // nothing at all. This is the closest a per-vertex smoothstep gets to the shader's fwidth.
         float band = THICKNESS * 0.125f;
 
+        // Shade the whole grid first, then emit triangles out of it.
+        //
+        // The consumer takes EXPLICIT triangle vertices -- vanilla's own quad() writes six per quad,
+        // three per triangle -- so streaming the grid row by row is read as consecutive triples: 343
+        // vertices became 114 nonsense triangles, which is a garbled, mostly degenerate shape rather
+        // than a blade. Cells also have to be wound to match, since entityTranslucent culls.
+        int cols = SEGMENTS_X + 1;
+        int rows = SEGMENTS_Y + 1;
+        float[] shaded = new float[cols * rows * 4];
+        for (int iy = 0; iy < rows; iy++) {
+            float v = (float) iy / SEGMENTS_Y;
+            for (int ix = 0; ix < cols; ix++) {
+                float u = (float) ix / SEGMENTS_X;
+                float[] argb = shade(u, v, tint, glow, opacity, time, band);
+                System.arraycopy(argb, 0, shaded, (iy * cols + ix) * 4, 4);
+            }
+        }
+
         buffers.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(SURFACE), (pose, consumer) -> {
             Matrix4f matrix = pose.pose();
-            for (int iy = 0; iy <= SEGMENTS_Y; iy++) {
-                float v = (float) iy / SEGMENTS_Y;
-                for (int ix = 0; ix <= SEGMENTS_X; ix++) {
-                    float u = (float) ix / SEGMENTS_X;
-                    float[] argb = shade(u, v, tint, glow, opacity, time, band);
-                    Vec3 position = center.add(halfSide.scale(u * 2f - 1f)).add(halfUp.scale(v * 2f - 1f));
-                    consumer.addVertex(matrix, (float) position.x, (float) position.y, (float) position.z)
-                            .setColor(argb[0], argb[1], argb[2], argb[3])
-                            .setUv(u, v)
-                            .setOverlay(OverlayTexture.NO_OVERLAY)
-                            .setLight(LightCoordsUtil.FULL_BRIGHT)
-                            .setNormal(0f, 0f, 1f);
+            for (int iy = 0; iy < SEGMENTS_Y; iy++) {
+                float v0 = (float) iy / SEGMENTS_Y;
+                float v1 = (float) (iy + 1) / SEGMENTS_Y;
+                for (int ix = 0; ix < SEGMENTS_X; ix++) {
+                    float u0 = (float) ix / SEGMENTS_X;
+                    float u1 = (float) (ix + 1) / SEGMENTS_X;
+                    int topLeft = (iy * cols + ix) * 4;
+                    int bottomLeft = ((iy + 1) * cols + ix) * 4;
+                    int bottomRight = ((iy + 1) * cols + ix + 1) * 4;
+                    int topRight = (iy * cols + ix + 1) * 4;
+                    // Same winding the sprite path used, so it is not culled from the front.
+                    corner(consumer, matrix, center, halfSide, halfUp, u0, v0, shaded, topLeft);
+                    corner(consumer, matrix, center, halfSide, halfUp, u0, v1, shaded, bottomLeft);
+                    corner(consumer, matrix, center, halfSide, halfUp, u1, v1, shaded, bottomRight);
+                    corner(consumer, matrix, center, halfSide, halfUp, u0, v0, shaded, topLeft);
+                    corner(consumer, matrix, center, halfSide, halfUp, u1, v1, shaded, bottomRight);
+                    corner(consumer, matrix, center, halfSide, halfUp, u1, v0, shaded, topRight);
                 }
             }
         });
+    }
+
+    private static void corner(VertexConsumer consumer, Matrix4f matrix, Vec3 center,
+                               Vec3 halfSide, Vec3 halfUp, float u, float v,
+                               float[] shaded, int offset) {
+        Vec3 position = center.add(halfSide.scale(u * 2f - 1f)).add(halfUp.scale(v * 2f - 1f));
+        consumer.addVertex(matrix, (float) position.x, (float) position.y, (float) position.z)
+                .setColor(shaded[offset], shaded[offset + 1], shaded[offset + 2], shaded[offset + 3])
+                .setUv(u, v)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setLight(LightCoordsUtil.FULL_BRIGHT)
+                .setNormal(0f, 0f, 1f);
     }
 
     /**
