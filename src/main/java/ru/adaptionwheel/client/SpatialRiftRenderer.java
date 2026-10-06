@@ -33,9 +33,11 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile> {
         float fade = lifeRatio > 0.82f ? Mth.clamp((1f - lifeRatio) / 0.18f, 0f, 1f) : 1f;
 
         poseStack.pushPose();
-        poseStack.mulPose(this.entityRenderDispatcher.camera.rotation());
+        // No camera billboard: the blade now orients along its own flight path, and
+        // flattening it to face the camera would erase the cross-section this mesh exists
+        // to provide -- which is the whole reason it replaced the quad.
         FlyingSlashRenderer.render(poseStack, entity.getDeltaMovement(), entity.getRoll(), age,
-                9.0f, 7.5f, BLADE_VIOLET, GLOW_VIOLET, fade);
+                9.0f, 1.05f, 0.60f, BLADE_VIOLET, GLOW_VIOLET, fade);
         poseStack.popPose();
         super.render(entity, entityYaw, partialTick, poseStack, buffers, light);
     }

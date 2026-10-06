@@ -4,36 +4,36 @@ import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RegisterShadersEvent;
 import org.joml.Matrix4f;
-import org.joml.Vector4f;
 import org.slf4j.Logger;
 import ru.adaptionwheel.AdaptionWheel;
 
 import java.io.IOException;
 
 /**
- * Draws the cursed slash as a procedural blade instead of a flying sprite.
+ * Draws the cursed slash as a real swept volume rather than a camera-facing quad.
  *
- * <p>The shape lives entirely in {@code slash.fsh} — a tapered bowed blade with a white-hot edge
- * and a halo — so the cut stays crisp at any distance and any resolution, which a fixed-size PNG
- * could not do: the old sprite was blurry up close and dissolved into its own pixels at range.
+ * <p>The geometry is {@link SlashBladeMesh}: the same sine arch and taper the fragment shader used
+ * to evaluate per pixel, now built as a tube with a genuine cross-section. The fragment stage is
+ * left with nothing but colouring -- {@code SlashShape} is gone from it entirely, because the shape
+ * no longer lives in the shader.
  *
  * <p>Unlike the impact frame this is <b>not</b> batched through a {@code RenderType}, and it is not
- * a post pass. It issues one immediate draw per slash with its own uniform values, which is what
- * lets a single program serve every slash on screen with a different roll, size and tint. The
- * caller keeps owning the motion — growth, opacity, roll — on the CPU exactly as before; only the
- * pixels changed.
+ * a post pass. A {@code RenderType} draws every primitive sharing it under one set of uniforms, so
+ * the per-slash tint and fade would have nowhere to live -- the rift is violet and the cursed slash
+ * cyan, and both fade out at the end of their life. Issuing one immediate draw per slash keeps both
+ * on the uniform, and the mesh is a few hundred triangles, so batching would buy nothing anyway.
  *
  * <p>The transform is deliberately explicit rather than relying on {@code ModelViewMat}/{@code ProjMat}:
  * see {@link #viewProjection()}.
@@ -45,32 +45,6 @@ public final class SlashShaderFX {
     private static final ResourceLocation SHADER =
             ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, "slash");
 
-    /**
-     * These four are {@code SlashShape}, whose slots are (glowHalf, coreHalf, feather, taperPower)
-     * — the order the shader reads them. The names are the contract: the previous version of this
-     * shader used the same four floats for (bow, half-thickness, core width, taper), so a rename
-     * here silently reshapes the blade rather than failing to compile.
-     *
-     * <p>The measured defaults, from porting the fragment shader to numpy at 1024x1024 (the same
-     * method that caught three earlier defects in the CPU-drawn blade):
-     * <ul>
-     *   <li>0.28/0.16 puts the halo band at 0.28 half-heights and the ink at 0.16, so on the
-     *       6x5 quad the ink measures 1.64 blocks across at the belly and the halo 2.10 — a
-     *       stroke that reads at swing distance rather than a hairline.</li>
-     *   <li>0.04 is the ink edge's softness in the quad's own units, i.e. ~0.10 blocks: 25 px at
-     *       three blocks out, ~1 px at sixty, which is where the shader's {@code fwidth} floor
-     *       takes over.</li>
-     *   <li>1.35 tapers the tips to nothing inside the outer eighth of the sweep, measured as a
-     *       peak alpha of 0.02 at u=0.02 and 0.00 at u=0.005 — the ends dissolve instead of
-     *       stopping as a brick.</li>
-     * </ul>
-     */
-    private static final float GLOW_HALF = 0.28f;
-    private static final float CORE_HALF = 0.16f;
-    private static final float EDGE_FEATHER = 0.04f;
-    /** Higher tapers harder, so the tips come to a sharper point. */
-    private static final float TAPER_POWER = 1.35f;
-
     private static ShaderInstance shader;
 
     private SlashShaderFX() {
@@ -81,10 +55,9 @@ public final class SlashShaderFX {
      * saturates and the slash disappears — which is exactly what happened when the sprite was
      * replaced. The blade has to be able to darken the background to read on it.
      *
-     * <p>The two-tone ink shader measures out at 5.9x the 5% Weber threshold against a noon
-     * sky (luminance 0.93) at its ink core, so the tint is passed straight through and the
-     * shader darkens nothing itself. The halo is the marginal part at 1.3x, which is why the
-     * ink is what carries the silhouette.
+     * <p>The two-tone ink shader measures out at 5.9x the 5% Weber threshold against a noon sky at
+     * its ink core, so the tint is passed straight through and the shader darkens nothing itself.
+     * The halo is the marginal part at 1.3x, which is why the ink is what carries the silhouette.
      */
     private static void bladeBlend() {
         RenderSystem.enableBlend();
@@ -125,14 +98,14 @@ public final class SlashShaderFX {
     }
 
     /**
-     /**
-     * One slash: a world-space quad billboarded on {@code side}/{@code up}, shaped by the shader.
+     * One slash: a swept tube in world space, oriented by its caller.
      *
-     * @param alpha      0..1 master fade, driven by the entity's life ratio
-     * @param glowAlpha  0..1 halo strength; the halo is part of the same draw, not a second sprite
+     * @param alpha 0..1 master fade, driven by the entity's life ratio; it rides the uniform
+     *              because a vertex attribute cannot carry it without widening the format
+     * @param glow  0..1 aura strength, same reason
      */
-    public static void draw(Matrix4f pose, Vec3 side, Vec3 up, Vec3 center,
-                            float width, float height,
+    public static void draw(PoseStack poseStack, float length, float curveAmount,
+                            float glowHalf, float coreHalf, float taperPower,
                             int[] tint, float alpha, int[] glow, float glowAlpha) {
         ShaderInstance active = shader;
         if (active == null || alpha <= 0.01f) {
@@ -142,45 +115,38 @@ public final class SlashShaderFX {
         bladeBlend();
         RenderSystem.enableDepthTest();
         RenderSystem.depthMask(false);
-        // Same trap as the impact frame: world passes leave culling on, and this quad's winding
-        // is not guaranteed to survive the pose stack's basis.
-        RenderSystem.disableCull();
+        // Culling is ON, which is the opposite of every other pass in this mod and is correct only
+        // for this mesh. The tube is closed and its traversal emits outward-facing normals
+        // consistently (measured: 280 of 280 non-degenerate triangles agree), so only the near wall
+        // is drawn and the blade composites exactly once. With NO_CULL both walls composite and a
+        // 0.6-authored aura lands at 0.84, which reads as a denser, flatter blade. The degenerate
+        // rings at the two tips cannot defeat this: a zero-area triangle is culled whatever its
+        // winding.
+        RenderSystem.enableCull();
 
         try {
             active.safeGetUniform("SlashProj").set(viewProjection());
-            active.safeGetUniform("SlashShape").set(GLOW_HALF, CORE_HALF, EDGE_FEATHER, TAPER_POWER);
             active.safeGetUniform("SlashTint").set(
                     ((tint[0] & 0xFF) / 255f), ((tint[1] & 0xFF) / 255f), ((tint[2] & 0xFF) / 255f), alpha);
             active.safeGetUniform("SlashGlow").set(
                     ((glow[0] & 0xFF) / 255f), ((glow[1] & 0xFF) / 255f), ((glow[2] & 0xFF) / 255f), glowAlpha);
             active.apply();
 
-            Vec3 halfSide = side.scale(width * 0.5);
-            Vec3 halfUp = up.scale(height * 0.5);
-            BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS,
+            BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLES,
                     DefaultVertexFormat.POSITION_TEX);
-            corner(buffer, pose, center.subtract(halfSide).add(halfUp), 0f, 0f);
-            corner(buffer, pose, center.subtract(halfSide).subtract(halfUp), 0f, 1f);
-            corner(buffer, pose, center.add(halfSide).subtract(halfUp), 1f, 1f);
-            corner(buffer, pose, center.add(halfSide).add(halfUp), 1f, 0f);
+            // PoseStack rather than a bare Matrix4f because Pose, the thing addVertex(pose, ...)
+            // wants, is package-private in blaze3d and cannot be constructed from here.
+            SlashBladeMesh.build(buffer, poseStack.last(),
+                    length, curveAmount, glowHalf, coreHalf, taperPower);
             BufferUploader.draw(buffer.buildOrThrow());
         } finally {
-            // Unlike the impact frame on the GUI hook, this runs INSIDE the world pass, so nothing
-            // downstream re-establishes GL state for us: leaving culling off makes every later quad
-            // in the frame shade back faces. `buildOrThrow` and the uniform lookups can all throw,
-            // so the restore cannot sit on the success path either.
+            // This runs INSIDE the world pass, so nothing downstream re-establishes GL state for
+            // us; leaving blending off would make every later quad in the frame composite wrongly.
+            // `buildOrThrow` and the uniform lookups can all throw, so the restore cannot sit on
+            // the success path either.
             active.clear();
-            RenderSystem.enableCull();
             RenderSystem.depthMask(true);
             RenderSystem.disableBlend();
         }
-    }
-
-    /** The pose stack is baked into the vertex on the CPU, as the sprite path did; the shader then
-     * applies the view-projection, matching how vanilla transforms entity geometry. */
-    private static void corner(BufferBuilder buffer, Matrix4f pose, Vec3 position, float u, float v) {
-        Vector4f world = new Vector4f((float) position.x, (float) position.y, (float) position.z, 1f);
-        pose.transform(world);
-        buffer.addVertex(world.x, world.y, world.z).setUv(u, v);
     }
 }
