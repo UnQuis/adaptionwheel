@@ -1,7 +1,5 @@
 package ru.adaptionwheel.entity;
 
-import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -12,13 +10,13 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.entity.projectile.ProjectileUtil;
 import ru.adaptionwheel.sound.ModSounds;
 
 import java.util.ArrayDeque;
@@ -40,6 +38,10 @@ public class CursedSlashProjectile extends Projectile {
 
     private final ArrayDeque<Vec3> trailPositions = new ArrayDeque<>();
 
+    /** Where the slash was at the start of this tick, used to sweep the whole segment it just
+     *  travelled instead of only checking a bubble around where it ended up. */
+    private Vec3 lastPosition;
+
     private float traveled;
 
     public CursedSlashProjectile(EntityType<? extends CursedSlashProjectile> type, Level level) {
@@ -54,6 +56,7 @@ public class CursedSlashProjectile extends Projectile {
         setDeltaMovement(velocity);
         this.damage = damage;
         this.maxHits = maxHits;
+        this.lastPosition = position();
         entityData.set(ROLL, roll);
     }
 
@@ -70,15 +73,23 @@ public class CursedSlashProjectile extends Projectile {
     public void tick() {
         super.tick();
         Vec3 motion = getDeltaMovement();
+        boolean clientSide = level().isClientSide();
 
-        if (level().isClientSide) {
+        if (clientSide) {
+            // Purely cosmetic: just keep the trail for rendering. Everything that decides who
+            // got hit lives in the server-only branch below.
             trailPositions.addLast(position());
             while (trailPositions.size() > TRAIL_LENGTH) {
                 trailPositions.removeFirst();
             }
         }
+
+        // Deterministic given the synced velocity, so it's safe (and necessary for the client's
+        // own trail-length effects) to update this on both sides.
         traveled += (float) motion.length();
 
+        // Block collision is deterministic from already-synced chunk data, so letting the client
+        // predict it too just makes the slash stop against a wall without network lag.
         HitResult hitResult = ProjectileUtil.getHitResultOnMoveVector(this, this::canHitEntity);
         if (hitResult.getType() != HitResult.Type.MISS) {
             onHit(hitResult);
@@ -87,9 +98,19 @@ public class CursedSlashProjectile extends Projectile {
             }
         }
 
+        Vec3 from = lastPosition != null ? lastPosition : position();
+        Vec3 to = position();
+        lastPosition = to;
+
         setPos(getX() + motion.x, getY() + motion.y, getZ() + motion.z);
 
-        hitTargets();
+        if (!clientSide) {
+            // Server-authoritative on purpose: entity positions can differ slightly between the
+            // client and the server, so letting both sides decide who got hit used to produce a
+            // doubled hit sound and the slash occasionally vanishing a tick early on the client
+            // while the server kept simulating it.
+            hitTargets(from, to);
+        }
     }
 
     public List<Vec3> getTrailSnapshot() {
@@ -106,15 +127,21 @@ public class CursedSlashProjectile extends Projectile {
         discard();
     }
 
-    private void hitTargets() {
-        Vec3 center = position();
-        AABB box = new AABB(center, center).inflate(1.6);
+    private void hitTargets(Vec3 from, Vec3 to) {
+        // Sweep the segment travelled since the last tick, not just a bubble around the
+        // endpoint: a fast slash moves further in one tick than a 1.6-block bubble ever covered,
+        // so anything standing between the two points used to be skipped over entirely.
+        AABB box = new AABB(from, to).inflate(1.6);
         for (LivingEntity target : level().getEntitiesOfClass(LivingEntity.class, box, this::canHitEntity)) {
             if (!alreadyHit.add(target.getUUID())) {
                 continue;
             }
             DamageSource source = damageSources().mobProjectile(this, getOwner() instanceof LivingEntity living ? living : null);
-            target.hurt(source, damage);
+            // This branch still has LivingEntity.hurt(DamageSource, float); hurtServer is 26.3's
+            // replacement and does not exist here.
+            if (!level().isClientSide()) {
+                target.hurt(source, damage);
+            }
             level().playSound(null, target.blockPosition(), ModSounds.SOE_HIT_2.get(), SoundSource.PLAYERS, 0.8f,
                     1f + (random.nextFloat() - 0.5f) * 0.2f);
             if (alreadyHit.size() >= maxHits) {
@@ -133,7 +160,8 @@ public class CursedSlashProjectile extends Projectile {
 
     @Override
     protected void onHitEntity(EntityHitResult result) {
-
+        // Intentionally empty: entity hits are resolved by the line sweep in hitTargets(), not
+        // by the raycast. The raycast only exists here for block collision.
     }
 
     @Override
@@ -142,12 +170,7 @@ public class CursedSlashProjectile extends Projectile {
     }
 
     @Override
-    public AABB getBoundingBoxForCulling() {
-        return super.getBoundingBoxForCulling().inflate(8.0);
-    }
-
-    @Override
-    protected void readAdditionalSaveData(CompoundTag tag) {
+    protected void readAdditionalSaveData(net.minecraft.nbt.CompoundTag tag) {
         super.readAdditionalSaveData(tag);
         damage = tag.getFloat("Damage");
         maxHits = tag.getInt("MaxHits");
@@ -155,7 +178,7 @@ public class CursedSlashProjectile extends Projectile {
     }
 
     @Override
-    protected void addAdditionalSaveData(CompoundTag tag) {
+    protected void addAdditionalSaveData(net.minecraft.nbt.CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putFloat("Roll", entityData.get(ROLL));
         tag.putFloat("Damage", damage);
