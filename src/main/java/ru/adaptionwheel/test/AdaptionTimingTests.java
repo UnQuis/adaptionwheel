@@ -6,6 +6,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.AdaptionTimings;
+import ru.adaptionwheel.config.AdaptionConfig;
 
 /**
  * Pins the tick-rate conversion for durations ported from the original.
@@ -68,6 +69,54 @@ public class AdaptionTimingTests {
                 "reflected hits grant " + reflect + " ticks; the original grants max(immuneTime, 2),"
                         + " about 33ms, because reflection denies the boss its attack rather than"
                         + " shielding the player");
+        helper.succeed();
+    }
+
+    /**
+     * The corrected default is not enough on its own -- a stored value has to be migrated.
+     *
+     * <p>NeoForge's config tracker writes the default only into a file that lacks a value and keeps
+     * whatever is already stored, so changing 40 to 10 in code left every install that generated its
+     * file in between still granting 40 ticks. That is two seconds, which outlasts a melee swing, so
+     * those users kept the exact behaviour that had been reported as a bug and nothing in the log
+     * said why.
+     *
+     * <p>The rewrite is deliberately narrow: only the old default is touched, because 40 is a value
+     * the config comment offers a player who wants the original's two seconds, and a player who
+     * typed it themselves must keep it.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theLegacyStoredValueIsMigrated(GameTestHelper helper) {
+
+        // The value that was shipped, and therefore what an old config file actually contains.
+        helper.assertTrue(AdaptionConfig.migrateLegacyLv8IFrames(AdaptionConfig.LEGACY_LV8_IFRAMES_TICKS)
+                        == AdaptionConfig.DEFAULT_LV8_IFRAMES_TICKS,
+                "a stored " + AdaptionConfig.LEGACY_LV8_IFRAMES_TICKS + " must migrate to "
+                        + AdaptionConfig.DEFAULT_LV8_IFRAMES_TICKS + ", got "
+                        + AdaptionConfig.migrateLegacyLv8IFrames(AdaptionConfig.LEGACY_LV8_IFRAMES_TICKS));
+
+        // A fresh install reads the corrected default, not the legacy one.
+        helper.assertTrue(AdaptionConfig.DEFAULT_LV8_IFRAMES_TICKS == 10,
+                "the default is " + AdaptionConfig.DEFAULT_LV8_IFRAMES_TICKS + "; a fresh config would still be"
+                        + " granting a window that outlasts a melee interval");
+
+        // Everything else is a player choice and must survive untouched.
+        int[] untouched = {0, 1, 5, 9, 11, 20, 39, 41, 60, 1200};
+        for (int stored : untouched) {
+            helper.assertTrue(AdaptionConfig.migrateLegacyLv8IFrames(stored) == stored,
+                    "migrateLegacyLv8IFrames(" + stored + ") returned "
+                            + AdaptionConfig.migrateLegacyLv8IFrames(stored) + "; only the old shipped default"
+                            + " may be rewritten, and 0 must keep meaning no i-frames at all");
+        }
+
+        // And the migration must be one-shot, or a player who deliberately asks for 40 loses it on
+        // every start. Only the flag's EXISTENCE is asserted, never its value: starting the gametest
+        // server fires the migration for real, which sets and saves the flag, so asserting "still
+        // false" would only pass on a machine that had never run the mod -- and would then fail for
+        // everyone else. The value is the migration's business, not an invariant.
+        helper.assertTrue(AdaptionConfig.LV8_IFRAMES_MIGRATION_DONE != null,
+                "without a stored flag the rewrite would repeat forever and take away a player's"
+                        + " deliberate choice");
         helper.succeed();
     }
 }
