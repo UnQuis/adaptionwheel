@@ -1,6 +1,7 @@
 package ru.adaptionwheel.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import org.joml.Matrix4f;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.util.Mth;
 import org.joml.Vector3f;
@@ -35,6 +36,82 @@ import org.joml.Vector3f;
  * </ul>
  */
 public final class SlashBladeMesh {
+
+    /**
+     * The blade's world frame: length along the <b>level</b> flight direction, arc running across
+     * it, and the ribbon's flat face pointing at the ground so the crescent lies horizontal.
+     *
+     * <p>Rotation order matters and is not interchangeable — the two orderings that look similar in
+     * code are not similar at all. This is {@code ry(yaw) · rz(roll + 90°) · ry(-90°)}, with
+     * {@code ry(-90°)} applied <b>first</b> because the mesh is built along local +X and that
+     * rotation is what swings it onto +Z. Swapping the two y-rotation terms instead measures
+     * length·up = +1.000 and flight·length = 0.000: the blade stands on end, pointing at the sky.
+     *
+     * <p>No pitch is applied, deliberately. The projectile still travels where it travels; the art
+     * stays level, so a slash fired downward still renders as a horizontal crescent instead of
+     * tipping into the ground with it.
+     *
+     * <p>There is no camera term anywhere in here, and that is the point: the frame is a function
+     * of the heading alone, so turning the view never re-orients the blade. Because the slash is
+     * fired along the player's look vector, it points away from the camera at the moment of the
+     * swing and keeps that heading afterwards.
+     *
+     * @param yaw   heading, radians, from the velocity's horizontal component
+     * @param roll  spin about the blade's own length axis, radians
+     */
+    public static Matrix4f frame(float yaw, float roll) {
+        // Built as an explicit basis rather than a chain of Euler rotations. Two orderings of the
+        // y-rotations that look interchangeable in code are not: applying the -90 first is what
+        // swings the mesh's local +X onto the heading, and swapping them puts the blade on end with
+        // length pointing at the sky. An explicit basis has no ordering to get wrong.
+        Vector3f lengthAxis = new Vector3f(Mth.sin(yaw), 0f, Mth.cos(yaw));
+        Vector3f bowAxis = new Vector3f(Mth.cos(yaw), 0f, -Mth.sin(yaw));
+        // Right-handed completion: length x bow is straight up, which is the ribbon's face normal.
+        Vector3f faceAxis = new Vector3f(lengthAxis).cross(bowAxis).normalize();
+
+        // Spin the plate about its own length. Clamped well inside the server's +/-60 degrees,
+        // because past that the plate tips far enough out of level to read as standing on end.
+        float clamped = Mth.clamp(roll, -MAX_ROLL, MAX_ROLL);
+        rotateAbout(bowAxis, lengthAxis, clamped);
+        rotateAbout(faceAxis, lengthAxis, clamped);
+
+        Matrix4f frame = new Matrix4f();
+        // JOML is column-major, so each mesh axis becomes one column.
+        frame.set(lengthAxis.x, lengthAxis.y, lengthAxis.z, 0f,
+                  bowAxis.x,    bowAxis.y,    bowAxis.z,    0f,
+                  faceAxis.x,   faceAxis.y,   faceAxis.z,   0f,
+                  0f,           0f,           0f,           1f);
+        return frame;
+    }
+
+    /**
+     * Rodrigues rotation of {@code vector} about the unit {@code axis}, in place.
+     *
+     * <p>Written out rather than delegated to {@code Quaternionf.rotationAxis} plus
+     * {@code Vector3f.rotate}, because that pair does not agree with its own signature in the JOML
+     * this project builds against. Asked to rotate {@code (0,1,0)} about the X axis by 30 degrees
+     * it returned {@code (0.8415, 0.5403, 0)} -- a rotation about Z, from a quaternion whose
+     * scalar part was 0.8776 where {@code cos(15 deg)} is 0.9659. Two axes and a half angle it
+     * should not have had, from an API whose whole purpose is to be obvious.
+     *
+     * <p>The formula is three lines and its output is checked directly: the frame's three axes must
+     * stay unit length and mutually perpendicular, and {@code x cross y . z} must be +1. A rotation
+     * that quietly did the wrong thing would fail those rather than ship a tilted blade.
+     *
+     * @param axis assumed unit length, which is what {@link #frame} passes
+     */
+    private static void rotateAbout(Vector3f vector, Vector3f axis, float angle) {
+        float cos = (float) Math.cos(angle);
+        float sin = (float) Math.sin(angle);
+        Vector3f cross = new Vector3f(axis).cross(vector).mul(sin);
+        Vector3f along = new Vector3f(axis).mul(axis.dot(vector) * (1f - cos));
+        vector.set(vector.x * cos + cross.x + along.x,
+                vector.y * cos + cross.y + along.y,
+                vector.z * cos + cross.z + along.z);
+    }
+
+    /** Roll is clamped well inside the server's +/-60 degree range; see {@link #frame}. */
+    public static final float MAX_ROLL = (float) Math.toRadians(30.0);
 
     /** Along the sweep. 21 spans over 6 blocks is 0.29 blocks each, well under the taper's scale. */
     private static final int LENGTH_SEGMENTS = 22;

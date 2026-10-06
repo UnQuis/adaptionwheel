@@ -37,7 +37,7 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile> {
         // flattening it to face the camera would erase the cross-section this mesh exists
         // to provide -- which is the whole reason it replaced the quad.
         FlyingSlashRenderer.render(poseStack, entity.getDeltaMovement(), entity.getRoll(), age,
-                9.0f, 1.05f, 0.60f, BLADE_VIOLET, GLOW_VIOLET, fade);
+                9.0f, 0.33f, 0.20f, BLADE_VIOLET, GLOW_VIOLET, fade);
         poseStack.popPose();
         super.render(entity, entityYaw, partialTick, poseStack, buffers, light);
     }

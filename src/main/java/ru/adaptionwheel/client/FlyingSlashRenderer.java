@@ -1,7 +1,6 @@
 package ru.adaptionwheel.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
@@ -31,13 +30,14 @@ public final class FlyingSlashRenderer {
     }
 
     /**
-     * The two half-widths are the ink-to-aura ratio of the flat shader, converted: it separated
-     * them by 0.16 v against 0.28 v, which is 0.40 blocks against 0.70 on a 6-block blade, or
-     * 0.5714 as a fraction. Passing the ratio rather than a third constant keeps the two-tone band
-     * a single design decision instead of two numbers that can drift apart.
-     *
      * @param glowHalf half-width of the aura at the blade's belly, in blocks
      * @param coreHalf half-width of the ink, in blocks
+     *
+     * <p>The pair keeps the flat shader's ink-to-aura proportion (0.16 v against 0.28 v, about
+     * 0.57) but is far narrower than that shader's, and that is deliberate: with the ribbon lying
+     * flat, its arc width is exactly what a viewer behind the shot sees, so this number <em>is</em>
+     * the strip's apparent thickness. The old 0.70 gave a 1.4-block band that read as a broad
+     * crescent rather than a cut.
      */
     public static void render(PoseStack poseStack, Vec3 motion, float roll,
                               float age, float length, float glowHalf, float coreHalf,
@@ -49,23 +49,16 @@ public final class FlyingSlashRenderer {
         // Swings open quickly, then holds — a cut does not ease in.
         float growth = Mth.clamp(age / 3f, 0.15f, 1f);
 
+        // Heading only. The pitch is deliberately dropped: the crescent stays level however the
+        // shot was aimed, so a downward slash does not tip into the ground with the projectile.
         float yaw = (float) Mth.atan2(motion.x, motion.z);
-        float pitch = (float) Mth.atan2(motion.y, motion.horizontalDistance());
 
         poseStack.pushPose();
-        // The mesh is built along local +X, and this chain maps it onto the flight direction.
-        //
-        // Both signs matter and were measured rather than reasoned about: the mesh's +X must end up
-        // parallel to the velocity, and this composition gives dot = +1.000 against it. Rotating the
-        // wrong way about Y (and the wrong way about X) puts the crescent behind the projectile and
-        // off-axis at the same time — a blade that looks merely misaligned rather than broken, so
-        // it is easy to ship by eye.
-        poseStack.mulPose(Axis.YP.rotation(yaw));
-        poseStack.mulPose(Axis.XP.rotation(-pitch));
-        // Roll about the blade's own length axis, which is what flips the crescent's bow from one
-        // side of the trail to the other. Verified not to move the length axis itself.
-        poseStack.mulPose(Axis.ZP.rotationDegrees(roll));
-        poseStack.mulPose(Axis.YP.rotationDegrees(-90f));
+        // SlashBladeMesh owns the frame. It is built from the heading and nothing else, so there is
+        // no camera term to re-orient the blade when the view turns; and it puts the ribbon flat
+        // with its face to the ground, which is what makes the crescent read as a thin strip rather
+        // than as a broad crescent face.
+        poseStack.mulPose(SlashBladeMesh.frame(yaw, roll));
 
         SlashShaderFX.draw(poseStack,
                 length * growth, CURVE_AMOUNT,

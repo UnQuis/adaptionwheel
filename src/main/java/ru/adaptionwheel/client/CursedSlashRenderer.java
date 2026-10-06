@@ -38,7 +38,7 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile> {
         // flattening it to face the camera would erase the cross-section this mesh exists
         // to provide -- which is the whole reason it replaced the quad.
         FlyingSlashRenderer.render(poseStack, entity.getDeltaMovement(), entity.getRoll(), age,
-                6.0f, 0.70f, 0.40f, BLADE_CYAN, GLOW_CYAN, fade);
+                6.0f, 0.22f, 0.13f, BLADE_CYAN, GLOW_CYAN, fade);
         poseStack.popPose();
         super.render(entity, entityYaw, partialTick, poseStack, buffers, light);
     }
