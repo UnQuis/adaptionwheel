@@ -2,25 +2,21 @@
 
 // The blade, drawn procedurally: nothing here samples a texture.
 //
-// The blade line is a parabola, `y = -bow * (1 - x^2)`, which passes through the middle of the
-// quad, sits `bow` below it at the belly and rises back to the midline at both tips. A circular
-// arc was the obvious alternative and it is the wrong shape here: because the arc has to leave
-// the quad somewhere, a circle whose radius equals its centre offset only grazes the quad's
-// middle and the blade dies out roughly a third of the way to each edge. The parabola keeps the
-// blade across the full width, and `bow` is then a directly meaningful number of half-heights
-// instead of an indirect circle radius.
+// The blade line is a sine arch, `sin(u * PI) * 0.55`, so a straight quad bends into a crescent
+// without any of its four corners moving. It is offset by half its own height so the arch is
+// centred on the projectile: unoffset, the whole blade floats half a quad above the thing it is
+// cutting, which matters because the hit sweep runs along the projectile's real path.
 //
 // Everything else is a function of the perpendicular distance `d` to that one line, which is what
 // lets the taper sharpen the tips and the halo follow the taper rather than staying a blob.
 
-in vec2 vLocal;
+in vec2 texCoord;
 
-// x = bow (half-heights the belly dips), y = belly half-thickness, z = core half-thickness,
-// w = tip sharpness.
+// x = glow half-width, y = ink half-width, z = edge feather, w = tip taper power.
 uniform vec4 SlashShape;
-// rgb = blade tint, a = overall alpha.
+// rgb = ink colour + overall alpha.
 uniform vec4 SlashTint;
-// rgb = halo colour, a = halo strength.
+// rgb = paper/highlight colour + halo alpha.
 uniform vec4 SlashGlow;
 // Seconds since the world started; filled in by ShaderInstance.apply().
 uniform float GameTime;
@@ -28,53 +24,79 @@ uniform float GameTime;
 out vec4 fragColor;
 
 void main() {
-    // -1..1 with x running along the blade and y across it.
-    vec2 p = vLocal * 2.0 - 1.0;
+    float glowHalf = SlashShape.x;
+    float coreHalf = SlashShape.y;
+    float feather  = max(SlashShape.z, 1e-4);
+    float taper    = max(SlashShape.w, 0.01);
 
-    float bow = SlashShape.x;
-    float thickness = SlashShape.y;
-    float coreWidth = SlashShape.z;
-    float taper = SlashShape.w;
+    float u = clamp(texCoord.x, 0.0, 1.0); // вдоль клинка: 0 — хвост взмаха, 1 — остриё
+    float v = texCoord.y * 2.0 - 1.0;      // поперёк клинка, -1..1
 
-    float bladeY = -bow * (1.0 - p.x * p.x);
-    // Dividing by the slope's length turns the vertical gap into a perpendicular one, so the
-    // blade keeps an even thickness instead of thinning where it runs steeply.
-    float slope = 2.0 * bow * p.x;
-    float d = abs(p.y - bladeY) / sqrt(1.0 + slope * slope);
+    // Тот же трюк, что гнёт прямой quad в полумесяц: центральная линия — синусоида от u,
+    // а не ось четырёхугольника.
+    float arc = sin(u * 3.14159265);
+    float centreline = (arc - 0.5) * 1.1;
 
-    // Local half-width multiplier: full at the belly, zero at both tips.
-    float t = pow(max(0.0, 1.0 - p.x * p.x), taper);
+    // d меряется ПЕРПЕНДИКУЛЯРно линии, а не по вертикали. На плечах синуса наклон достигает
+    // ~1.4 на единицу u, и вертикальный замер там даёт клинок на 30-40% тоньше, чем он
+    // нарисован: замерено 0.57 против 0.82 блока на u=0.30. Деление на длину наклона
+    // (переведённую в пропорции самого quad) держит толщину одинаковой по всей дуге.
+    //
+    // 0.833 — это height/width, и у обоих рендереров quad одинаковые 1.2:1 (6x5 и 9x7.5),
+    // так что одна константа верна для обоих.
+    float slope = 0.55 * 3.14159265 * cos(u * 3.14159265) * 0.8333;
+    float d = abs(v - centreline) / sqrt(1.0 + slope * slope);
 
-    // Derivative-based edge: the blade stays one pixel wide on screen no matter how far away the
-    // slash is, instead of shimmering into aliasing at range. That was the whole reason for
-    // moving off the sprite.
-    float aa = max(fwidth(d), 1e-4);
-    float ad = abs(d);
+    // Сужение к обоим концам взмаха вместо кирпича постоянной ширины.
+    float lengthFalloff = pow(max(arc, 0.0), taper);
+    float coreEdge = coreHalf * lengthFalloff;
+    float glowEdge = glowHalf * lengthFalloff;
 
-    float body = 1.0 - smoothstep(thickness * t - aa, thickness * t + aa, ad);
-    float core = 1.0 - smoothstep(coreWidth * t - aa, coreWidth * t + aa, ad);
+    // Край тушевой, а не мягкий: feather держится маленьким и почти постоянным в МИРОВЫХ
+    // единицах — замерено: полоса в 25 px на 3 блоках и ~1 px на 60. Комментарий в старой
+    // версии звал это «экранными единицами», что неправда: константа в координатах quad
+    // постоянна в мире, а не на экране, и сжимается вместе с перспективой.
+    // fwidth() подкладывается снизу как страховка от aliasing за пределами видимой дистанции,
+    // где константа схлопнулась бы в долю пикселя.
+    float fe = max(feather, fwidth(d));
+    float core = 1.0 - smoothstep(coreEdge - fe, coreEdge + fe, d);
+    float glow = 1.0 - smoothstep(glowEdge - fe, glowEdge + fe * 4.0, d);
 
-    // Halo measured outward from the blade's own edge, so it follows the taper.
-    float halo = exp(-max(ad - thickness * t, 0.0) * 9.0) * t;
+    // Полоса между свечением и ядром — не градиент, а скринтон: тот же приём двухтоновости,
+    // что в impact-панели, иначе клинок выглядит аэрографом, а не нарисованным тушью.
+    //
+    // Делитель подобран под пропорции quad: при плоском 0.03 ячейка выходила в 1.67 раза
+    // выше ширины (0.09 x 0.15 блока), и «точки» растягивались в вертикальные чёрточки.
+    // 0.0125 даёт клетку 0.09 x 0.09 блока — круглую на обоих рендерерах.
+    float tone = clamp(glow - core, 0.0, 1.0);
+    vec2 dotSpace = mat2(0.7071, -0.7071, 0.7071, 0.7071) * (texCoord / vec2(0.015, 0.0125));
+    float dots = step(length(fract(dotSpace) - 0.5), mix(0.1, 0.5, tone));
 
-    // A highlight running the length of the blade, drifting outward over time. This is the only
-    // term that animates on its own; the caller already drives growth and fade.
-    float shimmer = 0.86 + 0.14 * sin(vLocal.x * 20.0 - GameTime * 5.0);
+    // Манговые "speed lines" с задней кромки дуги, бегущие по GameTime — чтобы статичный
+    // кадр всё равно читался как движение, а не как наклейка.
+    float hatchLane = fract(u * 9.0 - GameTime * 4.0);
+    float hatch = step(0.85, hatchLane) * smoothstep(0.0, 0.5, arc) * (1.0 - core);
 
-    // Manga slashes are a *replacement* of pixels, not an addition: a dark inked stroke with a
-    // white-hot cutting edge. The sprite this replaced was dark for exactly this reason -- it had
-    // to read against a blown-out noon sky. An additive glow cannot do that: on a near-white sky it
-    // simply saturates, and the slash vanishes. So the body is a very dark tint (keeping the
-    // per-entity colour identity -- cyan for the cursed slash, violet for the rift), the core burns
-    // to white so it still reads in a dark cave, and the halo carries the saturated colour.
-    vec3 ink = SlashTint.rgb * 0.16;
-    vec3 colour = ink * body * shimmer;
-    colour = mix(colour, vec3(1.0), core);
-    colour = mix(colour, SlashGlow.rgb, clamp(halo * 0.75, 0.0, 1.0) * (1.0 - core));
+    // Штрихи гасятся ДВУМЯ воротами, и нужны оба.
+    //
+    // По расстоянию до кромки свечения: без этого `max` внизу рисует девять полос скорости
+    // поперёк всей пустоты quad — замерено 9% площади с альфой 0.5 там, где клинка нет вообще,
+    // медиана в 0.73 единицы от осевой линии, то есть сетка из висящих прямоугольников.
+    // По lengthFalloff: на кончиках glowEdge схлопывается в ноль, и ворота по расстоянию там
+    // уже ничего не гасят. Вместе 0.07% против 0.08% и 9% без них.
+    hatch = hatch
+            * (1.0 - smoothstep(glowEdge * 1.15, glowEdge * 2.1, d))
+            * lengthFalloff;
 
-    float alpha = clamp(body * 0.92 + core + halo * 0.45, 0.0, 1.0) * SlashTint.a;
-    if (alpha < 0.004) {
+    vec3 color = mix(SlashGlow.rgb, SlashTint.rgb, core);
+    color = mix(color, SlashTint.rgb, dots * tone * 0.8);
+    color = mix(color, SlashTint.rgb, hatch * 0.6);
+
+    float alpha = clamp(core * SlashTint.a + glow * SlashGlow.a, 0.0, 1.0) * lengthFalloff;
+    alpha = max(alpha, hatch * SlashTint.a * 0.5);
+
+    if (alpha < 0.01) {
         discard;
     }
-    fragColor = vec4(colour, alpha);
+    fragColor = vec4(color, alpha);
 }

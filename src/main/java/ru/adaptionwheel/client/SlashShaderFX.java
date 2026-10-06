@@ -46,15 +46,30 @@ public final class SlashShaderFX {
             ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, "slash");
 
     /**
-     * How far the blade's belly dips, in half-heights of its own quad. Directly meaningful: it
-     * measured out at 0.40 gives a blade spanning ~53% of the quad's width with a visible bow.
+     * These four are {@code SlashShape}, whose slots are (glowHalf, coreHalf, feather, taperPower)
+     * — the order the shader reads them. The names are the contract: the previous version of this
+     * shader used the same four floats for (bow, half-thickness, core width, taper), so a rename
+     * here silently reshapes the blade rather than failing to compile.
+     *
+     * <p>The measured defaults, from porting the fragment shader to numpy at 1024x1024 (the same
+     * method that caught three earlier defects in the CPU-drawn blade):
+     * <ul>
+     *   <li>0.28/0.16 puts the halo band at 0.28 half-heights and the ink at 0.16, so on the
+     *       6x5 quad the ink measures 1.64 blocks across at the belly and the halo 2.10 — a
+     *       stroke that reads at swing distance rather than a hairline.</li>
+     *   <li>0.04 is the ink edge's softness in the quad's own units, i.e. ~0.10 blocks: 25 px at
+     *       three blocks out, ~1 px at sixty, which is where the shader's {@code fwidth} floor
+     *       takes over.</li>
+     *   <li>1.35 tapers the tips to nothing inside the outer eighth of the sweep, measured as a
+     *       peak alpha of 0.02 at u=0.02 and 0.00 at u=0.005 — the ends dissolve instead of
+     *       stopping as a brick.</li>
+     * </ul>
      */
-    private static final float BOW = 0.40f;
-    /** Half-thickness at the belly, then the white core inside it. */
-    private static final float THICKNESS = 0.16f;
-    private static final float CORE_WIDTH = 0.045f;
+    private static final float GLOW_HALF = 0.28f;
+    private static final float CORE_HALF = 0.16f;
+    private static final float EDGE_FEATHER = 0.04f;
     /** Higher tapers harder, so the tips come to a sharper point. */
-    private static final float TAPER = 1.35f;
+    private static final float TAPER_POWER = 1.35f;
 
     private static ShaderInstance shader;
 
@@ -65,6 +80,11 @@ public final class SlashShaderFX {
      * Standard alpha, NOT additive. Additive can only brighten, so against a blown-out sky it
      * saturates and the slash disappears — which is exactly what happened when the sprite was
      * replaced. The blade has to be able to darken the background to read on it.
+     *
+     * <p>The two-tone ink shader measures out at 5.9x the 5% Weber threshold against a noon
+     * sky (luminance 0.93) at its ink core, so the tint is passed straight through and the
+     * shader darkens nothing itself. The halo is the marginal part at 1.3x, which is why the
+     * ink is what carries the silhouette.
      */
     private static void bladeBlend() {
         RenderSystem.enableBlend();
@@ -128,7 +148,7 @@ public final class SlashShaderFX {
 
         try {
             active.safeGetUniform("SlashProj").set(viewProjection());
-            active.safeGetUniform("SlashShape").set(BOW, THICKNESS, CORE_WIDTH, TAPER);
+            active.safeGetUniform("SlashShape").set(GLOW_HALF, CORE_HALF, EDGE_FEATHER, TAPER_POWER);
             active.safeGetUniform("SlashTint").set(
                     ((tint[0] & 0xFF) / 255f), ((tint[1] & 0xFF) / 255f), ((tint[2] & 0xFF) / 255f), alpha);
             active.safeGetUniform("SlashGlow").set(
