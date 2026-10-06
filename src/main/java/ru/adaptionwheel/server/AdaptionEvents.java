@@ -309,6 +309,7 @@ public class AdaptionEvents {
             if (bossFromSource != null) {
                 String bossPath = entityPath(bossFromSource.getType());
                 noteBossEncounter(data, bossPath);
+                noteBossHit(player, data, bossPath);
             }
         }
 
@@ -335,7 +336,9 @@ public class AdaptionEvents {
 
         int bestLevel = 0;
         for (String concept : concepts) {
-            bestLevel = Math.max(bestLevel, data.level(concept));
+            // levelOrZero, not level(): this loop grants the Lv5 heal and the Lv8 i-frames, both of
+            // which are effects, so a switched-off adaptation must not keep paying out.
+            bestLevel = Math.max(bestLevel, data.levelOrZero(concept));
         }
         if (bestLevel >= 5) {
             double ratio = AdaptionConfig.defenseHealRatio(bestLevel) / 100.0;
@@ -344,7 +347,13 @@ public class AdaptionEvents {
             }
         }
         if (bestLevel >= 8) {
-            player.setInvulnerableTime(Math.max(player.getInvulnerableTime(), 120));
+            // Configurable, and 10 rather than the original's 2 seconds on purpose: a window that
+            // outlasts a melee swing re-arms before it lapses, which turns an Lv8 capstone into
+            // permanent immunity to that damage category rather than a reduction.
+            int lv8IFrames = AdaptionConfig.DEFENSE_LV8_IFRAMES_TICKS.get();
+            if (lv8IFrames > 0) {
+                player.setInvulnerableTime(Math.max(player.getInvulnerableTime(), lv8IFrames));
+            }
         }
 
         if (AdaptionConfig.ENABLE_DEFENSE.get()) {
@@ -416,7 +425,7 @@ public class AdaptionEvents {
 
         player.setHealth(Math.max(1f, player.getHealth() - 30f));
         data.adversityActive = true;
-        data.adversityTimer = 480;
+        data.adversityTimer = ru.adaptionwheel.AdaptionTimings.ADVERSITY_TICKS;
         player.setInvulnerableTime(60);
 
         if (player.level() instanceof ServerLevel serverLevel) {
@@ -514,7 +523,13 @@ public class AdaptionEvents {
 
             living.knockback(1.2, player.getX() - living.getX(), player.getZ() - living.getZ(),
                     player.damageSources().playerAttack(player), damage * multiplier);
-            player.setInvulnerableTime(Math.max(player.getInvulnerableTime(), 10));
+            // 1 tick, not 10. The original grants max(immuneTime, 2) here -- two Terraria ticks,
+            // about 33ms. Reflection denies the boss its attack; it does not shield the player, and
+            // half a second of invulnerability per reflected hit was standing in for a cooldown.
+            int reflectIFrames = AdaptionConfig.EXISTENCE_REFLECT_IFRAMES_TICKS.get();
+            if (reflectIFrames > 0) {
+                player.setInvulnerableTime(Math.max(player.getInvulnerableTime(), reflectIFrames));
+            }
         }
     }
 
@@ -1059,6 +1074,70 @@ public class AdaptionEvents {
                 grantExistenceAdaptation(player, data, path);
             }
         }
+    }
+
+    /**
+     * The boss counters the client is allowed to see, and so the ones the HUD may draw a row for.
+     *
+     * <p>Extracted because two senders once disagreed about this same map and the row flickered
+     * between them: the full sync filtered to bosses that are nearby right now, while a shorter push
+     * sent the raw counters, and {@code accumulateBossCombat} deliberately keeps an entry for a boss
+     * that has walked away. The counters persisting is correct -- walking away from a fight should
+     * not throw the analysis away. What is filtered here is only what is <i>shown</i>. Same lesson as
+     * {@code envImmunityConcept} having been written out twice.
+     */
+    private static Map<String, Integer> visibleBossProgress(ServerPlayer player, PlayerAdaption data) {
+        if (!AdaptionConfig.ENABLE_EXISTENCE.get() || data.bossCombatTicks.isEmpty()) {
+            return java.util.Map.of();
+        }
+        Set<String> nearby = nearbyBossPaths(player, data);
+        Map<String, Integer> visible = new HashMap<>();
+        for (Map.Entry<String, Integer> entry : data.bossCombatTicks.entrySet()) {
+            String path = entry.getKey();
+            if (data.existenceAdapted.contains(path) || !nearby.contains(path)) continue;
+            int ticks = entry.getValue();
+            if (ticks > 0) {
+                visible.put(path, ticks);
+            }
+        }
+        return visible;
+    }
+
+    /**
+     * A hit on the boss banks a little progress, on top of the passive per-tick accumulation.
+     *
+     * <p>Ported from the original's {@code ReduceCombatTime}, which is why a boss bar there visibly
+     * moves when you swing at the boss rather than only drifting on its own:
+     *
+     * <pre>
+     * float scale = (float)requiredFrames / 108000f;
+     * int reduction = (int)((float)Main.rand.Next(6, 61) * scale);
+     * if (reduction &lt; 1) reduction = 1;
+     * </pre>
+     *
+     * <p>108000 frames is 1800 seconds at the original's 60 ticks a second, so at any sane
+     * {@code existenceRequiredSeconds} the multiplier lands below one and every hit banks the floor of
+     * one tick. That is deliberate: a hit is a nudge, not a shortcut, and it is kept as a floor rather
+     * than rounded up so the pacing still matches. Randomised per hit so the bar does not read as a
+     * deterministic counter, and clamped so a hit can never carry a boss past its total.
+     *
+     * <p>Gated on {@code active}, so switching the adaptation off stops banking as well as denying.
+     */
+    private static void noteBossHit(ServerPlayer player, PlayerAdaption data, String bossPath) {
+        if (!data.active(Concepts.existence(bossPath)) || data.existenceAdapted.contains(bossPath)) {
+            return;
+        }
+        int required = (int) (AdaptionConfig.EXISTENCE_REQUIRED_SECONDS.get() * 20);
+        if (required <= 0) {
+            return;
+        }
+        double scale = (double) required / 108000.0;
+        int reduction = (int) ((6 + player.getRandom().nextInt(55)) * scale);
+        if (reduction < 1) {
+            reduction = 1;
+        }
+        data.bossCombatTicks.put(bossPath,
+                Math.min(required, data.bossCombatTicks.getOrDefault(bossPath, 0) + reduction));
     }
 
     private static void noteBossEncounter(PlayerAdaption data, String bossPath) {
@@ -1775,7 +1854,10 @@ public class AdaptionEvents {
             MobEffectInstance instance = event.getEffectInstance();
             if (instance != null && !instance.getEffect().value().isBeneficial()) {
                 String concept = Concepts.debuff(effectKey(instance));
-                if (data(player).isAdapted(concept)) {
+                // active(), NOT isAdapted(): the panel switch sets `disabled`, and isAdapted only
+                // answers "do you have it", so the denial kept firing after the adaptation was
+                // switched off and the debuff could still never be received.
+                if (data(player).active(concept)) {
                     event.setResult(MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
                 }
             }
@@ -1822,7 +1904,7 @@ public class AdaptionEvents {
      * immediately -- and this is the recovery path.
      */
     private static int combatFistDone(PlayerAdaption data) {
-        int tier = ru.adaptionwheel.server.HardFist.currentTier(data);
+        int tier = ru.adaptionwheel.server.HardFist.trainingTier(data);
         if (tier < 0) {
             return 0;
         }
@@ -1842,16 +1924,13 @@ public class AdaptionEvents {
      * <p>Only a finished ladder still reports 0, because then there genuinely is nothing left.
      */
     private static int combatFistTotal(PlayerAdaption data) {
-        int tier = ru.adaptionwheel.server.HardFist.currentTier(data);
+        int tier = ru.adaptionwheel.server.HardFist.trainingTier(data);
         if (tier < 0) {
             return 0;
         }
         int level = data.level(ru.adaptionwheel.category.CombatFistTiers.concept(tier));
         if (level >= PlayerAdaption.MAX_LEVEL) {
-            int next = tier + 1;
-            return next < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT
-                    ? AdaptionConfig.fistKillsForNextLevel(next, 0)
-                    : 0;
+            return 0;
         }
         return AdaptionConfig.fistKillsForNextLevel(tier, level);
     }
@@ -1910,19 +1989,7 @@ public class AdaptionEvents {
 
     public static void sync(ServerPlayer player, PlayerAdaption data, boolean wearing) {
 
-        Map<String, Integer> existenceProgress = null;
-        if (AdaptionConfig.ENABLE_EXISTENCE.get() && !data.bossCombatTicks.isEmpty()) {
-            Set<String> nearby = nearbyBossPaths(player, data);
-            for (Map.Entry<String, Integer> entry : data.bossCombatTicks.entrySet()) {
-                String path = entry.getKey();
-                if (data.existenceAdapted.contains(path) || !nearby.contains(path)) continue;
-                int ticks = entry.getValue();
-                if (ticks > 0) {
-                    if (existenceProgress == null) existenceProgress = new HashMap<>();
-                    existenceProgress.put(path, ticks);
-                }
-            }
-        }
+        Map<String, Integer> existenceProgress = visibleBossProgress(player, data);
         AdaptionSyncPayload payload = new AdaptionSyncPayload(
                 wearing,
                 data.adversityActive,

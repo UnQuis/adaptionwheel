@@ -80,13 +80,13 @@ public class AdaptionHud {
             int luck = ru.adaptionwheel.category.FistTiers.luckMultiplier(tier);
 
             String suffix = luck > 1 ? " - LUCK x" + luck : null;
+            int[] split = handedOverColours(ClientAdaption.level(
+                            ru.adaptionwheel.category.FistTiers.concept(tier)), tier,
+                    ru.adaptionwheel.category.FistTiers::concept,
+                    ru.adaptionwheel.category.FistTiers::color);
             rows.add(new Row(ru.adaptionwheel.category.FistTiers.concept(tier),
                     fistProgress(), false, ClientAdaption.fistProgressDone,
-                    ClientAdaption.fistProgressTotal, suffix,
-                    handedOverColour(ClientAdaption.level(
-                            ru.adaptionwheel.category.FistTiers.concept(tier)), tier,
-                            ru.adaptionwheel.category.FistTiers::concept,
-                            ru.adaptionwheel.category.FistTiers::color)));
+                    ClientAdaption.fistProgressTotal, suffix, split[0], split[1]));
         }
 
         {
@@ -99,14 +99,17 @@ public class AdaptionHud {
             if (trained >= 0) {
                 int tier = Math.min(trained, ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT - 1);
                 boolean maxed = ClientAdaption.combatFistProgressTotal <= 0;
+                // No suffix: the meter already prints the counter from blocksDone/blocksTotal, so
+                // the row used to read "0/6 kills 0/6" -- the same counter twice, side by side.
+                int[] punch = handedOverColours(ClientAdaption.level(
+                                ru.adaptionwheel.category.CombatFistTiers.concept(tier)), tier,
+                        ru.adaptionwheel.category.CombatFistTiers::concept,
+                        ru.adaptionwheel.category.CombatFistTiers::color);
                 rows.add(new Row(ru.adaptionwheel.category.CombatFistTiers.concept(tier),
                         maxed ? 1f : combatFistProgress(), false,
                         ClientAdaption.combatFistProgressDone,
-                        ClientAdaption.combatFistProgressTotal, maxed ? "MAX" : tierKillsSuffix(tier),
-                        handedOverColour(ClientAdaption.level(
-                                ru.adaptionwheel.category.CombatFistTiers.concept(tier)), tier,
-                                ru.adaptionwheel.category.CombatFistTiers::concept,
-                                ru.adaptionwheel.category.CombatFistTiers::color)));
+                        ClientAdaption.combatFistProgressTotal, maxed ? "MAX" : null,
+                        punch[0], punch[1]));
             }
         }
         rows.sort(Comparator.comparingInt(r -> priority(r.concept)));
@@ -174,14 +177,14 @@ public class AdaptionHud {
                 graphics.fill(15 + x, y + 24, 15 + x + 1, y + 24 + BAR_HEIGHT,
                         withAlpha(segColor, opacity * 90 / 100));
             }
-        } else if (row.splitColour != 0) {
+        } else if (row.splitLeft != 0) {
             // Two-tone, and only here: the player has just crossed a material boundary, so half the
             // bar is the stage they finished and half is the one they are training.
             int half = BAR_WIDTH / 2;
             graphics.fill(15, y + 24, 15 + half, y + 24 + BAR_HEIGHT,
-                    withAlpha(row.splitColour, opacity * 55 / 100));
+                    withAlpha(row.splitLeft, opacity * 90 / 100));
             graphics.fill(15 + half, y + 24, 15 + BAR_WIDTH, y + 24 + BAR_HEIGHT,
-                    withAlpha(color, opacity * 90 / 100));
+                    withAlpha(row.splitRight, opacity * 90 / 100));
         } else {
             graphics.fill(15, y + 24, 15 + barW, y + 24 + BAR_HEIGHT, withAlpha(color, opacity * 90 / 100));
         }
@@ -228,13 +231,13 @@ public class AdaptionHud {
     }
 
     private record Row(String concept, float progress, boolean rainbow, int blocksDone, int blocksTotal,
-                       String suffix, int splitColour) {
+                       String suffix, int splitLeft, int splitRight) {
         private static Row of(String concept, float progress) {
-            return new Row(concept, progress, false, 0, 0, null, 0);
+            return new Row(concept, progress, false, 0, 0, null, 0, 0);
         }
 
         private static Row of(String concept, float progress, boolean rainbow) {
-            return new Row(concept, progress, rainbow, 0, 0, null, 0);
+            return new Row(concept, progress, rainbow, 0, 0, null, 0, 0);
         }
 
         /** What the counter measures: the breaking fist counts blocks, the punching fist kills. */
@@ -270,50 +273,41 @@ public class AdaptionHud {
         return null;
     }
 
-    /**
-     * The colour of the other half of the bar, but only where a stage actually hands over.
-     *
-     * <p>A stage tops out at 8 and the next begins at 1, so both ends of that boundary are the same
-     * event seen from opposite sides: level 1 of a stage whose predecessor is maxed (you have just
-     * arrived) and level 8 of a stage whose successor is untouched (you are about to leave). Gating
-     * on the arrival side alone left the row reading "Lv.MAX &gt; Stone Lv.1" in one flat colour on
-     * the very tick it announces a new material, which is what a player actually sees.
-     *
-     * <p>Which half is the "other" one flips with the side: on arrival the row is the new stage and
-     * the other half is what was just finished; on departure the row is the finished stage and the
-     * other half is what comes next. The bar always paints the row's own colour on the right, so only
-     * the left half has to be worked out.
-     *
-     * <p>Levels are read raw, not through {@code levelOrZero}: switching a stage off must not make it
-     * look like a handover happened.
-     *
-     * @return the colour of the other half, or 0 when no split applies
-     */
-    private static int handedOverColour(int level, int tier,
-                                        java.util.function.IntFunction<String> concept,
-                                        java.util.function.IntFunction<Integer> colour) {
-        int count = ru.adaptionwheel.category.FistTiers.TIER_COUNT;
-        boolean previousMaxed = tier > 0
-                && ClientAdaption.level(concept.apply(tier - 1)) >= PlayerAdaption.MAX_LEVEL;
-        boolean nextUntrained = tier + 1 < count && ClientAdaption.level(concept.apply(tier + 1)) == 0;
-        // The rule is in FistTiers, not here, because a gametest cannot call a method that needs a
-        // client Font -- and the "only at the handover" half of it is the whole requirement.
-        if (!ru.adaptionwheel.category.FistTiers.showsHandover(level, previousMaxed, nextUntrained)) {
-            return 0;
-        }
-        return colour.apply(previousMaxed && level == 1 ? tier - 1 : tier + 1);
-    }
-
-    private static String tierKillsSuffix(int tier) {
-        return ClientAdaption.combatFistProgressDone + "/" + ClientAdaption.combatFistProgressTotal;
-    }
-
+    
     private static float combatFistProgress() {
         int total = ClientAdaption.combatFistProgressTotal;
         if (total <= 0) {
             return 0f;
         }
         return Math.min(1f, (float) ClientAdaption.combatFistProgressDone / total);
+    }
+
+    /**
+     * The two halves of the bar: the finished stage on the left, the one being moved into on the
+     * right, and {@code {0, 0}} when no split applies.
+     *
+     * <p>That arrangement reads the same on both sides of the 8 -&gt; 1 boundary: wood is the brown
+     * you are leaving, stone is the grey you are arriving at, so the bar always runs brown-to-grey
+     * whichever end of the handover the row is showing. Carrying a single "other colour" instead drew
+     * it backwards on departure -- the split went grey then brown, the exact opposite of what the bar
+     * announces.
+     *
+     * <p>The gate itself lives in {@code FistTiers.showsHandover}, not here, so it can be pinned
+     * without a client Font.
+     */
+    private static int[] handedOverColours(int level, int tier,
+                                           java.util.function.IntFunction<String> concept,
+                                           java.util.function.IntFunction<Integer> colour) {
+        int count = ru.adaptionwheel.category.FistTiers.TIER_COUNT;
+        boolean previousMaxed = tier > 0
+                && ClientAdaption.level(concept.apply(tier - 1)) >= PlayerAdaption.MAX_LEVEL;
+        boolean nextUntrained = tier + 1 < count && ClientAdaption.level(concept.apply(tier + 1)) == 0;
+        if (!ru.adaptionwheel.category.FistTiers.showsHandover(level, previousMaxed, nextUntrained)) {
+            return new int[] {0, 0};
+        }
+        boolean arriving = level == 1 && previousMaxed;
+        return new int[] {colour.apply(arriving ? tier - 1 : tier),
+                colour.apply(arriving ? tier : tier + 1)};
     }
 
     private static float fistProgress() {

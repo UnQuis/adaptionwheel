@@ -56,6 +56,34 @@ public final class HardFist {
     }
 
     /**
+     * The stage the player is training <i>right now</i>, which is not always the one they reached.
+     *
+     * <p>A stage tops out at 8 and the next begins at 1, so once the current one is maxed the kills
+     * have to go somewhere: they train the next stage, which is the whole point of the 8 -&gt; 1
+     * handover. Separate from {@link #currentTier} on purpose -- that answers "which stage has this
+     * player ever reached", which is permanent and must stay that way so the HUD row survives the
+     * off switch.
+     *
+     * <p>Both the banking and the row that reports it have to agree on this value. They did not: the
+     * row showed the next stage's cost ("0/6 kills") while {@code onFistKill} early-returned on the
+     * maxed stage and banked nothing, so a player could kill a hundred mobs against a bar that never
+     * moved. One accessor, used by both, is what stops that coming back.
+     *
+     * @return the stage being trained, or -1 before the first unlock
+     */
+    public static int trainingTier(PlayerAdaption data) {
+        int reached = currentTier(data);
+        if (reached < 0) {
+            return -1;
+        }
+        if (data.levelOrZero(CombatFistTiers.concept(reached)) >= PlayerAdaption.MAX_LEVEL
+                && reached + 1 < CombatFistTiers.TIER_COUNT) {
+            return reached + 1;
+        }
+        return reached;
+    }
+
+    /**
      * Whether this kill trains the punching fist.
      *
      * <p>Decided from the **damage source**, not from what is in the hand at the moment of death.
@@ -122,14 +150,18 @@ public final class HardFist {
         if (data.adversityActive || !trains(player, source)) {
             return;
         }
-        int tier = currentTier(data);
+        int tier = trainingTier(data);
         if (tier < 0) {
             unlock(player, data);
             return;
         }
         String concept = CombatFistTiers.concept(tier);
-        int level = data.level(concept);
+        // levelOrZero, not level(): banking kills is an effect, so a switched-off stage must stop
+        // counting. The level read here decides which stage the kills train, and it is the same
+        // accessor disagreement that let a disabled adaptation keep paying out.
+        int level = data.levelOrZero(concept);
         if (level >= PlayerAdaption.MAX_LEVEL) {
+            // Only reachable on a finished ladder: there is no stage after Netherite to train.
             return;
         }
         int need = AdaptionConfig.fistKillsForNextLevel(tier, level);

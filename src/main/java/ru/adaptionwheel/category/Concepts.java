@@ -213,7 +213,14 @@ public final class Concepts {
         if (concept.startsWith(MOVE_PREFIX)) return COLOR_MOVEMENT;
         if (concept.startsWith(MINE_PREFIX)) return COLOR_MINING;
         if (concept.startsWith(FIST_PREFIX)) return fistColor(concept.substring("Fist_".length()));
-        if (concept.startsWith(CombatFistTiers.CONCEPTS[0])) return combatFistColor(concept);
+        // Matched against EVERY stage, not startsWith(CONCEPTS[0]). That only ever matched Wood, so
+        // Stone, Iron, Diamond and Netherite fell through to the generic combat colour and rendered
+        // red -- including the split halves, whose whole point is naming the material being moved
+        // into. A prefix test against a whole word is the bug: the five keys share a scheme, not a
+        // prefix.
+        for (int i = 0; i < CombatFistTiers.TIER_COUNT; i++) {
+            if (concept.equals(CombatFistTiers.CONCEPTS[i])) return CombatFistTiers.color(i);
+        }
         if (concept.startsWith(COMBAT_PREFIX)) return COLOR_COMBAT;
         if (concept.startsWith(PERCEP_PREFIX)) return COLOR_PERCEPTION;
         if (concept.startsWith(MUTATION_PREFIX)) return COLOR_MUTATION;

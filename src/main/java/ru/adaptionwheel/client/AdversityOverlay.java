@@ -15,7 +15,7 @@ import ru.adaptionwheel.AdaptionWheel;
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = net.neoforged.api.distmarker.Dist.CLIENT)
 public final class AdversityOverlay {
 
-    private static final int ADVERSITY_TOTAL_TICKS = 480;
+    private static final int ADVERSITY_TOTAL_TICKS = ru.adaptionwheel.AdaptionTimings.ADVERSITY_TICKS;
 
     private AdversityOverlay() {
     }

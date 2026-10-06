@@ -128,6 +128,8 @@ public final class AdaptionConfig {
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_REDUCTION_LEVELS;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_HEAL_RATIO_LEVELS;
+    public static final ModConfigSpec.ConfigValue<Integer> DEFENSE_LV8_IFRAMES_TICKS;
+    public static final ModConfigSpec.ConfigValue<Integer> EXISTENCE_REFLECT_IFRAMES_TICKS;
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> REGEN_SPEED_LEVELS;
     public static final ModConfigSpec.ConfigValue<Double> REGEN_HP_THRESHOLD;
@@ -522,7 +524,30 @@ public final class AdaptionConfig {
 
         s.pop();
 
-        s.comment("--- Regeneration ---").push("regeneration");
+        
+        DEFENSE_LV8_IFRAMES_TICKS = s
+                .comment("At Lv8 of a damage type you gain invulnerability after every hit.",
+                        "The original sets immuneTime = 120, which is 2 SECONDS there because Terraria",
+                        "runs at 60 ticks a second. This used to be 120 here too, which is 6 seconds at",
+                        "Minecraft's 20 -- a 3x mistranslation, and a brutal one: a mob in melee range",
+                        "swings about every 20 ticks, so a 6 second window re-armed on each landed hit",
+                        "left you permanently immune to that whole damage category.",
+                        "Note the original's own value does not survive that reasoning: its 2 seconds",
+                        "outlasts a melee swing in both games, so there an Lv8 capstone is immunity to",
+                        "that damage type rather than i-frames. That was reported as a bug, so the",
+                        "default here is 10 ticks -- half a second, short enough to lapse between two",
+                        "melee swings, so it reduces damage instead of erasing it. Raise it to 40 for",
+                        "the original's exact two seconds. 0 disables it entirely.")
+                .defineInRange("lv8IFramesTicks", 10, 0, 1200);
+        EXISTENCE_REFLECT_IFRAMES_TICKS = s
+                .comment("I-frames granted by reflecting a boss's hit back at it.",
+                        "The original grants max(immuneTime, 2) -- two Terraria ticks, about 33ms, which",
+                        "is nothing at all; the reflection is meant to deny the boss its attack, not to",
+                        "shield the player. This was 10 Minecraft ticks, half a second, standing in for",
+                        "a cooldown it never had.")
+                .defineInRange("existenceReflectIFramesTicks", 1, 0, 200);
+
+s.comment("--- Regeneration ---").push("regeneration");
 
         REGEN_HP_THRESHOLD = s
                 .comment("Below this % of max HP the wheel begins injury analysis.")
