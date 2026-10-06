@@ -206,7 +206,7 @@ public final class ClientAdaption {
     public static float adversityProgress() {
         int elapsed = elapsedTicksSinceSync();
         int remaining = Math.max(0, adversityTimer - elapsed);
-        return 1f - (float) remaining / 480f;
+        return 1f - (float) remaining / ru.adaptionwheel.AdaptionTimings.ADVERSITY_TICKS;
     }
 
     public static int smoothedAdversityTimer() {

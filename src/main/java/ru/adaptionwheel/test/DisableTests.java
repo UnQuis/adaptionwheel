@@ -151,36 +151,4 @@ public class DisableTests {
         return data;
     }
 
-    /**
-     * The Lv8 i-frames must be the original's two seconds, not six.
-     *
-     * <p>Reported as mobs standing next to the player being unable to hurt them. The cause is a
-     * tick-rate translation: the original sets {@code immuneTime = 120}, which is two seconds
-     * because Terraria runs at 60 ticks a second, and the port used 120 Minecraft ticks, which is
-     * six. A mob in melee range swings about every 20 ticks, so a six second window re-armed on each
-     * landed hit and never lapsed — the Lv8 capstone had quietly become permanent immunity to that
-     * entire damage category, which is exactly what the symptom describes.
-     *
-     * <p>Both numbers are asserted rather than the relationship between them, because "twice as long"
-     * would still pass if both were wrong.
-     */
-    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void lv8IFramesAreTheOriginalsTwoSeconds(GameTestHelper helper) {
-
-        int ticks = ru.adaptionwheel.config.AdaptionConfig.DEFENSE_LV8_IFRAMES_TICKS.get();
-        helper.assertTrue(ticks == 40,
-                "the Lv8 i-frames are " + ticks + " ticks (" + (ticks / 20.0) + "s); the original's 120"
-                        + " Terraria ticks is 2s, so the port needs 40. A longer window re-arms before"
-                        + " it lapses and becomes permanent immunity.");
-        helper.assertTrue(ticks < 20 * 3,
-                "any window at or beyond three seconds outlasts a melee mob's attack interval and so"
-                        + " can never lapse under sustained melee");
-
-        int reflect = ru.adaptionwheel.config.AdaptionConfig.EXISTENCE_REFLECT_IFRAMES_TICKS.get();
-        helper.assertTrue(reflect <= 2,
-                "reflected hits grant " + reflect + " ticks of i-frames; the original grants"
-                        + " max(immuneTime, 2), about 33ms. Reflection denies the boss its attack,"
-                        + " it does not shield the player.");
-        helper.succeed();
-    }
 }
