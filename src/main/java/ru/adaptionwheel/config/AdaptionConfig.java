@@ -110,6 +110,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_FLASH_FRAMES;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FLASH_MS;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FLASH_STRENGTH;
+    public static final ModConfigSpec.ConfigValue<Boolean> EXISTENCE_CINEMATIC_ENABLED;
     
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
@@ -139,6 +140,8 @@ public final class AdaptionConfig {
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_REDUCTION_LEVELS;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_HEAL_RATIO_LEVELS;
+    public static final ModConfigSpec.ConfigValue<Integer> DEFENSE_LV8_IFRAMES_TICKS;
+    public static final ModConfigSpec.ConfigValue<Integer> EXISTENCE_REFLECT_IFRAMES_TICKS;
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> REGEN_SPEED_LEVELS;
     public static final ModConfigSpec.ConfigValue<Double> REGEN_HP_THRESHOLD;
@@ -539,6 +542,26 @@ public final class AdaptionConfig {
                         "Values are % of damage absorbed.")
                 .defineList("lifestealPct", doubleList(DEFENSE_HEAL_RATIO), AdaptionConfig::isDouble);
 
+        DEFENSE_LV8_IFRAMES_TICKS = s
+                .comment("At Lv8 of a damage type you gain invulnerability after every hit.",
+                        "The original sets immuneTime = 120, which is 2 SECONDS there because Terraria",
+                        "runs at 60 ticks a second. This used to be 120 here too, which is 6 seconds at",
+                        "Minecraft's 20 -- a 3x mistranslation, and a brutal one: a mob in melee range",
+                        "swings about every 20 ticks, so a 6 second window re-armed on each landed hit",
+                        "left you permanently immune to that whole damage category, which is what",
+                        "left mobs standing next to me unable to hurt me at all.",
+                        "40 ticks is 2 seconds, i.e. the original's own value converted.",
+                        "Read this as a capstone: at Lv8 you are meant to be very hard to hurt by that",
+                        "damage type. Set it to 0 if you want Lv8 to stop granting i-frames at all.")
+                .defineInRange("lv8IFramesTicks", 40, 0, 1200);
+        EXISTENCE_REFLECT_IFRAMES_TICKS = s
+                .comment("I-frames granted by reflecting a boss's hit back at it.",
+                        "The original grants max(immuneTime, 2) -- two Terraria ticks, about 33ms, which",
+                        "is nothing at all; the reflection is meant to deny the boss its attack, not to",
+                        "shield the player. This was 10 Minecraft ticks (half a second), which was doing",
+                        "the job of a cooldown with the wrong tool.")
+                .defineInRange("existenceReflectIFramesTicks", 1, 0, 200);
+
         s.pop();
 
         s.comment("--- Regeneration ---").push("regeneration");
@@ -694,6 +717,15 @@ public final class AdaptionConfig {
                         "0.75 gives a 75% white then 75% black. A weak black half reads as dirt on",
                         "the screen rather than as an impact.")
                 .defineInRange("dimensionImpactFlashStrength", 0.75, 0.0, 1.0);
+        c.pop();
+
+        c.comment("--- Existence cinematic ---").push("existenceCinematic");
+        EXISTENCE_CINEMATIC_ENABLED = c.comment("Play the 9-second reward sequence once the existence",
+                        "analysis bar fills. Purely cosmetic — the adaptation itself is granted",
+                        "server-side the moment the bar fills, so disconnecting mid-sequence does",
+                        "not cost you the reward. This is the original's cinematic, which is what",
+                        "played instead of an instant grant; the bar and this are additive.")
+                .define("existenceCinematicEnabled", true);
         c.pop();
 
         c.pop();

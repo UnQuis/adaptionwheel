@@ -369,7 +369,14 @@ public class AdaptionEvents {
             }
         }
         if (bestLevel >= 8) {
-            player.invulnerableTime = Math.max(player.invulnerableTime, 120);
+            // 40 ticks, not 120. The original's immuneTime = 120 is 2 seconds because Terraria runs
+            // at 60 tps; 120 Minecraft ticks is 6, and a mob in melee range swings every ~20 ticks, so
+            // the window re-armed before it could ever lapse and the Lv8 capstone became permanent
+            // immunity to that whole damage category.
+            int iFrames = AdaptionConfig.DEFENSE_LV8_IFRAMES_TICKS.get();
+            if (iFrames > 0) {
+                player.invulnerableTime = Math.max(player.invulnerableTime, iFrames);
+            }
         }
 
         if (AdaptionConfig.ENABLE_DEFENSE.get()) {
@@ -550,7 +557,13 @@ public class AdaptionEvents {
         }
 
         living.knockback(1.2, player.getX(), player.getZ());
-        player.invulnerableTime = Math.max(player.invulnerableTime, 10);
+        // 1 tick, not 10. The original grants max(immuneTime, 2) here -- two Terraria ticks, about
+        // 33ms. Reflection is supposed to deny the boss its attack, not to give the player a shield;
+        // the half-second this used to grant was standing in for a cooldown it never had.
+        int reflectIFrames = AdaptionConfig.EXISTENCE_REFLECT_IFRAMES_TICKS.get();
+        if (reflectIFrames > 0) {
+            player.invulnerableTime = Math.max(player.invulnerableTime, reflectIFrames);
+        }
     }
 
     private static final Set<UUID> REFLECTING = new HashSet<>();
@@ -1228,7 +1241,50 @@ public class AdaptionEvents {
         return cache.paths;
     }
 
+    /**
+     * Starts the reward sequence on the client, now that {@code bossPath}'s bar is full.
+     *
+     * <p>Sent to this player alone, and <b>after</b> the grant rather than in place of it. The
+     * original granted at tick 540 of its own cinematic, which means a disconnect at second eight
+     * loses the adaptation outright; here the grant has already happened by the time the client is
+     * told to play anything, so the sequence is presentation and nothing rides on it finishing.
+     *
+     * <p>Silent when the boss has already despawned, which is exactly the case where the original's
+     * "is the framing still right" check would have refused to play.
+     */
+    private static void startExistenceCinematic(ServerPlayer player, String bossPath) {
+        if (!AdaptionConfig.ENABLE_EXISTENCE.get() || !AdaptionConfig.EXISTENCE_CINEMATIC_ENABLED.get()) {
+            return;
+        }
+        LivingEntity boss = findNearbyBoss(player, bossPath);
+        if (boss == null) {
+            // The boss despawned between filling the bar and being granted. Silent, which is exactly
+            // the case where the original's "is the framing still right" check refused to play.
+            return;
+        }
+        ru.adaptionwheel.network.ExistenceCinematicPayload.send(player, boss.getId(), boss.getName().getString());
+    }
+
+    /** The boss this bar was filling for, if it is still within the analysis radius. */
+    private static LivingEntity findNearbyBoss(ServerPlayer player, String bossPath) {
+        float range = AdaptionConfig.EXISTENCE_PROXIMITY_BLOCKS.get().floatValue();
+        for (Entity entity : player.level().getEntities(player, player.getBoundingBox().inflate(range))) {
+            if (!entityPath(entity.getType()).equals(bossPath)) {
+                continue;
+            }
+            LivingEntity boss = BossHelper.resolveBoss(entity);
+            if (boss != null) {
+                return boss;
+            }
+        }
+        return null;
+    }
+
     private static void grantExistenceAdaptation(ServerPlayer player, PlayerAdaption data, String bossPath) {
+        // Deliberately LAST. It used to be the first statement, before a single mutation, so anything
+        // that went wrong in a purely cosmetic send took the entire reward with it -- no
+        // existenceAdapted, no maxed contact or offence, no history, no completion event, and no
+        // error the player could act on. The reward is the point; the cinematic is a hat on it.
         String existenceConcept = Concepts.existence(bossPath);
         String contactConcept = Concepts.contact(bossPath);
         String offenseConcept = Concepts.offense(bossPath);
@@ -1270,6 +1326,8 @@ public class AdaptionEvents {
         player.sendSystemMessage(Component.translatable("adaptionwheel.msg.existence_details")
                 .withStyle(ChatFormatting.LIGHT_PURPLE));
         ru.adaptionwheel.api.events.AdaptationCompleteEvent.post(player, existenceConcept, -1);
+
+        startExistenceCinematic(player, bossPath);
     }
 
     private static boolean isInDarkness(Player player) {
