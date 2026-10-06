@@ -7,7 +7,6 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.minecraft.world.phys.Vec3;
 import ru.adaptionwheel.entity.CursedSlashProjectile;
 
 public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile> {
@@ -21,8 +20,6 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile> {
 
     @Override
     public ResourceLocation getTextureLocation(CursedSlashProjectile entity) {
-        // Never sampled: the blade is procedural. EntityRenderer declares this method but nothing
-        // in the dispatch path calls it, and there is no longer a sprite to point at.
         return MissingTextureAtlasSprite.getLocation();
     }
 
@@ -34,9 +31,8 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile> {
         float fade = age < 24f ? 1f : Mth.clamp(1f - (age - 24f) / 12f, 0f, 1f);
 
         poseStack.pushPose();
-        // No camera billboard: the blade now orients along its own flight path, and
-        // flattening it to face the camera would erase the cross-section this mesh exists
-        // to provide -- which is the whole reason it replaced the quad.
+        // Oriented by the projectile's own flight direction now, not by whichever camera happens
+        // to be rendering it - see FlyingSlashRenderer.aimRotation for why that was wrong.
         FlyingSlashRenderer.render(poseStack, entity.getDeltaMovement(), entity.getRoll(), age,
                 6.0f, 0.22f, 0.13f, BLADE_CYAN, GLOW_CYAN, fade);
         poseStack.popPose();

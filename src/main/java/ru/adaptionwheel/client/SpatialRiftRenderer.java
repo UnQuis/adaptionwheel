@@ -20,8 +20,6 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile> {
 
     @Override
     public ResourceLocation getTextureLocation(SpatialRiftProjectile entity) {
-        // Never sampled: the blade is procedural. EntityRenderer declares this method but nothing
-        // in the dispatch path calls it, and there is no longer a sprite to point at.
         return MissingTextureAtlasSprite.getLocation();
     }
 
@@ -33,9 +31,8 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile> {
         float fade = lifeRatio > 0.82f ? Mth.clamp((1f - lifeRatio) / 0.18f, 0f, 1f) : 1f;
 
         poseStack.pushPose();
-        // No camera billboard: the blade now orients along its own flight path, and
-        // flattening it to face the camera would erase the cross-section this mesh exists
-        // to provide -- which is the whole reason it replaced the quad.
+        // Oriented by the projectile's own flight direction now, not by whichever camera happens
+        // to be rendering it - see FlyingSlashRenderer.aimRotation for why that was wrong.
         FlyingSlashRenderer.render(poseStack, entity.getDeltaMovement(), entity.getRoll(), age,
                 9.0f, 0.33f, 0.20f, BLADE_VIOLET, GLOW_VIOLET, fade);
         poseStack.popPose();

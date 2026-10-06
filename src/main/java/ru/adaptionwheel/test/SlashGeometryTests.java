@@ -198,17 +198,11 @@ public class SlashGeometryTests {
     }
 
     // ---------------------------------------------------------------------------------------
-    // The orientation frame. Reported as "stands vertically, points at the sky" from play, which
-    // is two complaints and one cause: the ribbon's plane was upright, so the crescent read as a
-    // fin on its tail. Everything below pins the three properties that were asked for.
+    // The orientation frame. The blade is oriented by the camera, so these check what it maps to
+    // in camera space rather than anything about world axes: the whole point is that there are none.
     // ---------------------------------------------------------------------------------------
 
-    /**
-     * Applies the frame to a mesh-local direction and writes the world-space result into
-     * {@code out}. {@code transformDirection} rather than {@code transform}: the frame is a pure
-     * rotation, so a direction has w = 0, and {@code transform} divides by w -- which is zero here,
-     * so it returns infinities and every assertion downstream passes or fails at random.
-     */
+    /** Applies the frame to a mesh-local direction and writes the result into {@code out}. */
     private static float axis(Matrix4f frame, float x, float y, float z, float[] out) {
         Vector3f v = new Vector3f(x, y, z);
         frame.transformDirection(v);
@@ -219,106 +213,85 @@ public class SlashGeometryTests {
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void bladeLengthAlwaysPointsWhereItIsFlying(GameTestHelper helper) {
-        float worst = 0f;
-        for (int deg = -180; deg < 180; deg += 15) {
-            for (float rollDeg : new float[]{-60f, -30f, 0f, 30f, 60f}) {
-                float yaw = (float) Math.toRadians(deg);
-                Matrix4f frame = SlashBladeMesh.frame(yaw, (float) Math.toRadians(rollDeg));
-                float[] len = new float[3];
-                axis(frame, 1f, 0f, 0f, len);
-                // The level heading the frame was built for.
-                float headingX = (float) Math.sin(yaw);
-                float headingZ = (float) Math.cos(yaw);
-                worst = Math.max(worst, Math.abs(len[0] * headingX + len[2] * headingZ - 1f));
-            }
+    public static void bladeRecedesIntoTheScreen(GameTestHelper helper) {
+        // Camera -Z is into the screen. Length must lie along it, which is what foreshortens the
+        // blade to a sliver: a viewer sees its near end rather than its full span.
+        for (float rollDeg : new float[]{-60f, -30f, 0f, 30f, 60f}) {
+            float[] len = new float[3];
+            axis(SlashBladeMesh.viewFrame((float) Math.toRadians(rollDeg)), 1f, 0f, 0f, len);
+            helper.assertTrue(len[2] < -0.999f && Math.abs(len[0]) < 1e-3f && Math.abs(len[1]) < 1e-3f,
+                    "the blade's length pointed to (" + len[0] + ", " + len[1] + ", " + len[2]
+                            + ") at roll " + rollDeg + " instead of straight into the screen"
+                            + " (0, 0, -1). Anything else shows the whole 6-block span broadside.");
         }
-        helper.assertTrue(worst < 1e-4f,
-                "the blade's length axis missed the flight heading by " + worst
-                        + " somewhere in the sweep. It is meant to lie along the shot, so the"
-                        + " crescent travels away from the player rather than across the view.");
         helper.succeed();
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void ribbonLiesFlatInsteadOfStandingOnEnd(GameTestHelper helper) {
-        // The face normal is the ribbon's local +Z. A horizontal ribbon has a VERTICAL normal, so
-        // what is checked is |normal . up| approaching 1 -- not the bow, which the roll tilts.
-        float worst = 1f;
-        float worstRoll = 0f;
-        for (int deg = -180; deg < 180; deg += 15) {
-            for (float rollDeg : new float[]{-60f, -30f, 0f, 30f, 60f}) {
-                Matrix4f frame = SlashBladeMesh.frame((float) Math.toRadians(deg),
-                        (float) Math.toRadians(rollDeg));
-                float[] face = new float[3];
-                axis(frame, 0f, 0f, 1f, face);
-                float dot = Math.abs(face[1]);
-                if (dot < worst) {
-                    worst = dot;
-                    worstRoll = rollDeg;
-                }
-            }
-        }
-        // The clamp is what bounds this: sin(30 deg) = 0.866 at the limit, 1.0 at zero roll.
-        helper.assertTrue(worst > 0.86f,
-                "the ribbon tipped to " + worst + " of vertical face normal (worst at roll "
-                        + worstRoll + "), so the crescent lies in a plane tipped out of horizontal"
-                        + " and reads as standing on end. The roll clamp exists to prevent exactly"
-                        + " this; check MAX_ROLL against the server's +/-60 degree range.");
-        helper.succeed();
-    }
-
-    /**
-     * "Parallel to the horizon": the frame is a function of the heading alone, so a shot aimed
-     * into the ground renders level. Checked by asserting that two shots sharing a heading produce
-     * byte-identical frames -- which only holds because the renderer passes yaw and never pitch.
-     */
-    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void divingShotRendersLevel(GameTestHelper helper) {
-        boolean differed = false;
-        float[] level = new float[16];
-        float[] diving = new float[16];
-        for (int deg = -180; deg < 180; deg += 15) {
-            SlashBladeMesh.frame((float) Math.toRadians(deg), 0.4f).get(level);
-            // A shot at -40 degrees of pitch would be a different matrix if pitch were applied.
-            SlashBladeMesh.frame((float) Math.toRadians(deg), 0.4f).get(diving);
-            for (int i = 0; i < 16; i++) {
-                if (Math.abs(level[i] - diving[i]) > 1e-9f) {
-                    differed = true;
-                }
-            }
-        }
-        helper.assertTrue(!differed,
-                "the frame changed between two shots with the same heading, which means something"
-                        + " other than the heading is reaching it. If that is the pitch, the crescent"
-                        + " tips into the ground with a downward shot instead of staying level.");
+    public static void arcBowsSidewaysAndTheFaceLooksAtYou(GameTestHelper helper) {
+        float[] bow = new float[3];
+        float[] face = new float[3];
+        Matrix4f frame = SlashBladeMesh.viewFrame(0f);
+        axis(frame, 0f, 1f, 0f, bow);
+        axis(frame, 0f, 0f, 1f, face);
+        helper.assertTrue(bow[0] > 0.999f && Math.abs(bow[1]) < 1e-3f && Math.abs(bow[2]) < 1e-3f,
+                "the arc points to (" + bow[0] + ", " + bow[1] + ", " + bow[2]
+                        + ") instead of across the screen (1, 0, 0), so the crescent would bow into"
+                        + " or out of the screen instead of sideways.");
+        helper.assertTrue(face[1] < -0.999f && Math.abs(face[0]) < 1e-3f && Math.abs(face[2]) < 1e-3f,
+                "the ribbon's face normal points to (" + face[0] + ", " + face[1] + ", " + face[2]
+                        + ") instead of at the viewer (0, -1, 0). This is the strip's presenting"
+                        + " side: flipped, the slash shows its edge and the arc's width vanishes.");
         helper.succeed();
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void frameStaysRightHandedAndOrthonormal(GameTestHelper helper) {
-        // A mirrored basis would invert the mesh and render the crescent inside-out, with the
-        // screentone band on the wrong side of the ink.
-        for (int deg = -180; deg < 180; deg += 30) {
-            for (float rollDeg : new float[]{-60f, 0f, 60f}) {
-                Matrix4f frame = SlashBladeMesh.frame((float) Math.toRadians(deg),
-                        (float) Math.toRadians(rollDeg));
-                float[] x = new float[3];
-                float[] y = new float[3];
-                float[] z = new float[3];
-                float nx = axis(frame, 1f, 0f, 0f, x);
-                float ny = axis(frame, 0f, 1f, 0f, y);
-                float nz = axis(frame, 0f, 0f, 1f, z);
-                float unit = Math.max(Math.max(Math.abs(nx - 1f), Math.abs(ny - 1f)),
-                        Math.abs(nz - 1f));
-                float cross = x[1] * y[2] - x[2] * y[1];
-                float handed = cross * z[0] + (x[2] * y[0] - x[0] * y[2]) * z[1]
-                        + (x[0] * y[1] - x[1] * y[0]) * z[2];
-                helper.assertTrue(unit < 1e-4f && handed > 0.999f,
-                        "at yaw " + deg + " roll " + rollDeg + " the basis is off: axis lengths"
-                                + " " + nx + "/" + ny + "/" + nz + ", x cross y . z = " + handed
-                                + ". A left-handed basis mirrors the blade.");
-            }
+    public static void rollSpinsAboutTheLengthAxisOnly(GameTestHelper helper) {
+        // The spin must not move the length axis -- that is the whole difference between a roll and
+        // a second rotation -- while the arc and face must actually move, or the random per-slash
+        // roll would do nothing at all.
+        float[] a = new float[3];
+        float[] b = new float[3];
+        axis(SlashBladeMesh.viewFrame(0f), 1f, 0f, 0f, a);
+        axis(SlashBladeMesh.viewFrame(1.0f), 1f, 0f, 0f, b);
+        float drift = Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+        helper.assertTrue(drift < 1e-4f,
+                "rolling by 1 radian moved the length axis by " + drift
+                        + ". A roll about the blade's own axis leaves that axis fixed.");
+
+        float[] bowZero = new float[3];
+        float[] bowSpun = new float[3];
+        axis(SlashBladeMesh.viewFrame(0f), 0f, 1f, 0f, bowZero);
+        axis(SlashBladeMesh.viewFrame(1.0f), 0f, 1f, 0f, bowSpun);
+        float moved = Math.abs(bowZero[1] - bowSpun[1]) + Math.abs(bowZero[2] - bowSpun[2]);
+        helper.assertTrue(moved > 0.1f,
+                "the arc barely moved under a full radian of roll (" + moved + "), so the per-slash"
+                        + " spin is invisible. Worth checking whether the roll is reaching the frame"
+                        + " at all, since the server sends it in radians.");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void viewFrameStaysRightHandedAndOrthonormal(GameTestHelper helper) {
+        // A mirrored basis inverts the mesh and renders the crescent inside-out, with the
+        // screentone band on the wrong side of the ink. Nothing else would catch it.
+        for (float rollDeg : new float[]{-60f, -30f, 0f, 30f, 60f}) {
+            Matrix4f frame = SlashBladeMesh.viewFrame((float) Math.toRadians(rollDeg));
+            float[] x = new float[3];
+            float[] y = new float[3];
+            float[] z = new float[3];
+            float nx = axis(frame, 1f, 0f, 0f, x);
+            float ny = axis(frame, 0f, 1f, 0f, y);
+            float nz = axis(frame, 0f, 0f, 1f, z);
+            float unit = Math.max(Math.max(Math.abs(nx - 1f), Math.abs(ny - 1f)),
+                    Math.abs(nz - 1f));
+            float cross = x[1] * y[2] - x[2] * y[1];
+            float handed = cross * z[0] + (x[2] * y[0] - x[0] * y[2]) * z[1]
+                    + (x[0] * y[1] - x[1] * y[0]) * z[2];
+            helper.assertTrue(unit < 1e-4f && handed > 0.999f,
+                    "at roll " + rollDeg + " the basis is off: axis lengths " + nx + "/" + ny + "/"
+                            + nz + ", x cross y . z = " + handed
+                            + ". A left-handed basis mirrors the blade.");
         }
         helper.succeed();
     }

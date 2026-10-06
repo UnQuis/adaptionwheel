@@ -448,7 +448,7 @@ public class AdaptionEvents {
 
         player.setHealth(Math.max(1f, player.getHealth() - 30f));
         data.adversityActive = true;
-        data.adversityTimer = 480;
+        data.adversityTimer = ru.adaptionwheel.AdaptionTimings.ADVERSITY_TICKS;
 
         player.invulnerableTime = Math.max(player.invulnerableTime, 60);
 

@@ -3,41 +3,85 @@ package ru.adaptionwheel.server;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
-import org.jetbrains.annotations.Nullable;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import org.jetbrains.annotations.Nullable;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.adapt.AdaptationDefinition;
 import ru.adaptionwheel.adapt.AdaptationDomain;
 import ru.adaptionwheel.adapt.AdaptationRegistry;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
+import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.data.PlayerAdaption;
+import ru.adaptionwheel.data.WheelData;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
+/**
+ * The /adaptionwheel command tree.
+ *
+ * <p>Two real bugs lived here before this revision, both in how the tree was wired rather than in
+ * the command bodies themselves:
+ *
+ * <ul>
+ *   <li>{@code grant all <domain>} read an argument named {@code "concept"} out of a context that
+ *       only ever bound one named {@code "domain"}. That is not a typo that degrades gracefully --
+ *       {@code CommandContext.getArgument} throws {@link IllegalArgumentException} for a name that
+ *       was never bound, so every call to this branch crashed outright.</li>
+ *   <li>{@code grant <concept> <target|level>} and {@code grant all <target|domain>} put two
+ *       sibling argument nodes of different types in competition for the same next token. Nothing
+ *       stops a player's name from being indistinguishable from a level number or a domain key as
+ *       far as the parser is concerned, so which sibling wins was never something this code chose
+ *       -- it was whatever Brigadier's internal tie-break happened to do. That is fixed here by
+ *       disambiguating with an explicit keyword ({@code level}, {@code domain}) rather than relying
+ *       on two argument types never colliding, which was never guaranteed in the first place.</li>
+ * </ul>
+ *
+ * <p>The second fix changes two command shapes:
+ * <pre>
+ *   grant &lt;concept&gt; &lt;level&gt;        -&gt;  grant &lt;concept&gt; level &lt;level&gt;
+ *   grant all &lt;domain&gt;                -&gt;  grant all domain &lt;domain&gt;
+ * </pre>
+ * Every other shape is unchanged. The rule going forward: no two sibling nodes under the same
+ * parent may ever both be argument nodes capable of parsing the same token -- separate them with a
+ * literal keyword, the way {@code level} and {@code domain} do above, the moment a second argument
+ * sibling is added anywhere in this tree.
+ */
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public final class AdaptionCommand {
 
     private AdaptionCommand() {
     }
 
-    private static final com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> CONCEPT_SUGGESTIONS =
+    private static final SuggestionProvider<CommandSourceStack> CONCEPT_SUGGESTIONS =
             (ctx, builder) -> {
                 for (AdaptationDefinition def : AdaptationRegistry.allDefinitions()) {
                     builder.suggest(def.concept());
@@ -49,7 +93,7 @@ public final class AdaptionCommand {
                 return builder.buildFuture();
             };
 
-    private static final com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> DOMAIN_SUGGESTIONS =
+    private static final SuggestionProvider<CommandSourceStack> DOMAIN_SUGGESTIONS =
             (ctx, builder) -> {
                 for (AdaptationDomain domain : AdaptationDomain.values()) {
                     builder.suggest(domain.getKey());
@@ -57,13 +101,17 @@ public final class AdaptionCommand {
                 return builder.buildFuture();
             };
 
-    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String>
-            conceptArg(String name) {
-        return net.minecraft.commands.Commands.argument(name, StringArgumentType.string())
+    private static RequiredArgumentBuilder<CommandSourceStack, String> conceptArg(String name) {
+        return Commands.argument(name, StringArgumentType.string())
                 .suggests(CONCEPT_SUGGESTIONS);
     }
 
-    private static final com.mojang.brigadier.arguments.IntegerArgumentType LEVEL_ARG =
+    private static RequiredArgumentBuilder<CommandSourceStack, String> domainArg(String name) {
+        return Commands.argument(name, StringArgumentType.word())
+                .suggests(DOMAIN_SUGGESTIONS);
+    }
+
+    private static final IntegerArgumentType LEVEL_ARG =
             IntegerArgumentType.integer(0, PlayerAdaption.MAX_LEVEL);
 
     private static final int LEVEL_DEFAULT = -1;
@@ -72,10 +120,13 @@ public final class AdaptionCommand {
         return IntegerArgumentType.getInteger(ctx, "level");
     }
 
+    private static String domain(CommandContext<CommandSourceStack> ctx) {
+        return StringArgumentType.getString(ctx, "domain");
+    }
+
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
-        LiteralArgumentBuilder<CommandSourceStack> root = net.minecraft.commands.Commands
-                .literal("adaptionwheel");
+        LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("adaptionwheel");
 
         root.executes(ctx -> {
             ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.usage"), false);
@@ -83,139 +134,136 @@ public final class AdaptionCommand {
             return 1;
         });
 
-        root.then(net.minecraft.commands.Commands.literal("status")
+        root.then(Commands.literal("status")
                 .executes(ctx -> status(ctx, self(ctx)))
-                .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
+                .then(Commands.argument("target", EntityArgument.player())
                         .requires(s -> s.hasPermission(2))
                         .executes(ctx -> status(ctx, EntityArgument.getPlayer(ctx, "target")))));
 
-        root.then(net.minecraft.commands.Commands.literal("list")
+        root.then(Commands.literal("list")
                 .executes(ctx -> list(ctx, self(ctx), null))
-                .then(net.minecraft.commands.Commands.argument("domain", StringArgumentType.word())
-                        .suggests(DOMAIN_SUGGESTIONS)
-                        .executes(ctx -> list(ctx, self(ctx), StringArgumentType.getString(ctx, "domain")))
-                        .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
+                .then(domainArg("domain")
+                        .executes(ctx -> list(ctx, self(ctx), domain(ctx)))
+                        .then(Commands.argument("target", EntityArgument.player())
                                 .requires(s -> s.hasPermission(2))
                                 .executes(ctx -> list(ctx, EntityArgument.getPlayer(ctx, "target"),
-                                        StringArgumentType.getString(ctx, "domain"))))));
+                                        domain(ctx))))));
 
-        root.then(net.minecraft.commands.Commands.literal("info")
+        root.then(Commands.literal("info")
                 .then(conceptArg("concept")
                         .executes(ctx -> {
                             ServerPlayer target;
                             try {
                                 target = self(ctx);
-                            } catch (Exception e) {
+                            } catch (CommandSyntaxException e) {
                                 target = null;
                             }
-                            return info(ctx, target, StringArgumentType.getString(ctx, "concept"));
+                            return info(ctx, target, concept(ctx));
                         })));
 
-        root.then(net.minecraft.commands.Commands.literal("grant")
+        // grant <concept>                       -> self, default level
+        // grant <concept> <target>               -> target, default level
+        // grant <concept> level <level>          -> self, explicit level
+        // grant <concept> level <level> <target> -> target, explicit level
+        //
+        // "level" is a literal keyword, not a second argument sibling of "target": a player can
+        // legally be named anything an integer can also look like, so a bare integer argument and
+        // a bare player argument must never compete for the same token. See the class javadoc.
+        root.then(Commands.literal("grant")
                 .requires(s -> s.hasPermission(2))
-                .then(net.minecraft.commands.Commands.literal("all")
+                .then(Commands.literal("all")
                         .executes(ctx -> grantAll(ctx, self(ctx), null))
-                        .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
-                                .requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("target", EntityArgument.player())
                                 .executes(ctx -> grantAll(ctx, EntityArgument.getPlayer(ctx, "target"), null)))
-                        .then(conceptArg("domain")
-                                .suggests(DOMAIN_SUGGESTIONS)
-                                .executes(ctx -> grantAll(ctx, self(ctx), concept(ctx)))
-                                .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
-                                        .requires(s -> s.hasPermission(2))
-                                        .executes(ctx -> grantAll(ctx, EntityArgument.getPlayer(ctx, "target"),
-                                                concept(ctx))))))
+                        .then(Commands.literal("domain")
+                                .then(domainArg("domain")
+                                        .executes(ctx -> grantAll(ctx, self(ctx), domain(ctx)))
+                                        .then(Commands.argument("target", EntityArgument.player())
+                                                .executes(ctx -> grantAll(ctx,
+                                                        EntityArgument.getPlayer(ctx, "target"), domain(ctx)))))))
                 .then(conceptArg("concept")
-
-                        .executes(ctx -> grant(ctx, selfOrTarget(ctx, "target"), concept(ctx), LEVEL_DEFAULT))
-
-                        .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
-                                .requires(s -> s.hasPermission(2))
+                        .executes(ctx -> grant(ctx, self(ctx), concept(ctx), LEVEL_DEFAULT))
+                        .then(Commands.argument("target", EntityArgument.player())
                                 .executes(ctx -> grant(ctx, EntityArgument.getPlayer(ctx, "target"),
                                         concept(ctx), LEVEL_DEFAULT)))
-                        .then(net.minecraft.commands.Commands.argument("level", LEVEL_ARG)
-                                .executes(ctx -> grant(ctx, self(ctx), concept(ctx), level(ctx)))
-                                .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
-                                        .executes(ctx -> grant(ctx, EntityArgument.getPlayer(ctx, "target"),
-                                                concept(ctx), level(ctx)))))));
+                        .then(Commands.literal("level")
+                                .then(Commands.argument("level", LEVEL_ARG)
+                                        .executes(ctx -> grant(ctx, self(ctx), concept(ctx), level(ctx)))
+                                        .then(Commands.argument("target", EntityArgument.player())
+                                                .executes(ctx -> grant(ctx, EntityArgument.getPlayer(ctx, "target"),
+                                                        concept(ctx), level(ctx))))))));
 
-        root.then(net.minecraft.commands.Commands.literal("ungrant")
+        root.then(Commands.literal("ungrant")
                 .requires(s -> s.hasPermission(2))
                 .then(conceptArg("concept")
                         .executes(ctx -> ungrant(ctx, selfOrTarget(ctx, "target"), concept(ctx)))
-                        .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
+                        .then(Commands.argument("target", EntityArgument.player())
                                 .executes(ctx -> ungrant(ctx, EntityArgument.getPlayer(ctx, "target"),
                                         concept(ctx))))));
 
-        root.then(net.minecraft.commands.Commands.literal("shed")
+        root.then(Commands.literal("shed")
                 .then(conceptArg("concept")
                         .executes(ctx -> shed(ctx, selfOrTarget(ctx, "target"), concept(ctx)))
-                        .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
+                        .then(Commands.argument("target", EntityArgument.player())
                                 .requires(s -> s.hasPermission(2))
                                 .executes(ctx -> shed(ctx, EntityArgument.getPlayer(ctx, "target"),
                                         concept(ctx))))));
 
-        root.then(net.minecraft.commands.Commands.literal("analyze")
+        root.then(Commands.literal("analyze")
                 .requires(s -> s.hasPermission(2))
                 .then(conceptArg("concept")
                         .executes(ctx -> analyze(ctx, selfOrTarget(ctx, "target"), concept(ctx)))
-                        .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
+                        .then(Commands.argument("target", EntityArgument.player())
                                 .executes(ctx -> analyze(ctx, EntityArgument.getPlayer(ctx, "target"),
                                         concept(ctx))))));
 
-        root.then(net.minecraft.commands.Commands.literal("reset")
+        root.then(Commands.literal("reset")
                 .requires(s -> s.hasPermission(2))
                 .executes(ctx -> reset(ctx, self(ctx)))
-                .then(net.minecraft.commands.Commands.argument("target", EntityArgument.player())
+                .then(Commands.argument("target", EntityArgument.player())
                         .executes(ctx -> reset(ctx, EntityArgument.getPlayer(ctx, "target")))));
 
-        root.then(net.minecraft.commands.Commands.literal("registry")
+        root.then(Commands.literal("registry")
                 .requires(s -> s.hasPermission(2))
                 .executes(AdaptionCommand::registry));
 
-        root.then(net.minecraft.commands.Commands.literal("debug")
-                .then(net.minecraft.commands.Commands.literal("aggro")
-
-                        .requires(s2 -> s2.hasPermission(2))
+        root.then(Commands.literal("debug")
+                .requires(s -> s.hasPermission(2))
+                .then(Commands.literal("aggro")
                         .executes(ctx -> aggro(ctx, self(ctx))))
-                .then(net.minecraft.commands.Commands.literal("altar")
-                        .requires(s2 -> s2.hasPermission(2))
+                .then(Commands.literal("altar")
                         .executes(ctx -> altarLookup(ctx, null))
-                        .then(net.minecraft.commands.Commands.argument("item",
-                                        StringArgumentType.word())
+                        .then(Commands.argument("item", StringArgumentType.word())
                                 .executes(ctx -> altarLookup(ctx,
                                         StringArgumentType.getString(ctx, "item")))))
-                .then(net.minecraft.commands.Commands.literal("flight")
-                        .requires(s2 -> s2.hasPermission(2))
+                .then(Commands.literal("flight")
                         .executes(ctx -> flight(ctx, self(ctx)))
-                        .then(net.minecraft.commands.Commands.argument("player",
-                                        EntityArgument.player())
+                        .then(Commands.argument("player", EntityArgument.player())
                                 .executes(ctx -> flight(ctx, selfOrTarget(ctx, "player"))))));
 
         event.getDispatcher().register(root);
     }
 
-    private static ServerPlayer self(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+    private static ServerPlayer self(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         return ctx.getSource().getPlayerOrException();
     }
 
     private static ServerPlayer selfOrTarget(CommandContext<CommandSourceStack> ctx, String name)
-            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+            throws CommandSyntaxException {
         try {
             return EntityArgument.getPlayer(ctx, name);
         } catch (IllegalArgumentException ignored) {
-
+            // No such argument was bound on this path, meaning this branch is the self-only one.
         }
         try {
             return ctx.getSource().getPlayerOrException();
-        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+        } catch (CommandSyntaxException e) {
             throw NO_PLAYER_ERROR.create();
         }
     }
 
-    private static final com.mojang.brigadier.exceptions.SimpleCommandExceptionType NO_PLAYER_ERROR =
-            new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
-                    Component.translatable("adaptionwheel.cmd.no_player"));
+    private static final SimpleCommandExceptionType NO_PLAYER_ERROR =
+            new SimpleCommandExceptionType(Component.translatable("adaptionwheel.cmd.no_player"));
 
     private static String concept(CommandContext<CommandSourceStack> ctx) {
         return StringArgumentType.getString(ctx, "concept");
@@ -297,7 +345,6 @@ public final class AdaptionCommand {
         boolean oneTime = def != null ? !def.leveled() : Concepts.isOneTime(concept);
         int maxLevel = def != null ? def.maxLevel() : PlayerAdaption.MAX_LEVEL;
         if (target == null) {
-
             final String kind = oneTime ? "one-time" : "leveled 1-" + maxLevel;
             ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.info",
                     Concepts.displayName(concept),
@@ -310,7 +357,7 @@ public final class AdaptionCommand {
         PlayerAdaption data = AdaptionEvents.dataOf(target);
         int level = data.level(concept);
         String state = oneTime ? (data.isAdapted(concept)
-                ? Component.translatable("adaptionwheel.gui.adapted").getString() : "-")
+                                  ? Component.translatable("adaptionwheel.gui.adapted").getString() : "-")
                 : level + "/" + maxLevel + (level >= maxLevel ? " (" + Component.translatable("adaptionwheel.gui.max_reached").getString() + ")" : "");
         ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.info",
                 Concepts.displayName(concept),
@@ -334,7 +381,6 @@ public final class AdaptionCommand {
         }
         boolean oneTime = Concepts.isOneTime(concept);
         if (oneTime && level != LEVEL_DEFAULT) {
-
             ctx.getSource().sendSuccess(() -> Component.translatable(
                     "adaptionwheel.cmd.grant_level_ignored", concept), false);
         }
@@ -368,7 +414,7 @@ public final class AdaptionCommand {
     }
 
     private static int shed(CommandContext<CommandSourceStack> ctx, ServerPlayer target,
-                           String concept) {
+                            String concept) {
         Component truncated = truncationHint(concept);
         if (truncated != null) {
             ctx.getSource().sendFailure(truncated);
@@ -377,7 +423,7 @@ public final class AdaptionCommand {
         Shedding.Refusal refusal = Shedding.shed(target, AdaptionEvents.dataOf(target), concept);
         if (refusal != Shedding.Refusal.OK) {
             ctx.getSource().sendFailure(Component.translatable(
-                    "adaptionwheel.cmd.shed_" + refusal.name().toLowerCase(java.util.Locale.ROOT),
+                    "adaptionwheel.cmd.shed_" + refusal.name().toLowerCase(Locale.ROOT),
                     concept));
             return 0;
         }
@@ -425,24 +471,25 @@ public final class AdaptionCommand {
         return null;
     }
 
-    private static java.util.Set<String> knownNamespaces() {
-        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+    private static Set<String> knownNamespaces() {
+        Set<String> out = new LinkedHashSet<>();
         out.add("minecraft");
         try {
-            for (var mod : net.neoforged.fml.ModList.get().getMods()) {
+            for (var mod : ModList.get().getMods()) {
                 out.add(mod.getModId());
             }
         } catch (Throwable ignored) {
-
+            // ModList not ready yet (e.g. very early datagen context); namespace hinting is
+            // best-effort only, so falling back to just "minecraft" is fine.
         }
         return out;
     }
 
     private static List<String> nearMatches(String needle) {
-        String lower = needle.toLowerCase(java.util.Locale.ROOT);
+        String lower = needle.toLowerCase(Locale.ROOT);
         List<String> hits = new ArrayList<>();
         for (AdaptationDefinition def : AdaptationRegistry.allDefinitions()) {
-            if (def.concept().toLowerCase(java.util.Locale.ROOT).contains(lower)) {
+            if (def.concept().toLowerCase(Locale.ROOT).contains(lower)) {
                 hits.add(def.concept());
                 if (hits.size() >= 8) {
                     break;
@@ -509,12 +556,12 @@ public final class AdaptionCommand {
                 .reduce((a, b) -> a + ", " + b).orElse("(none)");
         source.sendSuccess(() -> Component.literal("effects: " + effects), false);
 
-        List<net.minecraft.world.entity.Mob> hostile = level.getEntitiesOfClass(
-                net.minecraft.world.entity.Mob.class, target.getBoundingBox().inflate(24.0D),
-                mob -> mob instanceof net.minecraft.world.entity.monster.Enemy);
+        List<Mob> hostile = level.getEntitiesOfClass(
+                Mob.class, target.getBoundingBox().inflate(24.0D),
+                mob -> mob instanceof Enemy);
         source.sendSuccess(() -> Component.literal("hostile mobs within 24 blocks: " + hostile.size()), false);
         int shown = 0;
-        for (net.minecraft.world.entity.Mob mob : hostile) {
+        for (Mob mob : hostile) {
             if (shown++ >= 5) {
                 source.sendSuccess(() -> Component.literal("... and " + (hostile.size() - 5) + " more"), false);
                 break;
@@ -523,7 +570,7 @@ public final class AdaptionCommand {
             source.sendSuccess(() -> Component.literal("  " + mob.getName().getString() + " -> "
                     + (mobTarget == null ? "(nothing)"
                     : mobTarget.getName().getString() + " at "
-                    + String.format(java.util.Locale.ROOT, "%.1f", mob.distanceTo(target)) + " blocks")), false);
+                      + String.format(Locale.ROOT, "%.1f", mob.distanceTo(target)) + " blocks")), false);
         }
         return 1;
     }
@@ -541,8 +588,8 @@ public final class AdaptionCommand {
         source.sendSuccess(() -> Component.literal(Concepts.chatName(concept)
                 + ": adapted=" + data.isAdapted(concept) + " enabled=" + data.isEnabled(concept)), false);
 
-        ru.adaptionwheel.data.WheelData onItem = AdaptionEvents.getWheelStack(target)
-                .map(s -> s.get(ru.adaptionwheel.data.ModDataComponents.WHEEL_DATA))
+        WheelData onItem = AdaptionEvents.getWheelStack(target)
+                .map(s -> s.get(ModDataComponents.WHEEL_DATA))
                 .orElse(null);
         int itemCount = onItem == null ? -1 : onItem.adaptCount();
         source.sendSuccess(() -> Component.literal("attachment adaptCount=" + data.getAdaptCount()
@@ -561,7 +608,7 @@ public final class AdaptionCommand {
         double needed = AdaptionConfig.FLIGHT_ALTITUDE.get();
         int phantom = data.level(Concepts.contact("minecraft:phantom"));
         boolean levitation = data.isAdapted(Concepts.debuff("minecraft:levitation"));
-        source.sendSuccess(() -> Component.literal("unlock: y=" + String.format(java.util.Locale.ROOT, "%.1f", altitude)
+        source.sendSuccess(() -> Component.literal("unlock: y=" + String.format(Locale.ROOT, "%.1f", altitude)
                 + " (needs " + needed + ") " + mark(altitude >= needed)
                 + "   " + Concepts.contact("minecraft:phantom") + "=" + phantom + "/"
                 + PlayerAdaption.MAX_LEVEL + " " + mark(phantom >= PlayerAdaption.MAX_LEVEL)
@@ -610,25 +657,23 @@ public final class AdaptionCommand {
                     + " mobs have loot here. /adaptionwheel debug altar <item> for one item."), false);
             return mobs;
         }
-        var id = net.minecraft.resources.ResourceLocation.tryParse(itemId);
-        if (id == null || !net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(id)) {
+        ResourceLocation id = ResourceLocation.tryParse(itemId);
+        if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
             source.sendSuccess(() -> Component.literal("no such item: " + itemId), false);
             return 0;
         }
-        var stack = new net.minecraft.world.item.ItemStack(
-                net.minecraft.core.registries.BuiltInRegistries.ITEM.get(id));
+        ItemStack stack = new ItemStack(BuiltInRegistries.ITEM.get(id));
         List<String> mobs = AltarOfferings.mobsFor(stack, server);
         source.sendSuccess(() -> Component.literal(itemId + " opens: "
                 + (mobs.isEmpty() ? "(nothing - not an offering)"
                 : String.join(", ", mobs))), false);
-        ru.adaptionwheel.server.DomainExchange.Recipe recipe =
-                ru.adaptionwheel.server.DomainExchange.recipeFor(stack);
+        DomainExchange.Recipe recipe = DomainExchange.recipeFor(stack);
         if (recipe != null) {
             source.sendSuccess(() -> Component.literal("  price list: " + recipe.itemsPerTrade()
                     + " item(s) for the first level, selectors "
                     + recipe.selectors().stream()
-                            .map(ru.adaptionwheel.server.DomainExchange.Selector::text)
-                            .reduce((a, b) -> a + ", " + b).orElse("?")), false);
+                    .map(DomainExchange.Selector::text)
+                    .reduce((a, b) -> a + ", " + b).orElse("?")), false);
         }
         for (String mob : mobs) {
             source.sendSuccess(() -> Component.literal("  " + Concepts.offense(mob) + ", "

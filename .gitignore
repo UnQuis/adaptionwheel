@@ -29,3 +29,13 @@ ldlib2/
 # OS noise
 .DS_Store
 Thumbs.db
+AdaptationScreen.java
+
+.git/
+com/
+inventory_files/
+ldlib2/
+run/
+Errors/
+mahoraga-wheel-spin-adaption-sound-effect-made-with-Voicemod.mp3
+

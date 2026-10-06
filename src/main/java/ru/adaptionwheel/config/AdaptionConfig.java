@@ -141,7 +141,10 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_FLASH_FRAMES;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FLASH_MS;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FLASH_STRENGTH;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_FOV_PUNCH_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FOV_PUNCH_STRENGTH;
     public static final ModConfigSpec.ConfigValue<Boolean> EXISTENCE_CINEMATIC_ENABLED;
+
     
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> MINING_SPEED_LEVELS;
@@ -760,6 +763,17 @@ public final class AdaptionConfig {
                         "the screen rather than as an impact.")
                 .defineInRange("dimensionImpactFlashStrength", 0.75, 0.0, 1.0);
         c.pop();
+        DIMENSION_IMPACT_FOV_PUNCH_ENABLED = c.comment("Pull the FOV inward for the opening instant of the",
+                        "frame, on the same clock as the panel. A narrowing lens on detonation reads as",
+                        "the camera being yanked toward the rupture, rather than knocked back from it -",
+                        "the 'something is being destroyed' register rather than the 'I got hit' one.",
+                        "0 strength below has the same effect as disabling this.")
+                .define("dimensionImpactFovPunchEnabled", true);
+        DIMENSION_IMPACT_FOV_PUNCH_STRENGTH = c.comment("How much the FOV narrows at peak strength, as a",
+                        "fraction of the current FOV. 0.12 is a firm but brief pull; past 0.3 starts to",
+                        "feel like a zoom rather than a punch.")
+                .defineInRange("dimensionImpactFovPunchStrength", 0.12, 0.0, 0.5);
+        c.pop();
 
         c.comment("--- Existence cinematic ---").push("existenceCinematic");
         EXISTENCE_CINEMATIC_ENABLED = c.comment("Play the 9-second reward sequence once the existence",
@@ -768,8 +782,6 @@ public final class AdaptionConfig {
                         "not cost you the reward. This is the original's cinematic, which is what",
                         "played instead of an instant grant; the bar and this are additive.")
                 .define("existenceCinematicEnabled", true);
-        c.pop();
-
         c.pop();
 
         CLIENT_SPEC = c.build();

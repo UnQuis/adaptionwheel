@@ -25,6 +25,8 @@ public class AdaptionNetworking {
                 (payload, context) -> context.enqueueWork(() -> TradeSyncPayload.apply(payload)));
         registrar.playToClient(RiftImpactPayload.TYPE, RiftImpactPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> RiftImpactPayload.apply(payload)));
+        registrar.playToClient(ExistenceCinematicPayload.TYPE, ExistenceCinematicPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ru.adaptionwheel.client.ExistenceCinematicFX.start(payload)));
         registrar.playToServer(TradeActionPayload.TYPE, TradeActionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         TradeActionPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));

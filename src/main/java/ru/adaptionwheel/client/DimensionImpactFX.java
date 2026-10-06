@@ -31,17 +31,20 @@ import java.io.IOException;
  * The Dimension Destroy impact frame: a manga two-tone pass laid over the composited frame when
  * the wearer's own spatial rifts go out.
  *
- * <p>It hangs off {@code RenderGuiEvent.Pre} rather than a mixin. By the time that fires, {@code
- * GameRenderer.render} has finished the world, the hand <i>and</i> vanilla's own post chain
- * (blaze rods, nausea), and has re-bound the main render target; no GUI layer has drawn yet. So
- * the frame is complete, the world underneath is in its final graded state, the HUD stays legible
- * on top of it, and the GUI stage sets its own GL state afterwards without having to be put back
- * the way this class found it.
+ * <p>See the class-level notes from the original version for why this hangs off
+ * {@code RenderGuiEvent.Pre} and why it is two passes through one program. This revision adds a
+ * sharper opening punch (detonation flash, a one-shot camera shove, an FOV pull-in) and fixes two
+ * things that were quietly working against the effect's own point:
  *
- * <p><b>Two passes, one program.</b> The two-tone threshold needs to read neighbouring pixels, and
- * reading the framebuffer you are drawing into is undefined, so the frame is first copied into a
- * scratch target. Pass A is this same shader with {@code strength = 0}, which early-outs to a plain
- * texture fetch — one sample per pixel instead of the thirteen the effect needs.
+ * <ul>
+ *   <li>{@code ImpactProgress.zw} is the shockwave/speed-line origin in the shader this is paired
+ *       with. It was being sent as {@code (0, 0)} - the top-left corner - instead of the screen
+ *       centre, so the burst almost certainly fired out of a corner instead of from the player.</li>
+ *   <li>The burst's own gain lived entirely in the shader's JSON defaults and never saw
+ *       {@code DIMENSION_IMPACT_STRENGTH} at all, so turning the effect down left the shockwave
+ *       and speed lines at full strength regardless. Java now owns those gains and scales them by
+ *       the same dial as everything else.</li>
+ * </ul>
  */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class DimensionImpactFX {
@@ -50,30 +53,49 @@ public final class DimensionImpactFX {
     private static final ResourceLocation SHADER =
             ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, "post/dimension_impact");
 
-    /**
-     * The panel's life, in seconds: a short full-strength snap so the hit registers as a punch,
-     * then a linear fade. {@code HOLD + FADE} is 450 ms end to end, which is the window the
-     * original game held its impact frames for.
-     *
-     * <p>Wall-clock, not per frame. A per-frame decay would hold the panel for a fixed <i>number
-     * of frames</i>, which is the same wall-clock duration on a 60 Hz screen and a fraction of
-     * it on a 240 Hz one — so the effect would quietly change length with the player's hardware.
-     */
     private static final float HOLD = 0.06f;
     private static final float FADE = 0.39f;
-    /** The white pop on top of the panel is much shorter than the panel itself. */
     private static final float FLASH_FADE = 0.12f;
-    /** Longest step we honour, so a stall cannot dump the whole panel in one frame. */
     private static final float MAX_STEP = 1f / 20f;
+
+    /** Length of the opening white pop, well under a frame at 60 fps counted in wall time rather
+     *  than frames, so it does not quietly change length with the player's refresh rate. */
+    private static final float DETONATION_SECONDS = 0.05f;
+
+    /**
+     * The strobe and the panel's own ink/paper, as literal RGB rather than generic black/white, so
+     * the flash reads as the same object as the panel instead of a filter bolted on top of it.
+     * Lifted straight from this shader's own {@code ImpactInk}/{@code ImpactPaper} JSON defaults
+     * (0.045/0.02/0.075 and 0.97/0.96/0.98) rather than re-guessed, so the two stay in sync if that
+     * JSON is ever retuned.
+     */
+    private static final int VOID_INK_RGB = 0x0B0513;
+    private static final int VOID_PAPER_RGB = 0xF7F5FA;
+
+    /**
+     * Base shockwave and speed-line gains, scaled by {@code DIMENSION_IMPACT_STRENGTH} every pass
+     * (see {@link #pass}) rather than left as a fixed JSON look. Pushed above a "tasteful" default
+     * on purpose - a dimension tearing itself apart is the one place this mod gets to overdo it.
+     */
+    private static final float BURST_RING_GAIN = 1.15f;
+    private static final float BURST_LINES_GAIN = 1.05f;
+    private static final float BURST_SCREENTONE_CRAWL = 2.5f;
+    private static final float BURST_INK_DARKNESS = 1.0f;
 
     @Nullable
     private static ShaderInstance shader;
     @Nullable
     private static TextureTarget scratch;
 
-    /** Seconds since the last trigger, parked past the end once the panel has played out. */
-    private static float elapsed = Float.MAX_VALUE;
-    private static long lastFrameNanos;
+    /**
+     * Both written by {@link #trigger}, which fires from network packet handling rather than from
+     * the render thread, and read every frame from the render thread. {@code volatile} buys
+     * visibility and rules out a torn read of {@code lastFrameNanos} (a non-volatile long's
+     * read/write is not guaranteed atomic by the JLS); it does not need to be more than that since
+     * nothing here does read-modify-write across threads.
+     */
+    private static volatile float elapsed = Float.MAX_VALUE;
+    private static volatile long lastFrameNanos;
 
     private DimensionImpactFX() {
     }
@@ -89,16 +111,6 @@ public final class DimensionImpactFX {
         }
     }
 
-    /**
-     * Restarts the panel. Called from {@code RiftImpactPayload} when the server reports that <i>this</i>
-     * player's swing actually spawned rifts.
-     *
-     * <p>It used to be driven by scanning the level for {@code SpatialRiftProjectile} owned by the local
-     * player, which could never fire: {@code Projectile.getOwner()} resolves its cached owner only, and
-     * the spawn packet carries no owner, so on the client it always returned {@code null}. The panel was
-     * therefore dead code. A clientbound packet is also the honest signal — the server already knows which
-     * swing produced the rifts, and it removes the ping-dependent guesswork entirely.
-     */
     public static void trigger() {
         elapsed = 0f;
         lastFrameNanos = 0L;
@@ -106,16 +118,12 @@ public final class DimensionImpactFX {
 
     @SubscribeEvent
     public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
-        // Advanced before any early return so the clock stays live even while nothing is drawn; a stale
-        // timestamp would otherwise dump a whole panel into the first frame after the next trigger.
         elapsed += step();
 
         if (shader != null && elapsed < HOLD + FADE
                 && AdaptionConfig.DIMENSION_IMPACT_FRAME_ENABLED.get()) {
             renderPanel();
         }
-        // Drawn after the panel and independently of it, so the punch still lands if the post shader
-        // ever failed to load.
         renderFlash(event.getGuiGraphics());
     }
 
@@ -128,40 +136,42 @@ public final class DimensionImpactFX {
         float current = strengthAt(elapsed);
         float progress = Math.min(elapsed / (HOLD + FADE), 1f);
         float flashAmount = Math.max(0f, 1f - elapsed / FLASH_FADE);
+        float configStrength = AdaptionConfig.DIMENSION_IMPACT_STRENGTH.get().floatValue();
 
         RenderTarget main = mc.getMainRenderTarget();
         TextureTarget target = scratchFor(main.width, main.height);
 
         target.bindWrite(true);
-        pass(main.getColorTextureId(), target.width, target.height, 0f, 0f, 0f, 1f, 0f);
+        pass(main.getColorTextureId(), target.width, target.height, 0f, 0f, 0f, 1f, 0f, 0f);
 
         main.bindWrite(true);
         pass(target.getColorTextureId(), main.width, main.height,
-                current * AdaptionConfig.DIMENSION_IMPACT_STRENGTH.get().floatValue(),
+                current * configStrength,
                 AdaptionConfig.DIMENSION_IMPACT_ABERRATION.get().floatValue(),
                 flashAmount * 0.35f,
-                1f, progress);
+                1f, progress, configStrength);
     }
 
     /**
-     * The anime flash: a full-screen white/black alternation over a measured duration.
-     *
-     * <p>The frame index is derived from {@code elapsed} and never from a per-rendered-frame
-     * counter. That is the entire safety question in this feature. Incrementing an index once per
-     * drawn frame gives 12 colour changes/second at 60 fps, inside the 3-25 Hz band where flicker
-     * reads as motion and provokes photosensitive migraine — that is a strobe, and it is why the
-     * original mod's own defaults are modest. Dividing a fixed duration into a fixed number of steps
-     * gives 20 fps for its 2-over-100 ms, which is just animation and is indistinguishable from the
-     * same frames played by hand at 60 fps.
-     *
-     * <p>Hard cut at the end rather than a fade: the sequence is punctuation on the front of the
-     * panel, and cutting is what makes it read as a hit instead of a dissolve.
+     * The anime flash: a hard white detonation pop, then a black/white (here: ink/paper) strobe.
+     * Both are driven off {@code elapsed} rather than a per-rendered-frame counter - see the
+     * original class notes on why a frame-counted strobe is a strobe-light hazard and a wall-clock
+     * one is not.
      */
     private static void renderFlash(GuiGraphics graphics) {
         if (!AdaptionConfig.DIMENSION_IMPACT_FRAME_ENABLED.get()
                 || !AdaptionConfig.DIMENSION_IMPACT_FLASH_ENABLED.get()) {
             return;
         }
+
+        if (elapsed < DETONATION_SECONDS) {
+            // The one true "it just happened" frame: brighter and flatter than the strobe below,
+            // and gone in three frames at 60 fps - a flashbulb, not part of the animation.
+            float deto = 1f - elapsed / DETONATION_SECONDS;
+            int alpha = Mth.clamp(Math.round(deto * deto * 255f), 0, 255);
+            graphics.fill(0, 0, graphics.guiWidth(), graphics.guiHeight(), (alpha << 24) | 0xFFFFFF);
+        }
+
         float duration = AdaptionConfig.DIMENSION_IMPACT_FLASH_MS.get().floatValue() / 1000f;
         if (elapsed >= duration) {
             return;
@@ -170,23 +180,14 @@ public final class DimensionImpactFX {
         int index = Mth.clamp((int) (elapsed / duration * frames), 0, frames - 1);
 
         float alpha = Mth.clamp(AdaptionConfig.DIMENSION_IMPACT_FLASH_STRENGTH.get().floatValue(), 0f, 1f);
-        int argb = ((int) (alpha * 255f) << 24) | (index % 2 == 0 ? 0xFFFFFF : 0x000000);
+        int argb = ((int) (alpha * 255f) << 24) | (index % 2 == 0 ? VOID_PAPER_RGB : VOID_INK_RGB);
         graphics.fill(0, 0, graphics.guiWidth(), graphics.guiHeight(), argb);
     }
 
     /**
-     * Camera shake, running on the panel's own clock.
-     *
-     * <p>The obvious way to write this is {@code System.nanoTime()} for the phase and a per-frame
-     * multiplier for the decay. That is wrong twice over: the amplitude then depends on your
-     * framerate while the oscillation rate does not, so the shake's shape quietly changes with your
-     * hardware. Taking the phase from {@code elapsed} instead makes it deterministic — the same
-     * envelope on any machine, and it cannot outlive the panel because it is literally the same
-     * curve.
-     *
-     * <p>{@code setRoll} is real rather than a no-op: NeoForge patches {@code Camera} to carry a
-     * {@code roll} field and a {@code setRotation(yaw, pitch, roll)} overload, and fires this event
-     * from {@code Camera.setup} with roll seeded to 0.
+     * Camera shake, running on the panel's own clock, plus a one-shot directional shove in the
+     * opening {@link #DETONATION_SECONDS} - the oscillation alone reads as a tremor; a single
+     * push riding on top of it in the first instant is what reads as the actual hit landing.
      */
     @SubscribeEvent
     public static void onCameraAngles(ViewportEvent.ComputeCameraAngles event) {
@@ -195,32 +196,51 @@ public final class DimensionImpactFX {
             return;
         }
 
-        // No hitstop here on purpose. See the note on the shake above.
         float power = AdaptionConfig.DIMENSION_IMPACT_SHAKE_ENABLED.get()
                 ? strengthAt(elapsed) * AdaptionConfig.DIMENSION_IMPACT_SHAKE_STRENGTH.get().floatValue()
                 : 0f;
         float yaw = event.getYaw();
         float pitch = event.getPitch();
         if (power > 0.01f) {
-            // Two incommensurate frequencies per axis, so the motion never visibly repeats.
             float t = elapsed * 47f;
             yaw += (float) (Math.sin(t) + Math.sin(t * 2.17f) * 0.5f) * power;
             pitch += (float) (Math.cos(t * 1.31f) + Math.sin(t * 2.83f) * 0.5f) * power;
             event.setRoll(event.getRoll() + (float) Math.sin(t * 0.87f) * power * 0.8f);
+
+            if (elapsed < DETONATION_SECONDS) {
+                float snap = 1f - elapsed / DETONATION_SECONDS;
+                pitch += snap * power * 6f;
+            }
         }
         event.setYaw(yaw);
         event.setPitch(pitch);
     }
 
     /**
-     * Full-strength snap, then a curve that stays near full and then falls off a cliff.
+     * A quick inward pull of the FOV at the moment of detonation - the camera gets yanked toward
+     * the rupture rather than knocked back from it, which is the "something is being destroyed"
+     * register rather than the "I got hit" one.
      *
-     * <p>A straight fade is what made the panel read as soft: it spends its whole life half
-     * faded, which looks like a dissolve. {@code 1 - fade^3} keeps the frame at ~88% halfway
-     * through the fade and still has slope at the end, so the panel is still there and then
-     * simply cuts. This mirrors what the original mod's own post effects did — they took a
-     * {@code uProgress} and drew against it, rather than only fading a uniform.
+     * <p>Flagged: I have not been able to confirm the exact numeric type
+     * {@code ViewportEvent.ComputeFov#getFOV()}/{@code #setFOV} use on this NeoForge version
+     * (float vs double) without running the game. If this does not compile as written, change
+     * only the local type below to match - the logic does not depend on which it is.
      */
+    @SubscribeEvent
+    public static void onComputeFov(ViewportEvent.ComputeFov event) {
+        if (shader == null || elapsed >= HOLD + FADE
+                || !AdaptionConfig.DIMENSION_IMPACT_FRAME_ENABLED.get()
+                || !AdaptionConfig.DIMENSION_IMPACT_FOV_PUNCH_ENABLED.get()) {
+            return;
+        }
+        float power = strengthAt(elapsed) * AdaptionConfig.DIMENSION_IMPACT_FOV_PUNCH_STRENGTH.get().floatValue();
+        if (power <= 0.001f) {
+            return;
+        }
+        float fov = (float) event.getFOV();
+        event.setFOV(fov * (1f - power));
+    }
+
     private static float strengthAt(float seconds) {
         if (seconds <= HOLD) {
             return 1f;
@@ -233,14 +253,14 @@ public final class DimensionImpactFX {
         return remaining * remaining * remaining;
     }
 
-    /** Seconds since the previous rendered frame, clamped so a stall cannot skip the panel. */
     private static float step() {
         long now = System.nanoTime();
-        if (lastFrameNanos == 0L) {
+        long previous = lastFrameNanos;
+        if (previous == 0L) {
             lastFrameNanos = now;
             return 0f;
         }
-        float delta = (now - lastFrameNanos) / 1_000_000_000f;
+        float delta = (now - previous) / 1_000_000_000f;
         lastFrameNanos = now;
         return Math.min(delta, MAX_STEP);
     }
@@ -249,7 +269,7 @@ public final class DimensionImpactFX {
         TextureTarget target = scratch;
         if (target == null) {
             target = new TextureTarget(width, height, false, false);
-            target.setFilterMode(9729); // GL_LINEAR
+            target.setFilterMode(9729);
             scratch = target;
         } else if (target.width != width || target.height != height) {
             target.resize(width, height, false);
@@ -258,19 +278,19 @@ public final class DimensionImpactFX {
         return target;
     }
 
-    /** One fullscreen quad through the impact program. {@code strength <= 0} makes it a plain copy. */
+    /**
+     * One fullscreen quad through the impact program. {@code passStrength <= 0} makes it a plain
+     * copy. {@code burstGain} is the user's overall strength dial, applied here to the shockwave
+     * and speed-line gains so turning the effect down turns the whole thing down - see the class
+     * notes on why that was not previously true.
+     */
     private static void pass(int sourceTexture, int width, int height,
                              float passStrength, float aberration, float flashAmount, float edgeGain,
-                             float progress) {
+                             float progress, float burstGain) {
         ShaderInstance active = shader;
         if (active == null) {
             return;
         }
-        // The world and post passes leave state behind that would silently drop an opaque
-        // fullscreen quad. Culling is the one that bites: a RenderType turned it on, and this
-        // quad's winding is clockwise in NDC once the vertex shader flips Y, so without this
-        // line the whole pass is back-face culled and draws nothing at all. The GUI stage
-        // re-establishes whatever it needs afterwards, so nothing has to be restored by hand.
         RenderSystem.disableBlend();
         RenderSystem.disableDepthTest();
         RenderSystem.disableCull();
@@ -280,7 +300,14 @@ public final class DimensionImpactFX {
         active.setSampler("Sampler0", sourceTexture);
         active.safeGetUniform("ImpactSize").set((float) width, (float) height);
         active.safeGetUniform("ImpactParams").set(passStrength, aberration, flashAmount, edgeGain);
-        active.safeGetUniform("ImpactProgress").set(progress, 0f, 0f, 0f);
+        // zw is the shockwave/speed-line origin in screen uv. This was (0, 0) - the top-left
+        // corner - and is now the screen centre, where the player actually is.
+        active.safeGetUniform("ImpactProgress").set(progress, 0f, 0.5f, 0.5f);
+        active.safeGetUniform("ImpactBurst").set(
+                BURST_RING_GAIN * burstGain,
+                BURST_LINES_GAIN * burstGain,
+                BURST_SCREENTONE_CRAWL,
+                BURST_INK_DARKNESS);
         active.apply();
 
         BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
