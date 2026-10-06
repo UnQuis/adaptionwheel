@@ -313,5 +313,6 @@
   "adaptionwheel.msg.trade_stale": "Этой строки больше нет. Посмотри список заново.",
   "adaptionwheel.msg.trade_no_experience": "Алтарь просит %s уровней. У вас %s.",
   "adaptionwheel.gui.all_learned": "Твоё колесо уже освоило всё, что открывает этот предмет.",
-  "container.adaptionwheel.resonance_altar": "Резонансный алтарь"
+  "container.adaptionwheel.resonance_altar": "Резонансный алтарь",
+  "adaptionwheel.gui.search_hint": "Поиск адаптаций"
 }

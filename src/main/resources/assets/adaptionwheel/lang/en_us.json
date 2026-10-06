@@ -313,5 +313,6 @@
   "adaptionwheel.msg.trade_stale": "That one is gone. Look at the list again.",
   "adaptionwheel.msg.trade_no_experience": "The altar asks %s levels. You have %s.",
   "adaptionwheel.gui.all_learned": "Your wheel has learned everything this item offers.",
-  "container.adaptionwheel.resonance_altar": "Resonance Altar"
+  "container.adaptionwheel.resonance_altar": "Resonance Altar",
+  "adaptionwheel.gui.search_hint": "Search adaptations"
 }
