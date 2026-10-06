@@ -6,6 +6,37 @@ import java.util.List;
 
 public final class AdaptionConfig {
 
+    /**
+     * The Lv8 invulnerability window, in ticks.
+     *
+     * <p>Ten is half a second, chosen because it must be <i>shorter than a melee attack
+     * interval</i> rather than merely shorter than the original's six seconds: a window at or past
+     * ~20 ticks re-arms before it can lapse, which turns the Lv8 capstone into permanent immunity to
+     * that damage category instead of a reduction.
+     */
+    public static final int DEFAULT_LV8_IFRAMES_TICKS = 10;
+
+    /**
+     * What {@link #DEFAULT_LV8_IFRAMES_TICKS} was briefly shipped as.
+     *
+     * <p>NeoForge's config tracker only ever writes the default into a file that lacks a value, and
+     * it keeps any value that is already there. Changing a default therefore does nothing for the
+     * installs that generated a file while the old default was current, so this one had to be
+     * migrated rather than merely corrected -- see
+     * {@link ru.adaptionwheel.config.ConfigMigration}.
+     */
+    public static final int LEGACY_LV8_IFRAMES_TICKS = 40;
+
+    /**
+     * Corrects a stored Lv8 window left over from the old default.
+     *
+     * <p>Only that exact value is rewritten. Any other number was chosen by the player and is left
+     * alone, and {@code 0} still means "no i-frames at Lv8".
+     */
+    public static int migrateLegacyLv8IFrames(int stored) {
+        return stored == LEGACY_LV8_IFRAMES_TICKS ? DEFAULT_LV8_IFRAMES_TICKS : stored;
+    }
+
     private static final double[] DEFENSE_REDUCTION = {5, 10, 15, 20, 25, 30, 45, 60};
     private static final double[] DEFENSE_HEAL_RATIO = {0, 0, 0, 0, 10, 15, 30, 50};
     private static final double[] INJURE_HEAL_SPEED = {1, 2, 3, 4, 6, 8, 10, 15};
@@ -130,6 +161,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_HEAL_RATIO_LEVELS;
     public static final ModConfigSpec.ConfigValue<Integer> DEFENSE_LV8_IFRAMES_TICKS;
     public static final ModConfigSpec.ConfigValue<Integer> EXISTENCE_REFLECT_IFRAMES_TICKS;
+    public static final ModConfigSpec.ConfigValue<Boolean> LV8_IFRAMES_MIGRATION_DONE;
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> REGEN_SPEED_LEVELS;
     public static final ModConfigSpec.ConfigValue<Double> REGEN_HP_THRESHOLD;
@@ -161,6 +193,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_ABOVE_HEAD;
     public static final ModConfigSpec.ConfigValue<Double> WHEEL_SIZE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_WHEEL_PARTICLES;
+    public static final ModConfigSpec.ConfigValue<Boolean> EXISTENCE_CINEMATIC_ENABLED;
 
     public static final ModConfigSpec SERVER_SPEC;
     public static final ModConfigSpec CLIENT_SPEC;
@@ -538,7 +571,7 @@ public final class AdaptionConfig {
                         "default here is 10 ticks -- half a second, short enough to lapse between two",
                         "melee swings, so it reduces damage instead of erasing it. Raise it to 40 for",
                         "the original's exact two seconds. 0 disables it entirely.")
-                .defineInRange("lv8IFramesTicks", 10, 0, 1200);
+                .defineInRange("lv8IFramesTicks", DEFAULT_LV8_IFRAMES_TICKS, 0, 1200);
         EXISTENCE_REFLECT_IFRAMES_TICKS = s
                 .comment("I-frames granted by reflecting a boss's hit back at it.",
                         "The original grants max(immuneTime, 2) -- two Terraria ticks, about 33ms, which",
@@ -546,6 +579,10 @@ public final class AdaptionConfig {
                         "shield the player. This was 10 Minecraft ticks, half a second, standing in for",
                         "a cooldown it never had.")
                 .defineInRange("existenceReflectIFramesTicks", 1, 0, 200);
+        LV8_IFRAMES_MIGRATION_DONE = s
+                .comment("Internal. Records that the legacy lv8IFramesTicks value has been corrected",
+                        "once, so a player who deliberately asks for 40 keeps it. Do not edit.")
+                .define("lv8IFramesMigrated", false);
 
 s.comment("--- Regeneration ---").push("regeneration");
 
@@ -636,6 +673,11 @@ s.comment("--- Regeneration ---").push("regeneration");
         HUD_SHOW_HISTORY = c.define("showAdaptationLog", true);
         WHEEL_ABOVE_HEAD = c.define("renderWheelAboveHead", true);
         WHEEL_SIZE = c.defineInRange("wheelModelScale", 0.45, 0.1, 2.0);
+        EXISTENCE_CINEMATIC_ENABLED = c.comment(
+                        "Play the reward cinematic when an existence adaptation is granted.",
+                        "Purely cosmetic: the adaptation is granted server-side and immediately either",
+                        "way, so turning this off (or a client that never renders it) costs no reward.")
+                .define("existenceCinematic", true);
 
         c.pop();
 
