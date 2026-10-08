@@ -1,18 +1,19 @@
-package ru.adaptionwheel.client;
+package ru.adaptionwheel.client.fx.dimension;
 
-import net.minecraft.client.renderer.PostPass;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.util.Mth;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.ViewportEvent;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.cinematic.ImpactFrameTiming;
-import ru.adaptionwheel.client.fx.DimensionImpactUniforms;
 import ru.adaptionwheel.config.AdaptionConfig;
 
-/** Client-side timing and uniforms for the Dimension Destroy manga impact frame. */
+/** Client-side timing, camera shake, and uniforms for the Dimension Destroy impact frame. */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class DimensionImpactFX {
 
@@ -42,7 +43,7 @@ public final class DimensionImpactFX {
         lastFrameNanos = 0L;
     }
 
-    /** Advances from the render mixin, so this wall-clock effect does not depend on game TPS. */
+    /** Advances from the camera render event, independently of game TPS. */
     public static void advanceFrame() {
         if (!ImpactFrameTiming.playing(age)) {
             lastFrameNanos = 0L;
@@ -68,21 +69,21 @@ public final class DimensionImpactFX {
         return AdaptionConfig.DIMENSION_IMPACT_ENABLED.get() && ImpactFrameTiming.playing(age);
     }
 
-    /** Writes the per-frame values into the post pass's custom std140 uniform buffer. */
-    public static void writeUniforms(PostPass pass, int screenWidth, int screenHeight) {
+    /** Uploads one frame's uniforms; the copy pass sets its panel strength to zero. */
+    public static GpuBufferSlice writeUniforms(int screenWidth, int screenHeight, boolean copyPass) {
         float currentAge = age;
         float configStrength = AdaptionConfig.DIMENSION_IMPACT_STRENGTH.get().floatValue();
-        float panelStrength = ImpactFrameTiming.strengthAt(currentAge) * configStrength;
+        float panelStrength = copyPass ? 0f : ImpactFrameTiming.strengthAt(currentAge) * configStrength;
         float panelProgress = ImpactFrameTiming.progressAt(currentAge);
         float mode = ImpactFrameTiming.modeAt(currentAge,
                 AdaptionConfig.DIMENSION_IMPACT_MODE_A.get(),
                 AdaptionConfig.DIMENSION_IMPACT_MODE_B.get());
-        float flash = flashAt(currentAge);
 
-        DimensionImpactUniforms.apply(pass, screenWidth, screenHeight,
+        // The visible flash is drawn by GuiGraphicsExtractor in RenderGuiEvent.Post. The shader
+        // block's third ImpactParams component stays zero to preserve its std140 layout.
+        return DimensionImpactUniforms.upload(screenWidth, screenHeight,
                 panelStrength,
                 AdaptionConfig.DIMENSION_IMPACT_ABERRATION.get().floatValue(),
-                flash,
                 1.0f,
                 panelProgress, mode, centreX, centreY,
                 RING_GAIN * configStrength,
@@ -93,29 +94,9 @@ public final class DimensionImpactFX {
                 PAPER);
     }
 
-    private static float flashAt(float currentAge) {
-        if (!AdaptionConfig.DIMENSION_IMPACT_FLASH_ENABLED.get()) {
-            return 0f;
-        }
-        if (currentAge < DETONATION_SECONDS) {
-            float detonation = 1f - currentAge / DETONATION_SECONDS;
-            // Values above one mark the one-shot white detonation for the shader; regular strobe
-            // values stay within [-1, 1] and alternate paper/ink.
-            return 1f + detonation * detonation;
-        }
-
-        int index = ImpactFrameTiming.flashIndex(currentAge,
-                AdaptionConfig.DIMENSION_IMPACT_FLASH_FRAMES.get(),
-                AdaptionConfig.DIMENSION_IMPACT_FLASH_MS.get());
-        if (index < 0) {
-            return 0f;
-        }
-        float strength = Mth.clamp(AdaptionConfig.DIMENSION_IMPACT_FLASH_STRENGTH.get().floatValue(), 0f, 1f);
-        return (index & 1) == 0 ? strength : -strength;
-    }
-
     @SubscribeEvent
     public static void onCameraAngles(ViewportEvent.ComputeCameraAngles event) {
+        advanceFrame();
         float currentAge = age;
         if (!active()) {
             return;
@@ -138,6 +119,56 @@ public final class DimensionImpactFX {
             float snap = 1f - currentAge / DETONATION_SECONDS;
             event.setPitch(event.getPitch() + snap * power * 6f);
         }
+    }
+
+    /** Draws the flash in the GUI overlay path, separate from the post-process pipeline. */
+    @SubscribeEvent
+    public static void onGuiPost(RenderGuiEvent.Post event) {
+        if (!active()) {
+            return;
+        }
+
+        int flash = flashOverlayColor(age);
+        if ((flash >>> 24) == 0) {
+            return;
+        }
+
+        GuiGraphicsExtractor graphics = event.getGuiGraphics();
+        graphics.fill(0, 0, graphics.guiWidth(), graphics.guiHeight(), flash);
+    }
+
+    private static int flashOverlayColor(float currentAge) {
+        if (!AdaptionConfig.DIMENSION_IMPACT_FLASH_ENABLED.get()) {
+            return 0;
+        }
+
+        float strength;
+        int rgb;
+        if (currentAge < DETONATION_SECONDS) {
+            float detonation = Mth.clamp(1f - currentAge / DETONATION_SECONDS, 0f, 1f);
+            strength = detonation * detonation;
+            rgb = 0x00FFFFFF;
+        } else {
+            int index = ImpactFrameTiming.flashIndex(currentAge,
+                    AdaptionConfig.DIMENSION_IMPACT_FLASH_FRAMES.get(),
+                    AdaptionConfig.DIMENSION_IMPACT_FLASH_MS.get());
+            if (index < 0) {
+                return 0;
+            }
+
+            strength = Mth.clamp(AdaptionConfig.DIMENSION_IMPACT_FLASH_STRENGTH.get().floatValue(), 0f, 1f);
+            int mode = ImpactFrameTiming.modeAt(currentAge,
+                    AdaptionConfig.DIMENSION_IMPACT_MODE_A.get(),
+                    AdaptionConfig.DIMENSION_IMPACT_MODE_B.get());
+            boolean inverseMode = (mode & 1) != 0;
+            boolean paperFlash = ((index & 1) == 0) ^ inverseMode;
+            // The shipped pair is pale paper and dark ink. Keep the GUI flash in the same phase
+            // as the frame's paper/ink inversion, even when the render pipeline is unavailable.
+            rgb = paperFlash ? 0x00F7F5FA : 0x000B0513;
+        }
+
+        int alpha = Math.round(Mth.clamp(strength, 0f, 1f) * 255f);
+        return (alpha << 24) | rgb;
     }
 
     @SubscribeEvent

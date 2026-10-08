@@ -1,4 +1,4 @@
-package ru.adaptionwheel.client.render;
+package ru.adaptionwheel.client.render.slash;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;

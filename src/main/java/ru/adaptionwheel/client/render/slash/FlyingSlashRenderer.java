@@ -1,4 +1,4 @@
-package ru.adaptionwheel.client;
+package ru.adaptionwheel.client.render.slash;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
@@ -6,7 +6,6 @@ import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import ru.adaptionwheel.client.render.ModRenderTypes;
-import ru.adaptionwheel.client.render.SlashBladeMesh;
 
 /**
  * Shared 26.3 adapter for the slash model used by both cursed slashes and spatial rifts.

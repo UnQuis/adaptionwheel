@@ -5,6 +5,8 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import ru.adaptionwheel.AdaptionWheel;
+import ru.adaptionwheel.client.render.slash.CursedSlashRenderer;
+import ru.adaptionwheel.client.render.slash.SpatialRiftRenderer;
 import ru.adaptionwheel.entity.ModEntities;
 
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)

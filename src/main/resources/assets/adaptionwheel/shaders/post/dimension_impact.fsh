@@ -106,16 +106,5 @@ void main() {
 
     vec3 result = mix(col, frame, clamp(ImpactParams.x, 0.0, 1.0));
 
-    // A value outside [-1, 1] is the opening white detonation. Otherwise the sign alternates the
-    // flash between the current paper and ink colours, matching the frame's inverse cut.
-    float encodedFlash = ImpactParams.z;
-    bool detonation = abs(encodedFlash) > 1.0;
-    float flashStrength = detonation
-            ? clamp(abs(encodedFlash) - 1.0, 0.0, 1.0)
-            : clamp(abs(encodedFlash), 0.0, 1.0);
-    vec3 flashColor = detonation ? vec3(1.0)
-            : (encodedFlash < 0.0 ? inkColor : paperColor);
-    result = mix(result, flashColor, flashStrength);
-
     fragColor = vec4(result, 1.0);
 }

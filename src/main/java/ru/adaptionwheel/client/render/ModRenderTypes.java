@@ -2,6 +2,7 @@ package ru.adaptionwheel.client.render;
 
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import ru.adaptionwheel.client.render.pipeline.ModRenderPipelines;
 
 /** Render types for the mod's hand-built geometry. */
 public final class ModRenderTypes {
