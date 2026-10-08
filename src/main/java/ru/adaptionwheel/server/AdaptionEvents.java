@@ -1215,6 +1215,41 @@ public class AdaptionEvents {
         player.sendSystemMessage(Component.translatable("adaptionwheel.msg.existence_details")
                 .withStyle(ChatFormatting.LIGHT_PURPLE));
         ru.adaptionwheel.api.events.AdaptationCompleteEvent.post(player, existenceConcept, -1);
+
+        // Deliberately LAST, after every mutation and every message. It used to run first, before
+        // anything at all, so anything that went wrong in a purely cosmetic send took the entire
+        // reward with it -- no existenceAdapted, no maxed levels, no history, no completion event,
+        // and no error the player could act on. The reward is the point; the cinematic is a hat on
+        // it. Also silent when the boss has already despawned, which is exactly the case where the
+        // original's "is the framing still right" check would have refused to play.
+        startExistenceCinematic(player, bossPath);
+    }
+
+    /** Plays the reward cinematic, if the boss it is addressed to is still here to be framed. */
+    private static void startExistenceCinematic(ServerPlayer player, String bossPath) {
+        if (!AdaptionConfig.EXISTENCE_CINEMATIC_ENABLED.get()) {
+            return;
+        }
+        LivingEntity boss = findNearbyBoss(player, bossPath);
+        if (boss == null) {
+            return;
+        }
+        ru.adaptionwheel.network.ExistenceCinematicPayload.send(player, boss.getId(), boss.getName().getString());
+    }
+
+    /** The boss this bar was filling for, if it is still within the analysis radius. */
+    private static LivingEntity findNearbyBoss(ServerPlayer player, String bossPath) {
+        float range = AdaptionConfig.EXISTENCE_PROXIMITY_BLOCKS.get().floatValue();
+        for (Entity entity : player.level().getEntities(player, player.getBoundingBox().inflate(range))) {
+            if (!entityPath(entity.getType()).equals(bossPath)) {
+                continue;
+            }
+            LivingEntity boss = BossHelper.resolveBoss(entity);
+            if (boss != null) {
+                return boss;
+            }
+        }
+        return null;
     }
 
     private static boolean isInDarkness(Player player) {

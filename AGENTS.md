@@ -558,10 +558,18 @@ All three are on **both** branches and configured, not hard-coded.
 - **`AdaptionEvents` names differ from 1.21.1**: `sync` (not `syncAdaption`) and `completeTask`
   (not `grantConceptLevel`). Both are public for the fist.
 - **The gametest framework was rewritten and the 38 tests from `main` are NOT ported.** No
-  `@GameTest`/`@GameTestHolder` exists; tests are `GameTestInstance`s registered via the mod-bus
-  `RegisterGameTestsEvent`. See DEVELOPMENT_PLAN.md Phase 15. This branch therefore has no
-  automated coverage — do not treat a green build as a green suite.
-- **No gametest/lint task exists on this branch**, unlike `main`. `./gradlew build` only compiles.
+  `@GameTest`/`@GameTestHolder` exists. Tests are now `GameTestInstance`s registered on the mod bus
+  via `net.neoforged.neoforge.event.RegisterGameTestsEvent` — note the package: it is
+  `neoforge.event`, **not** `neoforged.neoforge.gametest`, where only `GameTestHooks` and
+  `BlockPosValueConverter` remain. Grepping the old package looks like the feature was deleted.
+  See DEVELOPMENT_PLAN.md Phase 15.
+- **No gametest/lint task exists on this branch**, unlike `main`. `./gradlew build` only compiles, so
+  a green build is still not a green suite.
+- **The ported schedule and payload assertions therefore run under plain JUnit**
+  (`src/test/java`, `./gradlew test`), not as gametests. That is a deliberate departure from the
+  gametest convention above, for one reason: with no task to run gametests on this branch, a
+  gametest port could not be verified to execute at all, whereas the JUnit suite runs and reports
+  8 passing tests. Revisit if a gametest run task is ever added.
 
 ### The lightmap is not a `LightTexture` any more
 
@@ -601,6 +609,148 @@ Phase 15/16 on `main` for the full reasoning.
 - **`Level.isClientSide` is a private final field on 26.3 with no accessor**, and
   `Entity.level()` returns `Level` — so the 1.21.1 guard `player.level().isClientSide` does not
   compile here. `instanceof ServerPlayer` already guarantees the server side; use that alone.
+
+## Ported from `main`: the Existence cinematic
+
+`client/ExistenceCinematicFX`, `cinematic/ExistenceCinematicTiming`,
+`network/ExistenceCinematicPayload`, `textures/entity/gakon.png`, plus the send at the **end** of
+`AdaptionEvents.grantExistenceAdaptation`. The schedule class is pure Java and copied verbatim;
+everything else moved. What the move actually cost, beyond `Identifier`:
+
+- **`MultiBufferSource` is gone**; `RenderLivingEvent.Post` hands over a
+  `net.minecraft.client.renderer.SubmitNodeCollector` and there is no way to push raw vertices. The
+  Gakon sprites are now a **baked `ModelPart`** submitted per sprite. Follow `WheelRenderer`: it
+  already does exactly this on this branch.
+- **`RenderLivingEvent.Post` has no `getEntity()` at all**, and render states are pure data with no
+  back-reference. "Is this the local player" therefore *cannot* be answered at render time. It is
+  answered where the entity still exists — an `AvatarRenderStateModifier` during state extraction —
+  and carried across on a `ContextKey<Boolean>`. Do not try to recover the entity from the state.
+- **The baked quad's depth is `0.001`, not `0`.** A cube's UVs are laid out per face from the tex
+  offset and the depth, so at `texOffs(0,0)` with `64x66` the viewer-facing face covers the whole
+  texture and the opposite face lands on `u 64..128`, which wraps onto the same pixels — both sides
+  show the sprite. Depth exactly `0` collapses the four side faces and the renderer discards
+  zero-area faces.
+- `MeshDefinition.bakeRoot()` is `LayerDefinition.create(mesh, 64, 66).bakeRoot()`.
+- `PoseStack` rotations are instance methods: `poseStack.rotate(Axis.ZP, radians)`, not
+  `mulPose(Axis.ZP.rotation(r))`.
+- `Minecraft.screen`/`setScreen(null)` is `mc.gui.screen()`/`mc.gui.setScreen(null)`.
+  `Minecraft.setScreenAndShow` exists but forces a `renderFrame`, which is far too much from a
+  payload handler.
+- **`RenderGuiEvent.getPartialTick()` returns a `DeltaTracker`, not a float** — see
+  `AdversityOverlay`. The world-space half reads `state.partialTick` off the render state instead.
+
+## The custom-shader substrate does not exist here — read this before porting any shader
+
+This is the single biggest difference from `main`, and it is not a rename. Verified against the
+26.3 decompile and the NeoForge sources:
+
+| `main` (1.21.1) | 26.3 |
+|---|---|
+| `net.minecraft.client.renderer.ShaderInstance` | **gone** |
+| `RegisterShadersEvent` / `RenderSystem` `registerShader` | **gone** |
+| `ShaderInstance.apply/setSampler/safeGetUniform` | **gone** |
+| old `blaze3d` shader pipeline | `com.mojang.renderpearl` + `net.minecraft.client.renderer.ShaderManager` |
+
+`grep -r registerShader` over the NeoForge 26.3 sources returns **nothing**, and `ShaderInstance`
+is absent from the Minecraft jar. A mod that registers a core shader on `main` cannot be ported by
+adjusting names — the whole registration mechanism is gone.
+
+What replaced it, and what it will and will not do:
+
+- Post effects are **JSON chains** at `assets/<ns>/post_effect/<name>.json`
+  (`targets` + `passes`), loaded by `ShaderManager.getPostChain`, and run inside the frame graph via
+  `PostChain.addToFrame`. Vanilla ships only `assets/minecraft/post_effect/{invert,creeper,blur,
+  spider,entity_outline}.json`. The vertex shader is normally the stock
+  `minecraft:core/screenquad`; the fragment shader is `#version 330` with
+  `#extension GL_ARB_separate_shader_objects : require`, a `InSampler` sampler (not `Sampler0`), a
+  `layout(std140) uniform SamplerInfo { vec2 OutSize; vec2 InSize; }` block supplied for free, and
+  its own uniforms in a `layout(std140)` block named to match the JSON's `uniforms` key.
+- **Uniform values are frozen.** `PostPass`'s constructor builds each uniform group's GPU buffer
+  once from the JSON; `customUniforms` is private with no setter, and the only per-frame buffer it
+  rewrites is `SamplerInfo` (the two sizes). So a JSON chain can do a **static** full-screen effect
+  and nothing more.
+- **There is no way to animate them, including by reflection.** `GpuBuffer` exposes only
+  `size/usage/isClosed/slice/map`; there is no write or upload method, and `map` needs
+  `USAGE_MAP_WRITE`, which `PostPass` does not request (it creates the buffer with usage `128`,
+  `USAGE_UNIFORM` only).
+- `PostChain.process(RenderTarget, GraphicsResourceAllocator)` **is public but `@Deprecated`**;
+  the live path is `addToFrame`, which needs the `FrameGraphBuilder` from world rendering.
+- `com.mojang.renderpearl.backend.opengl.GlProgram` is public (`link`, `getProgramId`,
+  `uniformCount`, `getUniform(int)`, `pushConstant()`), but its uniforms are addressed **by index,
+  not by name**, and bypassing the frame graph that way would be a rewrite.
+
+### The working route: `RenderGuiEvent.Pre` straight into `mainRenderTarget`
+
+**Do not use `FrameGraphSetupEvent` for a full-screen pass. It cannot work, and the reason is not
+obvious enough to guess.** That event hands you the `FrameGraphBuilder` (method spelled
+`getFrameGrapBuilder()`, missing an "h") plus the `LevelTargetBundle`, and it fires *before* vanilla
+adds its own passes — `LevelRenderer.render` adds "clear" at 249, "sky" at 377, "main" at 391, and
+executes at 283. `FrameGraphBuilder.execute` then runs passes **in creation order** (only
+`resolvePassOrder` pulls explicit `requires()`/reader deps earlier). So a pass added from that event
+executes *first*, samples a `main` target that nothing has written yet, and reads as pure black.
+You cannot express "run after vanilla" through handles either: pass handles carry only data
+dependencies, and aliasing a handle resets them.
+
+`RenderGuiEvent.Pre` has neither problem:
+
+- `GameRenderer.render` calls `renderLevel()` at **497** and `guiRenderer.render()` at **511**, and
+  `RenderGuiEvent.Pre` is posted from the NeoForge-patched `GuiLayerManager.render`. So by then the
+  whole level frame graph has run and `main` holds the composited frame.
+- `Minecraft` blits `gameRenderer.mainRenderTarget().getColorTextureView()` to the window surface
+  after `render()`, so anything written to `main` beforehand is visible.
+- Writing into `main` outside the frame graph is **not a hack**: vanilla does exactly this a few
+  lines earlier, in `GameRenderer.render3dHud` (703-712, "Screen effects"; 719, debug crosshair):
+
+  ```java
+  try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder()
+          .createRenderPass(() -> "Screen effects", mainRenderTarget.getColorTextureView(),
+                            Optional.empty(), depthTextureView, OptionalDouble.empty())) {
+      RenderSystem.bindDefaultUniforms(pass);
+      pass.draw(3, 1, 0, 0);      // full-screen triangle, no vertex buffer
+  }
+  ```
+
+  A full-screen triangle is `draw(3, 1, 0, 0)`; see the stock `core/screenquad.vsh`, which derives
+  `texCoord` from `gl_VertexIndex`. `RenderTarget.blitAndBlendToTexture` (112-123) is the reference
+  idiom for binding a sampler.
+
+Immediate-mode GL is gone: `RenderSystem` no longer has `drawElements`, `setShader`,
+`disableBlend`, `enableDepthTest` or anything else from 1.21.1's `ShaderInstance.apply()` toolkit.
+
+**Uniforms: do not use push constants, and do not use a JSON chain.** Push constants are a trap
+because the two backends disagree — `VulkanRenderPass` calls `vkCmdPushConstants` for real, while
+`GlCommandEncoder` *emulates* them by binding a buffer as a UBO, and `GlProgram` only finds that UBO
+if the block is named **exactly `_push_constants`**. No single GLSL declaration satisfies both. The
+portable route is what vanilla itself does for its per-frame `SamplerInfo`: allocate your own
+`MappableRingBuffer` with **`GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE`** (that is 130, and
+it is why vanilla's buffers use 130 too), `map(false, true)` it, write your floats, and hand it to
+`setUniform`. `MappableRingBuffer` keeps three buffers and fences on `rotate()`, so you never
+overwrite bytes the GPU is still reading — and you can call `rotate()` between two passes in one
+frame so they can carry **different** uniform values, which is how the impact frame gets its copy
+pass and its panel pass out of one program.
+
+Write std140 blocks by **absolute index** into the mapped `ByteBuffer`, not sequentially: the mapped
+buffer's position is not guaranteed to be zero, and each field's byte offset has to match the shader
+declaration exactly.
+
+#### Reading a target you are drawing into — use a scratch `TextureTarget`
+
+The two-tone threshold samples neighbouring pixels, and sampling the framebuffer you are drawing into
+is undefined. So copy first: draw `main` into a `TextureTarget` with `strength = 0`, which the shader
+early-outs to a single texture fetch, then draw that target back over `main` with the real strength.
+`TextureTarget(label, width, height, colorFormat, depthFormat)` resizes in its constructor; pass
+`null` for the depth format, since a flat overlay needs no depth attachment. Resize it when `main`
+resizes and destroy the old buffers.
+
+Because this route never aliases a handle, the whole class of crash documented for
+`FramePass.readsAndWrites` (use of the stale handle, or `bundle.replace(MAIN_TARGET_ID, ...)`) simply
+does not apply.
+
+Consequence for the two effects `main` ships: the **Dimension Destroy impact frame** is ported this
+way. The **flying slash shader** is not — a world-space translucent quad needs a vertex format and a
+real projection matrix, which is a different problem from a full-screen pass. Everything else (the
+payload trigger, the camera shake on `ViewportEvent.ComputeCameraAngles` with `setRoll`, the anime
+flash via `graphics.fill`, the config) ports unchanged.
 
 ## Branch parity: run `python3 tools/branch_parity.py`
 

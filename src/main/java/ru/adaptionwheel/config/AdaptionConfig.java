@@ -194,6 +194,17 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Double> WHEEL_SIZE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_WHEEL_PARTICLES;
     public static final ModConfigSpec.ConfigValue<Boolean> EXISTENCE_CINEMATIC_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_STRENGTH;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_ABERRATION;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_SHAKE_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_SHAKE_STRENGTH;
+    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_MODE_A;
+    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_MODE_B;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_FLASH_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_FLASH_FRAMES;
+    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_FLASH_MS;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FLASH_STRENGTH;
 
     public static final ModConfigSpec SERVER_SPEC;
     public static final ModConfigSpec CLIENT_SPEC;
@@ -678,6 +689,37 @@ s.comment("--- Regeneration ---").push("regeneration");
                         "Purely cosmetic: the adaptation is granted server-side and immediately either",
                         "way, so turning this off (or a client that never renders it) costs no reward.")
                 .define("existenceCinematic", true);
+
+        c.comment("--- Dimension Destroy impact frame ---").push("dimensionImpactFrame");
+        DIMENSION_IMPACT_ENABLED = c.comment(
+                        "Draw the manga impact panel when the wearer's spatial rifts go out.",
+                        "On by default; it is the whole point of the swing landing.")
+                .define("dimensionImpactEnabled", true);
+        DIMENSION_IMPACT_STRENGTH = c.defineInRange("dimensionImpactStrength", 1.0, 0.0, 2.0);
+        DIMENSION_IMPACT_ABERRATION = c.defineInRange("dimensionImpactAberration", 1.0, 0.0, 4.0);
+        DIMENSION_IMPACT_SHAKE_ENABLED = c.define("dimensionImpactShake", true);
+        DIMENSION_IMPACT_SHAKE_STRENGTH = c.defineInRange("dimensionImpactShakeStrength", 1.6, 0.0, 8.0);
+        DIMENSION_IMPACT_MODE_A = c.comment(
+                        "The two impact-frame looks the panel cuts between, 0-35. 0/1 is the plain",
+                        "manga frame (black shapes on white paper) and its exact inverse, which is the",
+                        "shipped default because an image and its negative is the oldest trick in the",
+                        "medium. See the mode list in shaders/post/dimension_impact.fsh: 7/8 white+red,",
+                        "9/10 white+gold, 13/14 navy+yellow, 17-20 ember line-art/slash/halftone/glitch,",
+                        "33-35 prism line-art, spectral bands, isometric wireframe.")
+                .defineInRange("dimensionImpactModeA", 0, 0, 35);
+        DIMENSION_IMPACT_MODE_B = c.defineInRange("dimensionImpactModeB", 1, 0, 35);
+        DIMENSION_IMPACT_FLASH_ENABLED = c.comment(
+                        "The anime flash over the panel. Off is the safe choice if flicker bothers you:",
+                        "five frames at 20 fps is animation, but the count is deliberately modest.")
+                .define("dimensionImpactFlash", true);
+        DIMENSION_IMPACT_FLASH_FRAMES = c.comment(
+                        "Flash steps and its length are coupled -- steps per second is frames/ms*1000,",
+                        "so changing one alone does not lengthen the flash.")
+                .defineInRange("dimensionImpactFlashFrames", 5, 1, 30);
+        DIMENSION_IMPACT_FLASH_MS = c.defineInRange("dimensionImpactFlashMs", 250, 20, 2000);
+        DIMENSION_IMPACT_FLASH_STRENGTH = c.defineInRange("dimensionImpactFlashStrength", 0.75, 0.0, 1.0);
+
+        c.pop();
 
         c.pop();
 

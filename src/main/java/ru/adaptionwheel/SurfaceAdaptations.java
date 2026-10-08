@@ -87,12 +87,34 @@ public final class SurfaceAdaptations {
 
     public static int fistTier(Player player) {
         if (player.level().isClientSide()) {
-            return ru.adaptionwheel.client.ClientAdaption.fistTier();
+            // Mirror the server branch exactly: this is an EFFECT (it feeds FistMastery.breakSpeed),
+            // so the switch is applied here. ClientAdaption.fistTier() itself stays raw because the
+            // HUD row must keep showing a switched-off stage. Without these gates the client kept
+            // mining at full fist speed while the server applied none, so the client predicted the
+            // break and the ack snapped every block back into place (client-faster-than-server).
+            if (!ru.adaptionwheel.client.ClientAdaption.active(ru.adaptionwheel.category.Concepts.MUTATION_FIST)) {
+                return -1;
+            }
+            int tier = ru.adaptionwheel.client.ClientAdaption.fistTier();
+            // The gate on the tier concept MUST be isEnabled(), not active(): the stage is a
+            // LEVELED concept, leveled concepts live only in the levels map and never enter the
+            // adapted set (see AdaptionEvents.applyGrant), so active(Fist_*) is always false.
+            // active() is only correct for the one-time mutation checked above.
+            return tier >= 0
+                    && ru.adaptionwheel.client.ClientAdaption.isEnabled(
+                            ru.adaptionwheel.category.FistTiers.concept(tier)) ? tier : -1;
         }
         if (!(player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)) {
             return -1;
         }
-        return ru.adaptionwheel.server.FistMastery.currentTier(AdaptionEvents.dataOf(serverPlayer));
+        // Same split as FistLuck: currentTier is the permanent "which stage was reached" question,
+        // and this is an effect, so the switch is applied here. The gate is isEnabled() and NOT
+        // active(): the tier is leveled and active(Fist_*) is always false, so this check used to
+        // return -1 on the server no matter what the player held while the raw client ran at full
+        // fist speed — the client-faster-than-server shape that made every break snap back.
+        var data = ru.adaptionwheel.server.AdaptionEvents.dataOf(serverPlayer);
+        int tier = ru.adaptionwheel.server.FistMastery.currentTier(data);
+        return tier >= 0 && data.isEnabled(ru.adaptionwheel.category.FistTiers.concept(tier)) ? tier : -1;
     }
 
     public static boolean instabreakUnlocked(Player player) {

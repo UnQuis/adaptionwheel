@@ -48,8 +48,11 @@ runs {
     client {
         systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         // Optional quick-play hook for automated visual smoke tests:
-        // AW_QUICKPLAY="singleplayer/New World" ./gradlew runClient
-        if (System.getenv('AW_QUICKPLAY')) {
+        // AW_QUICKPLAY="singleplayer/New World"            ./gradlew runClient
+        // AW_QUICKPLAY="multiplayer/127.0.0.1:25565"       ./gradlew runClient
+        if (System.getenv('AW_QUICKPLAY')?.startsWith('multiplayer/')) {
+            programArguments '--quickPlayMultiplayer', System.getenv('AW_QUICKPLAY').replaceFirst('^multiplayer/', '')
+        } else if (System.getenv('AW_QUICKPLAY')) {
             programArguments '--quickPlaySingleplayer', System.getenv('AW_QUICKPLAY').replaceFirst('^singleplayer/', '')
         }
     }
@@ -85,6 +88,20 @@ dependencies {
     // Mixin annotations + MixinExtras (both provided at runtime by NeoForge 26.3)
     compileOnly "org.spongepowered:mixin:${mixin_version}"
     compileOnly "io.github.llamalad7:mixinextras-common:${mixinextras_version}"
+
+    // 26.3 removed the whole gametest harness this branch's sibling used on 1.21.1 -- there is no
+    // @GameTestHolder, no @PrefixGameTestTemplate, and no GameTestRegistry left to register with --
+    // so the schedule and codec assertions are plain JUnit instead. They still run in `./gradlew test`.
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junit_version}"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junit_version}"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:${junit_platform_version}"
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+    }
 }
 
 tasks.withType(ProcessResources).configureEach {

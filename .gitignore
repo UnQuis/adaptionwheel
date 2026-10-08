@@ -32,3 +32,5 @@ ldlib2/
 Thumbs.db
 # loose reference copy of the adaptation browser, not part of the build
 /AdaptationScreen.java
+
+*.spv

@@ -1,0 +1,39 @@
+{
+  "targets": {
+    "swap": {}
+  },
+  "passes": [
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "adaptionwheel:post/dimension_impact",
+      "inputs": [
+        {
+          "sampler_name": "InSampler",
+          "target": "minecraft:main"
+        }
+      ],
+      "output": "swap",
+      "uniforms": {
+        "DimensionImpactUniforms": [
+          { "name": "ImpactSize", "type": "vec2", "value": [ 1.0, 1.0 ] },
+          { "name": "ImpactParams", "type": "vec4", "value": [ 0.0, 0.0, 0.0, 1.0 ] },
+          { "name": "ImpactProgress", "type": "vec4", "value": [ 0.0, 0.0, 0.5, 0.5 ] },
+          { "name": "ImpactBurst", "type": "vec4", "value": [ 0.85, 0.7, 2.5, 1.0 ] },
+          { "name": "ImpactInk", "type": "vec4", "value": [ 0.045, 0.02, 0.075, 1.0 ] },
+          { "name": "ImpactPaper", "type": "vec4", "value": [ 0.97, 0.96, 0.98, 1.0 ] }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "minecraft:core/blit_screen",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "swap"
+        }
+      ],
+      "output": "minecraft:main"
+    }
+  ]
+}

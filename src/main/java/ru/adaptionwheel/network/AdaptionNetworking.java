@@ -6,6 +6,8 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.client.ClientAdaption;
+import ru.adaptionwheel.client.DimensionImpactFX;
+import ru.adaptionwheel.client.ExistenceCinematicFX;
 
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public class AdaptionNetworking {
@@ -23,6 +25,10 @@ public class AdaptionNetworking {
                 (payload, context) -> context.enqueueWork(() -> CombatFistProgressPayload.apply(payload)));
         registrar.playToClient(TradeSyncPayload.TYPE, TradeSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> TradeSyncPayload.apply(payload)));
+        registrar.playToClient(ExistenceCinematicPayload.TYPE, ExistenceCinematicPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ExistenceCinematicFX.start(payload)));
+        registrar.playToClient(RiftImpactPayload.TYPE, RiftImpactPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> DimensionImpactFX.trigger(0.5f, 0.5f)));
         registrar.playToServer(TradeActionPayload.TYPE, TradeActionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         TradeActionPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));

@@ -114,6 +114,10 @@ public final class SwordOfExterminationHandler {
         player.level().playSound(null, player.blockPosition(),
                 ModSounds.SWING.get(), SoundSource.PLAYERS, 1.2f, 0.6f);
 
+        // Only now that the rifts exist: the impact frame is the punctuation on a swing that landed,
+        // and it would be a lie to play it over a swing that did not.
+        ru.adaptionwheel.network.RiftImpactPayload.send(player);
+
         player.sendOverlayMessage(net.minecraft.network.chat.Component.literal("DESTROY THE DIMENSION")
                 .withStyle(net.minecraft.ChatFormatting.BLACK, net.minecraft.ChatFormatting.BOLD));
     }
