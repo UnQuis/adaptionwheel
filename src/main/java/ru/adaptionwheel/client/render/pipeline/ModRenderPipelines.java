@@ -18,7 +18,7 @@ import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
 import ru.adaptionwheel.AdaptionWheel;
 
 /** Client render pipelines owned by Adaption Wheel. */
-@EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class ModRenderPipelines {
 
     private static final BindGroupLayout IMPACT_FRAME_BINDINGS = BindGroupLayout.builder()
@@ -58,6 +58,7 @@ public final class ModRenderPipelines {
     private ModRenderPipelines() {
     }
 
+    // In 26.3, EventBusSubscriber routes IModBusEvent handlers to this mod's event bus automatically.
     @SubscribeEvent
     static void register(RegisterRenderPipelinesEvent event) {
         event.registerPipeline(SLASH);
