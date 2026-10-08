@@ -69,8 +69,23 @@ public final class DimensionImpactFX {
         return AdaptionConfig.DIMENSION_IMPACT_ENABLED.get() && ImpactFrameTiming.playing(age);
     }
 
+    /**
+     * Index of the optional animated texture mask for the current flash step, or {@code -1} when
+     * there is no mask frame to draw. Textures are supplied by a resource pack or the optional
+     * impact-frames namespace; the procedural panel remains the fallback.
+     */
+    public static int textureMaskFrame() {
+        if (!AdaptionConfig.DIMENSION_IMPACT_TEXTURE_MASKS.get() || !ImpactFrameTiming.playing(age)) {
+            return -1;
+        }
+        return ImpactFrameTiming.flashIndex(age,
+                AdaptionConfig.DIMENSION_IMPACT_FLASH_FRAMES.get(),
+                AdaptionConfig.DIMENSION_IMPACT_FLASH_MS.get());
+    }
+
     /** Uploads one frame's uniforms; the copy pass sets its panel strength to zero. */
-    public static GpuBufferSlice writeUniforms(int screenWidth, int screenHeight, boolean copyPass) {
+    public static GpuBufferSlice writeUniforms(int screenWidth, int screenHeight, boolean copyPass,
+                                               boolean maskAvailable, int maskWidth, int maskHeight) {
         float currentAge = age;
         float configStrength = AdaptionConfig.DIMENSION_IMPACT_STRENGTH.get().floatValue();
         float panelStrength = copyPass ? 0f : ImpactFrameTiming.strengthAt(currentAge) * configStrength;
@@ -91,7 +106,12 @@ public final class DimensionImpactFX {
                 SCREENTONE_CRAWL,
                 INK_DARKNESS,
                 INK,
-                PAPER);
+                PAPER,
+                !copyPass && maskAvailable,
+                AdaptionConfig.DIMENSION_IMPACT_TEXTURE_SMOOTH_INVERT.get(),
+                AdaptionConfig.DIMENSION_IMPACT_TEXTURE_STRETCH.get(),
+                maskWidth,
+                maskHeight);
     }
 
     @SubscribeEvent

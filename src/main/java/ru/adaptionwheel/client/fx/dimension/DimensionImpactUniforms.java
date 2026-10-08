@@ -11,7 +11,7 @@ import java.nio.ByteOrder;
 /** Uploads the impact shader's std140 block through a GPU-safe mapped ring buffer. */
 public final class DimensionImpactUniforms {
 
-    private static final int BUFFER_SIZE = 96;
+    private static final int BUFFER_SIZE = 128;
     private static final int BUFFER_USAGE = GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE;
 
     private static MappableRingBuffer ring;
@@ -23,7 +23,9 @@ public final class DimensionImpactUniforms {
                                         float strength, float aberration, float edgeGain,
                                         float panelProgress, float mode, float centreX, float centreY,
                                         float ringGain, float lineGain, float crawlRate, float inkDarkness,
-                                        float[] ink, float[] paper) {
+                                        float[] ink, float[] paper,
+                                        boolean textureMaskEnabled, boolean smoothInvert, boolean stretchMask,
+                                        int maskWidth, int maskHeight) {
         if (ring == null) {
             ring = new MappableRingBuffer(
                     () -> AdaptionWheel.MODID + " dimension impact uniforms",
@@ -38,7 +40,7 @@ public final class DimensionImpactUniforms {
             ByteBuffer bytes = mapped.data().order(ByteOrder.nativeOrder());
             int base = bytes.position();
 
-            // std140: vec2 occupies a 16-byte slot, then five vec4 values follow at 16-byte
+            // std140: vec2 occupies a 16-byte slot, then seven vec4 values follow at 16-byte
             // boundaries. Use absolute offsets; mapped views need not start at position zero.
             bytes.putFloat(base, screenWidth);
             bytes.putFloat(base + 4, screenHeight);
@@ -49,6 +51,12 @@ public final class DimensionImpactUniforms {
             putVec4(bytes, base + 48, ringGain, lineGain, crawlRate, inkDarkness);
             putVec4(bytes, base + 64, ink[0], ink[1], ink[2], ink[3]);
             putVec4(bytes, base + 80, paper[0], paper[1], paper[2], paper[3]);
+            putVec4(bytes, base + 96,
+                    textureMaskEnabled ? 1f : 0f,
+                    smoothInvert ? 1f : 0f,
+                    stretchMask ? 1f : 0f,
+                    0f);
+            putVec4(bytes, base + 112, Math.max(maskWidth, 1), Math.max(maskHeight, 1), 0f, 0f);
         }
 
         return buffer.slice();

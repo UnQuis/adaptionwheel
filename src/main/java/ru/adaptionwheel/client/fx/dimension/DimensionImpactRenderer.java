@@ -74,12 +74,20 @@ public final class DimensionImpactRenderer {
             // Never sample from the target currently being written. First copy main into a
             // same-size scratch texture, then read scratch while writing the transformed result
             // back to main.
-            GpuBufferSlice copyUniforms = DimensionImpactFX.writeUniforms(width, height, true);
-            drawPass(encoder, pipeline, scratchColor, mainColor, copyUniforms, nearest,
+            ImpactFrameTextureResolver.Mask textureMask = ImpactFrameTextureResolver.resolve(
+                    minecraft, DimensionImpactFX.textureMaskFrame());
+            GpuBufferSlice copyUniforms = DimensionImpactFX.writeUniforms(width, height, true,
+                    false, 1, 1);
+            drawPass(encoder, pipeline, scratchColor, mainColor, mainColor, copyUniforms, nearest,
                     "Adaption Wheel impact-frame copy");
 
-            GpuBufferSlice panelUniforms = DimensionImpactFX.writeUniforms(width, height, false);
-            drawPass(encoder, pipeline, mainColor, scratchColor, panelUniforms, nearest,
+            boolean hasMask = textureMask != null;
+            GpuTextureView maskColor = hasMask ? textureMask.view() : scratchColor;
+            int maskWidth = hasMask ? textureMask.width() : 1;
+            int maskHeight = hasMask ? textureMask.height() : 1;
+            GpuBufferSlice panelUniforms = DimensionImpactFX.writeUniforms(width, height, false,
+                    hasMask, maskWidth, maskHeight);
+            drawPass(encoder, pipeline, mainColor, scratchColor, maskColor, panelUniforms, nearest,
                     "Adaption Wheel impact-frame panel");
         } catch (RuntimeException exception) {
             if (!renderWarningLogged) {
@@ -114,7 +122,7 @@ public final class DimensionImpactRenderer {
     }
 
     private static void drawPass(CommandEncoder encoder, CompiledRenderPipeline pipeline,
-                                 GpuTextureView output, GpuTextureView input,
+                                 GpuTextureView output, GpuTextureView input, GpuTextureView mask,
                                  GpuBufferSlice uniforms, GpuSampler sampler,
                                  String label) {
         RenderPassDescriptor descriptor = RenderPassDescriptor.builder(() -> label)
@@ -125,6 +133,7 @@ public final class DimensionImpactRenderer {
             pass.setPipeline(pipeline);
             pass.setUniform("DimensionImpactUniforms", uniforms);
             pass.setUniform("InSampler", input, sampler);
+            pass.setUniform("ImpactSampler", mask, sampler);
             pass.draw(3, 1, 0, 0);
         }
     }

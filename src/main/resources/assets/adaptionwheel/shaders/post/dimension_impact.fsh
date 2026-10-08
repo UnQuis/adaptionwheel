@@ -2,6 +2,7 @@
 #extension GL_ARB_separate_shader_objects : require
 
 uniform sampler2D InSampler;
+uniform sampler2D ImpactSampler;
 
 layout(std140) uniform DimensionImpactUniforms {
     vec2 ImpactSize;
@@ -10,6 +11,8 @@ layout(std140) uniform DimensionImpactUniforms {
     vec4 ImpactBurst;
     vec4 ImpactInk;
     vec4 ImpactPaper;
+    vec4 ImpactMaskOptions;
+    vec4 ImpactMaskSize;
 };
 
 layout(location = 0) in vec2 texCoord;
@@ -76,6 +79,41 @@ void main() {
     frame = mix(frame, inkColor * dots, mid * 0.8);
     frame = mix(frame, inkColor * 0.25, ink * ImpactBurst.w);
     frame = mix(frame, paperColor, core);
+
+    // Optional frame_N texture masks. The mask is a black/white image: white keeps the
+    // threshold-converted scene, black selects its inverse. This folds the old textured-invert
+    // pass into the live 26.3 pipeline without relying on a legacy JSON post chain.
+    if (ImpactMaskOptions.x > 0.5) {
+        vec3 baseConvertedColor = mix(inkColor, paperColor, step(vec3(0.5), col));
+        vec3 targetColor = mix(paperColor, inkColor, step(vec3(0.5), col));
+        vec2 maskUv = uv;
+
+        if (ImpactMaskOptions.z < 0.5) {
+            vec2 inputSize = max(ImpactSize, vec2(1.0));
+            vec2 frameSize = max(ImpactMaskSize.xy, vec2(1.0));
+            vec2 ratio = frameSize / inputSize;
+            ratio /= max(ratio.x, ratio.y);
+            vec2 overflow = 1.0 - ratio;
+            maskUv = (uv - overflow * 0.5) / ratio;
+            maskUv.y = 1.0 - maskUv.y;
+        }
+
+        vec3 textureFrame = baseConvertedColor;
+        bool insideMask = all(greaterThanEqual(maskUv, vec2(0.0)))
+                && all(lessThanEqual(maskUv, vec2(1.0)));
+        if (insideMask) {
+            vec4 mask = texture(ImpactSampler, maskUv);
+            float invertAmount = dot(mask.rgb, vec3(1.0 / 3.0));
+            vec3 maskedColor;
+            if (ImpactMaskOptions.y > 0.5) {
+                maskedColor = mix(baseConvertedColor, targetColor, 1.0 - invertAmount);
+            } else {
+                maskedColor = invertAmount < 0.5 ? targetColor : baseConvertedColor;
+            }
+            textureFrame = mix(baseConvertedColor, maskedColor, mask.a);
+        }
+        frame = textureFrame;
+    }
 
     float radius = length(radial);
     float angle = atan(radial.y, radial.x);

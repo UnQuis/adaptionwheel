@@ -24,6 +24,7 @@ public final class ModRenderPipelines {
     private static final BindGroupLayout IMPACT_FRAME_BINDINGS = BindGroupLayout.builder()
             .withUniform("DimensionImpactUniforms", UniformType.UNIFORM_BUFFER)
             .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+            .withUniform("ImpactSampler", UniformType.COMBINED_IMAGE_SAMPLER)
             .build();
 
     /** Manga-blade pipeline, with the same vanilla transform, projection, fog, and globals blocks. */
