@@ -1373,16 +1373,34 @@ public class AdaptionEvents {
     }
 
     private static void triggerImpactShockwave(ServerPlayer player, float fallDistance) {
+        if (!Float.isFinite(fallDistance) || fallDistance <= 0f) {
+            return;
+        }
+
         ServerLevel level = (ServerLevel) player.level();
         double radius = SynergyEffects.impactRadius(player, AdaptionConfig.IMPACT_STOMP_RADIUS.get());
-        float damage = Math.max(2f, (float) ((fallDistance - AdaptionConfig.IMPACT_STOMP_MIN_FALL.get() * 0.5)
-                * AdaptionConfig.IMPACT_STOMP_DAMAGE_PER_BLOCK.get()));
+        double rawDamage = (fallDistance - AdaptionConfig.IMPACT_STOMP_MIN_FALL.get() * 0.5)
+                * AdaptionConfig.IMPACT_STOMP_DAMAGE_PER_BLOCK.get();
+        if (!Double.isFinite(radius) || radius <= 0.0
+                || !Double.isFinite(rawDamage) || rawDamage > Float.MAX_VALUE) {
+            return;
+        }
+        float damage = Math.max(2f, (float) rawDamage);
+        var source = player.damageSources().playerAttack(player);
 
         List<LivingEntity> targets = level.getEntitiesOfClass(LivingEntity.class,
                 player.getBoundingBox().inflate(radius),
                 e -> e != player && e.isAlive() && !e.isAlliedTo(player));
         for (LivingEntity target : targets) {
-            target.hurt(player.damageSources().playerAttack(player), damage);
+            // The list is a snapshot: an earlier hit (or another listener it invokes) may have
+            // killed a later target before we reach it. Never begin a second hurt pipeline for a
+            // dead/removed entity; NeoForge rejects entities killed from inside LivingDamageEvent.Pre.
+            if (target == player || target.isRemoved() || !target.isAlive()) {
+                continue;
+            }
+            if (!target.hurt(source, damage) || target.isRemoved() || !target.isAlive()) {
+                continue;
+            }
             Vec3 away = target.position().subtract(player.position());
             double horizontal = Math.max(0.25, Math.sqrt(away.x * away.x + away.z * away.z));
             target.push(away.x / horizontal * 1.2, 0.5, away.z / horizontal * 1.2);
