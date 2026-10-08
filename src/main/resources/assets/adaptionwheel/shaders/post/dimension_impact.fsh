@@ -1,4 +1,5 @@
-#version 150
+#version 330
+#extension GL_ARB_separate_shader_objects : require
 
 uniform sampler2D InSampler;
 
@@ -11,8 +12,8 @@ layout(std140) uniform DimensionImpactUniforms {
     vec4 ImpactPaper;
 };
 
-in vec2 texCoord;
-out vec4 fragColor;
+layout(location = 0) in vec2 texCoord;
+layout(location = 0) out vec4 fragColor;
 
 const float TAU = 6.28318531;
 
@@ -39,6 +40,11 @@ void main() {
     float aspect = ImpactSize.x / ImpactSize.y;
     vec2 centre = ImpactProgress.zw;
 
+    // Modes 0 and 1 are the shipped manga pair: black ink on white paper, then its exact inverse.
+    float inverseMode = mod(floor(ImpactProgress.y + 0.5), 2.0);
+    vec3 inkColor = mix(ImpactInk.rgb, ImpactPaper.rgb, inverseMode);
+    vec3 paperColor = mix(ImpactPaper.rgb, ImpactInk.rgb, inverseMode);
+
     vec2 radial = (uv - centre) * vec2(aspect, 1.0);
     float r2 = dot(radial, radial);
     float split = ImpactParams.y * r2 * 0.08;
@@ -61,15 +67,15 @@ void main() {
 
     float crawl = ImpactProgress.x * ImpactBurst.z;
     vec2 tp = mat2(0.7071, -0.7071, 0.7071, 0.7071) * (uv * ImpactSize) / 9.0
-    - vec2(crawl * 2.0, crawl * 1.2);
+              - vec2(crawl * 2.0, crawl * 1.2);
     float tone = 1.0 - smoothstep(0.36, 0.96, l);
     float dots = step(length(fract(tp) - 0.5), sqrt(clamp(tone, 0.0, 1.0)) * 0.46);
     float mid = smoothstep(0.28, 0.44, tone) * (1.0 - smoothstep(0.62, 0.80, tone));
 
-    vec3 frame = ImpactPaper.rgb * two;
-    frame = mix(frame, ImpactInk.rgb * dots, mid * 0.8);
-    frame = mix(frame, ImpactInk.rgb * 0.25, ink * ImpactBurst.w);
-    frame = mix(frame, vec3(1.0), core);
+    vec3 frame = paperColor * two;
+    frame = mix(frame, inkColor * dots, mid * 0.8);
+    frame = mix(frame, inkColor * 0.25, ink * ImpactBurst.w);
+    frame = mix(frame, paperColor, core);
 
     float radius = length(radial);
     float angle = atan(radial.y, radial.x);
@@ -96,10 +102,20 @@ void main() {
 
     float edgeRadius = length((uv - 0.5) * vec2(aspect, 1.0));
     float vignette = smoothstep(0.55, 1.05 - ImpactProgress.x * 0.35, edgeRadius);
-    frame = mix(frame, ImpactInk.rgb, vignette * 0.85);
+    frame = mix(frame, inkColor, vignette * 0.85);
 
     vec3 result = mix(col, frame, clamp(ImpactParams.x, 0.0, 1.0));
-    result += ImpactPaper.rgb * ImpactParams.z;
+
+    // A value outside [-1, 1] is the opening white detonation. Otherwise the sign alternates the
+    // flash between the current paper and ink colours, matching the frame's inverse cut.
+    float encodedFlash = ImpactParams.z;
+    bool detonation = abs(encodedFlash) > 1.0;
+    float flashStrength = detonation
+            ? clamp(abs(encodedFlash) - 1.0, 0.0, 1.0)
+            : clamp(abs(encodedFlash), 0.0, 1.0);
+    vec3 flashColor = detonation ? vec3(1.0)
+            : (encodedFlash < 0.0 ? inkColor : paperColor);
+    result = mix(result, flashColor, flashStrength);
 
     fragColor = vec4(result, 1.0);
 }

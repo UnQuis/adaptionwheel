@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "ru.adaptionwheel.client.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "DimensionImpactMixin",
+    "accessor.PostChainAccessor",
+    "accessor.PostPassAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -36,6 +36,7 @@ public abstract class DimensionImpactMixin {
     @Inject(method = "render", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/gui/render/GuiRenderer;render()V", shift = At.Shift.AFTER))
     private void adaptionwheel$dimensionImpact(CallbackInfo ci) {
+        DimensionImpactFX.advanceFrame();
         if (!DimensionImpactFX.active()) {
             return;
         }
@@ -45,7 +46,11 @@ public abstract class DimensionImpactMixin {
             return;
         }
 
-        PostPass pass = ((PostChainAccessor) (Object) chain).adaptionwheel$passes().getFirst();
+        var passes = ((PostChainAccessor) (Object) chain).adaptionwheel$passes();
+        if (passes.isEmpty()) {
+            return;
+        }
+        PostPass pass = passes.getFirst();
         var target = this.minecraft.gameRenderer.mainRenderTarget();
         DimensionImpactFX.writeUniforms(pass, target.width, target.height);
 

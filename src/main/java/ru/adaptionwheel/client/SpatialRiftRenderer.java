@@ -7,12 +7,17 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import ru.adaptionwheel.entity.SpatialRiftProjectile;
 
+/** Renders spatial rifts with the larger swept-crescent model used on 1.21.1. */
 public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile, SlashRenderState> {
 
-    private static final int[] BLADE_VIOLET = {242, 218, 255};
-    private static final int[] GLOW_VIOLET = {155, 55, 255};
+    private static final float SPAN = 9.0f;
+    private static final float GLOW_HALF = 0.33f;
+    private static final float CORE_HALF = 0.20f;
+    private static final int TINT_VIOLET = 0xFFF2DAFF;
+    private static final int GLOW_VIOLET = 0xFF9B37FF;
 
     public SpatialRiftRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -43,11 +48,8 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile, S
         float lifeRatio = Mth.clamp(age / SpatialRiftProjectile.LIFETIME_TICKS, 0f, 1f);
         float fade = lifeRatio > 0.82f ? Mth.clamp((1f - lifeRatio) / 0.18f, 0f, 1f) : 1f;
 
-        poseStack.pushPose();
-        poseStack.rotate(camera.orientation);
         FlyingSlashRenderer.render(poseStack, collector, state.motion, state.roll, age,
-                9.0f, 7.5f, BLADE_VIOLET, GLOW_VIOLET, fade);
-        poseStack.popPose();
+                SPAN, GLOW_HALF, CORE_HALF, TINT_VIOLET, GLOW_VIOLET, fade);
         super.submit(state, poseStack, collector, camera);
     }
 }

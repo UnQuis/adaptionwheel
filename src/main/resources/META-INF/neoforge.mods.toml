@@ -3,6 +3,10 @@ license="${mod_license}"
 [[mixins]]
 config = "adaptionwheel.mixins.json"
 
+# The render-state era impact-frame post pass is kept in its own client-only package/config.
+[[mixins]]
+config = "adaptionwheel.client.mixins.json"
+
 [[mods]]
 modId="${mod_id}"
 version="${mod_version}"
