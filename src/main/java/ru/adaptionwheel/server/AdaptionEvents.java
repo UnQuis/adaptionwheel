@@ -57,6 +57,7 @@ import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.data.WheelData;
 import ru.adaptionwheel.item.ModItems;
 import ru.adaptionwheel.network.AdaptionSyncPayload;
+import ru.adaptionwheel.network.TaskProgressPayload;
 import ru.adaptionwheel.sound.ModSounds;
 
 import java.util.ArrayList;
@@ -197,6 +198,9 @@ public class AdaptionEvents {
     }
 
     private static String adaptedExistenceTarget(PlayerAdaption data, DamageSource source) {
+        if (!AdaptionConfig.ENABLE_EXISTENCE.get()) {
+            return null;
+        }
         LivingEntity boss = BossHelper.resolveBossFromSource(source);
         if (boss != null) {
             String path = entityPath(boss.getType());
@@ -885,6 +889,12 @@ public class AdaptionEvents {
                 it.remove();
                 completeTask(player, data, task.concept);
             }
+        }
+
+        // Push timer jumps and completions at 5 Hz instead of making the HUD wait for the 1 Hz full sync.
+        // Include the full sync's filtered existence counters so the HUD cannot blink between the two.
+        if (!data.tasks.isEmpty() && player.tickCount % TaskProgressPayload.PUSH_EVERY_TICKS == 0) {
+            TaskProgressPayload.send(player, data.tasks, visibleBossProgress(player, data));
         }
 
         if (AdaptionConfig.ENABLE_ENVIRONMENT.get()) {

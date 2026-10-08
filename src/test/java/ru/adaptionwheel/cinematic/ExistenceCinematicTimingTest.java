@@ -67,6 +67,34 @@ class ExistenceCinematicTimingTest {
     }
 
     @Test
+    void existenceGaugeTracksAllEightCueBoundaries() {
+        int[] boundaries = ExistenceCinematicTiming.LEVEL_BOUNDARIES_MS;
+        assertEquals(8, boundaries.length, "seven levels plus the finale");
+        assertEquals(ExistenceCinematicTiming.FINALE_MS, boundaries[7], "the finale completes level eight");
+        assertEquals(0, ExistenceCinematicTiming.existenceLevel(0), "the gauge starts at level zero");
+        assertTrue(ExistenceCinematicTiming.existenceLevelFraction(0) < 0.001f,
+                "the first segment starts empty");
+
+        for (int i = 0; i < boundaries.length; i++) {
+            int at = boundaries[i];
+            assertEquals(i, ExistenceCinematicTiming.existenceLevel(at - 1),
+                    "the cue has not fired one millisecond before boundary " + i);
+            assertTrue(ExistenceCinematicTiming.existenceLevelFraction(at - 1) > 0.99f,
+                    "the gauge is effectively full before cue " + i);
+            assertEquals(i + 1, ExistenceCinematicTiming.existenceLevel(at),
+                    "boundary " + i + " increments the reached level");
+            float atBoundary = ExistenceCinematicTiming.existenceLevelFraction(at);
+            assertEquals(i == boundaries.length - 1 ? 1f : 0f, atBoundary, 0.001f,
+                    "the gauge restarts after a rising cue and stays full at the finale");
+        }
+
+        assertEquals(8, ExistenceCinematicTiming.existenceLevel(ExistenceCinematicTiming.TOTAL_MS),
+                "the final level remains reached after the cinematic");
+        assertEquals(1f, ExistenceCinematicTiming.existenceLevelFraction(ExistenceCinematicTiming.TOTAL_MS),
+                "the gauge remains full after the finale");
+    }
+
+    @Test
     void barsRampInAndOut() {
         assertTrue(ExistenceCinematicTiming.barFraction(0) < 0.01f, "no bars at the very start");
         assertTrue(ExistenceCinematicTiming.barFraction(4_000) > 0.99f, "bars at full height mid-sequence");

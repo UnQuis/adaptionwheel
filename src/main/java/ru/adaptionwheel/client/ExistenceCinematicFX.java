@@ -10,6 +10,7 @@ import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
+import net.minecraft.client.player.ClientInput;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
@@ -22,10 +23,13 @@ import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.util.Mth;
 import net.minecraft.util.context.ContextKey;
 import net.minecraft.world.entity.Avatar;
+import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec2;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.MovementInputUpdateEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.RenderLivingEvent;
 import net.neoforged.neoforge.client.event.ViewportEvent;
@@ -37,6 +41,7 @@ import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.network.ExistenceCinematicPayload;
 import ru.adaptionwheel.sound.ModSounds;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -79,6 +84,11 @@ public final class ExistenceCinematicFX {
     /** Random scatter around the player, in blocks, matching the original's 70px fan. */
     private static final float GAKON_SPREAD = 0.9f;
 
+    private static final org.slf4j.Logger LOGGER =
+            org.slf4j.LoggerFactory.getLogger("adaptionwheel/existence_cinematic");
+    private static final Field CLIENT_INPUT_MOVE_VECTOR = findClientInputMoveVector();
+    private static boolean movementVectorWriteFailureLogged;
+
     private static final List<GakonSprite> sprites = new ArrayList<>();
     private static final Random RANDOM = new Random();
     /** Baked once on first use; submitting the same part many times in a frame is free. */
@@ -96,6 +106,26 @@ public final class ExistenceCinematicFX {
     }
 
     private record GakonSprite(int bornMs, int lifeMs, float offsetX, float offsetY, float rotation, float scale) {
+    }
+
+    /**
+     * 26.3 fires MovementInputUpdateEvent after ClientInput.tick(), so replacing keyPresses alone
+     * would still leave that tick's precomputed horizontal vector in place. ClientInput exposes no
+     * setter; cache access to its mapped moveVector field once instead of reflecting every frame.
+     */
+    private static Field findClientInputMoveVector() {
+        try {
+            Field field = ClientInput.class.getDeclaredField("moveVector");
+            if (!field.trySetAccessible()) {
+                LOGGER.warn("Could not access ClientInput.moveVector; cinematic movement will only suppress key states.");
+                return null;
+            }
+            return field;
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            LOGGER.warn("Could not access ClientInput.moveVector; cinematic movement will only suppress key states.",
+                    exception);
+            return null;
+        }
     }
 
     private static final ContextKey<Boolean> LOCAL_PLAYER =
@@ -194,13 +224,11 @@ public final class ExistenceCinematicFX {
         int passed = ExistenceCinematicTiming.levelsPassed(elapsed);
         while (levelsFired < passed) {
             levelsFired++;
-            int levelIndex = levelsFired - 1;
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null) {
                 mc.player.playSound(ModSounds.ADAPT_VOICE.get(), 1f, 1f);
             }
-            int at = ExistenceCinematicTiming.LEVEL_MS[levelIndex];
-            spawnGakon(elapsed - at, ExistenceCinematicTiming.GAKON_LIFE_MS,
+            spawnGakon(elapsed, ExistenceCinematicTiming.GAKON_LIFE_MS,
                     (RANDOM.nextFloat() - 0.5f) * GAKON_SPREAD * 2f, GAKON_HEIGHT,
                     (RANDOM.nextFloat() - 0.5f) * 0.3f, 0.9f + RANDOM.nextFloat() * 0.2f);
             spiralDust();
@@ -236,7 +264,7 @@ public final class ExistenceCinematicFX {
         player.playSound(ModSounds.REF.get(), 2f, 0.6f);
         player.playSound(ModSounds.SOE_HIT_1.get(), 1.5f, 0.8f);
         punch = 1f;
-        spawnGakon(elapsed - ExistenceCinematicTiming.FINALE_MS, ExistenceCinematicTiming.GAKON_FINALE_LIFE_MS,
+        spawnGakon(elapsed, ExistenceCinematicTiming.GAKON_FINALE_LIFE_MS,
                 0f, GAKON_HEIGHT, 0f, 1.6f);
 
         var level = player.level();
@@ -380,6 +408,37 @@ public final class ExistenceCinematicFX {
                 "No way...", 0xFFFFFFFF);
         drawLine(graphics, mc, ExistenceCinematicTiming.FINALE_MS, elapsed,
                 "To my very existence!?", 0xFFFF5555);
+        drawExistenceGauge(graphics, mc, width, height, elapsed);
+    }
+
+    private static final int EXISTENCE_GAUGE_WIDTH = 220;
+    private static final int EXISTENCE_GAUGE_HEIGHT = 10;
+
+    /** A progress meter tied to the same cue boundaries as the level sounds and Gakon sprites. */
+    private static void drawExistenceGauge(GuiGraphicsExtractor graphics, Minecraft mc,
+                                           int width, int height, int elapsed) {
+        float visibility = ExistenceCinematicTiming.barFraction(elapsed);
+        if (visibility <= 0f) {
+            return;
+        }
+        int level = ExistenceCinematicTiming.existenceLevel(elapsed);
+        float fraction = ExistenceCinematicTiming.existenceLevelFraction(elapsed);
+        int alpha = Math.round(255 * visibility);
+
+        int x = width / 2 - EXISTENCE_GAUGE_WIDTH / 2;
+        int y = height / 2 + 46;
+        String label = "EXISTENCE LEVEL " + level + "/8";
+        graphics.text(mc.font, label, width / 2 - mc.font.width(label) / 2, y - 12,
+                (alpha << 24) | 0xFFFFFF, true);
+
+        graphics.fill(x - 1, y - 1, x + EXISTENCE_GAUGE_WIDTH + 1,
+                y + EXISTENCE_GAUGE_HEIGHT + 1, alpha << 24);
+        int filled = Math.round(EXISTENCE_GAUGE_WIDTH * fraction);
+        if (filled > 0) {
+            int rainbow = AdaptionHud.rainbowColor();
+            graphics.fill(x, y, x + filled, y + EXISTENCE_GAUGE_HEIGHT,
+                    (alpha << 24) | (rainbow & 0xFFFFFF));
+        }
     }
 
     /**
@@ -410,4 +469,25 @@ public final class ExistenceCinematicFX {
         event.setPitch(event.getPitch() + (float) Math.cos(t * 2.3f) * punch * 4f);
         event.setRoll(event.getRoll() + (float) Math.sin(t * 1.1f) * punch * 5f);
     }
+
+    @SubscribeEvent
+    public static void onMovementInput(MovementInputUpdateEvent event) {
+        if (!active) {
+            return;
+        }
+        ClientInput input = event.getInput();
+        input.keyPresses = Input.EMPTY;
+        if (CLIENT_INPUT_MOVE_VECTOR == null) {
+            return;
+        }
+        try {
+            CLIENT_INPUT_MOVE_VECTOR.set(input, Vec2.ZERO);
+        } catch (IllegalAccessException | IllegalArgumentException exception) {
+            if (!movementVectorWriteFailureLogged) {
+                movementVectorWriteFailureLogged = true;
+                LOGGER.error("Could not clear movement input during the Existence cinematic.", exception);
+            }
+        }
+    }
+
 }
