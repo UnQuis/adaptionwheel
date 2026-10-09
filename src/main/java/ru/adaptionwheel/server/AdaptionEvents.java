@@ -78,6 +78,10 @@ public class AdaptionEvents {
 
     private static final Identifier HP_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "hp");
     private static final Identifier ARMOR_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "armor");
+    private static final Identifier ADAPTATION_COUNT_SPEED_MODIFIER =
+            Identifier.fromNamespaceAndPath("adaptionwheel", "adaptation_count_speed");
+    private static final Identifier ADAPTATION_COUNT_JUMP_MODIFIER =
+            Identifier.fromNamespaceAndPath("adaptionwheel", "adaptation_count_jump");
     private static final Identifier SWIM_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "swim");
     private static final Identifier LIQUID_SPEED_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "liquid_speed");
     private static final Identifier SUBMERGED_MINING_MODIFIER =
@@ -1624,6 +1628,7 @@ public class AdaptionEvents {
     public static void completeTaskUpTo(ServerPlayer player, PlayerAdaption data, String concept,
                                         int targetLevel) {
         applyGrant(player, data, concept, targetLevel);
+        applyStats(player, data);
 
         saveToItem(player, data);
         sync(player, data, true);
@@ -2006,6 +2011,13 @@ public class AdaptionEvents {
                 count * AdaptionConfig.BONUS_HP_PCT.get() / 100.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
         applyStat(player.getAttribute(Attributes.ARMOR), ARMOR_MODIFIER,
                 count * AdaptionConfig.BONUS_ARMOR_FLAT.get(), AttributeModifier.Operation.ADD_VALUE);
+
+        // Apply the requested movement bonuses directly as attributes (no potion effects); both
+        // scale linearly and stop increasing after the 400-adaptation progression cap.
+        applyStat(player.getAttribute(Attributes.MOVEMENT_SPEED), ADAPTATION_COUNT_SPEED_MODIFIER,
+                AdaptationProgression.movementSpeedBonus(count), AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL);
+        applyStat(player.getAttribute(Attributes.JUMP_STRENGTH), ADAPTATION_COUNT_JUMP_MODIFIER,
+                AdaptationProgression.jumpStrengthBonus(count), AttributeModifier.Operation.ADD_VALUE);
 
         boolean liquid = data.active(Concepts.ENV_LIQUID);
         applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), SWIM_MODIFIER,
