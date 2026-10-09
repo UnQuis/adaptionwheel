@@ -78,9 +78,10 @@ public final class DimensionImpactFX {
         if (!AdaptionConfig.DIMENSION_IMPACT_TEXTURE_MASKS.get() || !ImpactFrameTiming.playing(age)) {
             return -1;
         }
-        return ImpactFrameTiming.flashIndex(age,
+        int flashStep = ImpactFrameTiming.flashIndex(age,
                 AdaptionConfig.DIMENSION_IMPACT_FLASH_FRAMES.get(),
                 AdaptionConfig.DIMENSION_IMPACT_FLASH_MS.get());
+        return flashStep < 0 ? -1 : flashStep % ImpactFrameTextureResolver.FRAME_COUNT;
     }
 
     /** Uploads one frame's uniforms; the copy pass sets its panel strength to zero. */
