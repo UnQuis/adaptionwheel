@@ -1398,7 +1398,8 @@ public class AdaptionEvents {
             if (target == player || target.isRemoved() || !target.isAlive()) {
                 continue;
             }
-            if (!target.hurt(source, damage) || target.isRemoved() || !target.isAlive()) {
+            target.hurt(source, damage);
+            if (target.isRemoved() || !target.isAlive()) {
                 continue;
             }
             Vec3 away = target.position().subtract(player.position());
