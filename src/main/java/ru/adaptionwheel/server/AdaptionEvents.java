@@ -57,6 +57,7 @@ import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.data.WheelData;
 import ru.adaptionwheel.item.ModItems;
 import ru.adaptionwheel.network.AdaptionSyncPayload;
+import ru.adaptionwheel.network.TaskProgressPayload;
 import ru.adaptionwheel.sound.ModSounds;
 
 import java.util.ArrayList;
@@ -77,6 +78,10 @@ public class AdaptionEvents {
 
     private static final Identifier HP_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "hp");
     private static final Identifier ARMOR_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "armor");
+    private static final Identifier ADAPTATION_COUNT_SPEED_MODIFIER =
+            Identifier.fromNamespaceAndPath("adaptionwheel", "adaptation_count_speed");
+    private static final Identifier ADAPTATION_COUNT_JUMP_MODIFIER =
+            Identifier.fromNamespaceAndPath("adaptionwheel", "adaptation_count_jump");
     private static final Identifier SWIM_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "swim");
     private static final Identifier LIQUID_SPEED_MODIFIER = Identifier.fromNamespaceAndPath("adaptionwheel", "liquid_speed");
     private static final Identifier SUBMERGED_MINING_MODIFIER =
@@ -197,6 +202,9 @@ public class AdaptionEvents {
     }
 
     private static String adaptedExistenceTarget(PlayerAdaption data, DamageSource source) {
+        if (!AdaptionConfig.ENABLE_EXISTENCE.get()) {
+            return null;
+        }
         LivingEntity boss = BossHelper.resolveBossFromSource(source);
         if (boss != null) {
             String path = entityPath(boss.getType());
@@ -887,6 +895,12 @@ public class AdaptionEvents {
             }
         }
 
+        // Push timer jumps and completions at 5 Hz instead of making the HUD wait for the 1 Hz full sync.
+        // Include the full sync's filtered existence counters so the HUD cannot blink between the two.
+        if (!data.tasks.isEmpty() && player.tickCount % TaskProgressPayload.PUSH_EVERY_TICKS == 0) {
+            TaskProgressPayload.send(player, data.tasks, visibleBossProgress(player, data));
+        }
+
         if (AdaptionConfig.ENABLE_ENVIRONMENT.get()) {
             if (player.isInLava()) {
                 startTask(player, data, Concepts.ENV_LAVA, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
@@ -1363,16 +1377,35 @@ public class AdaptionEvents {
     }
 
     private static void triggerImpactShockwave(ServerPlayer player, float fallDistance) {
+        if (!Float.isFinite(fallDistance) || fallDistance <= 0f) {
+            return;
+        }
+
         ServerLevel level = (ServerLevel) player.level();
         double radius = SynergyEffects.impactRadius(player, AdaptionConfig.IMPACT_STOMP_RADIUS.get());
-        float damage = Math.max(2f, (float) ((fallDistance - AdaptionConfig.IMPACT_STOMP_MIN_FALL.get() * 0.5)
-                * AdaptionConfig.IMPACT_STOMP_DAMAGE_PER_BLOCK.get()));
+        double rawDamage = (fallDistance - AdaptionConfig.IMPACT_STOMP_MIN_FALL.get() * 0.5)
+                * AdaptionConfig.IMPACT_STOMP_DAMAGE_PER_BLOCK.get();
+        if (!Double.isFinite(radius) || radius <= 0.0
+                || !Double.isFinite(rawDamage) || rawDamage > Float.MAX_VALUE) {
+            return;
+        }
+        float damage = Math.max(2f, (float) rawDamage);
+        var source = player.damageSources().playerAttack(player);
 
         List<LivingEntity> targets = level.getEntitiesOfClass(LivingEntity.class,
                 player.getBoundingBox().inflate(radius),
                 e -> e != player && e.isAlive() && !e.isAlliedTo(player));
         for (LivingEntity target : targets) {
-            target.hurt(player.damageSources().playerAttack(player), damage);
+            // The list is a snapshot: an earlier hit (or another listener it invokes) may have
+            // killed a later target before we reach it. Never begin a second hurt pipeline for a
+            // dead/removed entity; NeoForge rejects entities killed from inside LivingDamageEvent.Pre.
+            if (target == player || target.isRemoved() || !target.isAlive()) {
+                continue;
+            }
+            target.hurt(source, damage);
+            if (target.isRemoved() || !target.isAlive()) {
+                continue;
+            }
             Vec3 away = target.position().subtract(player.position());
             double horizontal = Math.max(0.25, Math.sqrt(away.x * away.x + away.z * away.z));
             target.push(away.x / horizontal * 1.2, 0.5, away.z / horizontal * 1.2);
@@ -1595,6 +1628,7 @@ public class AdaptionEvents {
     public static void completeTaskUpTo(ServerPlayer player, PlayerAdaption data, String concept,
                                         int targetLevel) {
         applyGrant(player, data, concept, targetLevel);
+        applyStats(player, data);
 
         saveToItem(player, data);
         sync(player, data, true);
@@ -1977,6 +2011,13 @@ public class AdaptionEvents {
                 count * AdaptionConfig.BONUS_HP_PCT.get() / 100.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
         applyStat(player.getAttribute(Attributes.ARMOR), ARMOR_MODIFIER,
                 count * AdaptionConfig.BONUS_ARMOR_FLAT.get(), AttributeModifier.Operation.ADD_VALUE);
+
+        // Apply the requested movement bonuses directly as attributes (no potion effects); both
+        // scale linearly and stop increasing after the 400-adaptation progression cap.
+        applyStat(player.getAttribute(Attributes.MOVEMENT_SPEED), ADAPTATION_COUNT_SPEED_MODIFIER,
+                AdaptationProgression.movementSpeedBonus(count), AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL);
+        applyStat(player.getAttribute(Attributes.JUMP_STRENGTH), ADAPTATION_COUNT_JUMP_MODIFIER,
+                AdaptationProgression.jumpStrengthBonus(count), AttributeModifier.Operation.ADD_VALUE);
 
         boolean liquid = data.active(Concepts.ENV_LIQUID);
         applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), SWIM_MODIFIER,

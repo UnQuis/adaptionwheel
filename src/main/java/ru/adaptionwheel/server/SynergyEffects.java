@@ -45,6 +45,13 @@ public final class SynergyEffects {
 
     private static final Set<UUID> CHAINED = new HashSet<>();
 
+    /**
+     * Gravebloom deals damage synchronously from the hurt callback. The returned damage can in
+     * turn trigger another player's Gravebloom, so this guard is deliberately global to the
+     * current call stack rather than keyed by player.
+     */
+    private static final ThreadLocal<Boolean> GRAVEBLOOM_RETALIATION = ThreadLocal.withInitial(() -> false);
+
     private static final Map<UUID, Long> LAST_ON_FIRE = new HashMap<>();
 
     /**
@@ -206,12 +213,24 @@ public final class SynergyEffects {
     }
 
     public static void onHurtTaken(ServerPlayer player, LivingEntity attacker, float amount) {
-        if (amount <= 0 || player.level().isClientSide() || !isActive(player, Synergies.GRAVEBLOOM)) {
+        if (GRAVEBLOOM_RETALIATION.get()
+                || amount <= 0
+                || player.level().isClientSide()
+                || !isActive(player, Synergies.GRAVEBLOOM)
+                || attacker == null
+                || !attacker.isAlive()
+                || attacker.isAlliedTo(player)) {
             return;
         }
-        if (attacker != null && attacker.isAlive() && !attacker.isAlliedTo(player)) {
+
+        GRAVEBLOOM_RETALIATION.set(true);
+        try {
             attacker.hurt(player.damageSources().playerAttack(player),
                     (float) (amount * 0.12 * strength(player, Synergies.GRAVEBLOOM)));
+        } finally {
+            // hurt() is synchronous and can throw from another damage listener; never leave
+            // retaliation disabled for the rest of this server-thread call stack.
+            GRAVEBLOOM_RETALIATION.remove();
         }
     }
 

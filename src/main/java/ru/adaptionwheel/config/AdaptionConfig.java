@@ -205,6 +205,9 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_FLASH_FRAMES;
     public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_FLASH_MS;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FLASH_STRENGTH;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_TEXTURE_MASKS;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_TEXTURE_STRETCH;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_TEXTURE_SMOOTH_INVERT;
 
     public static final ModConfigSpec SERVER_SPEC;
     public static final ModConfigSpec CLIENT_SPEC;
@@ -718,6 +721,17 @@ s.comment("--- Regeneration ---").push("regeneration");
                 .defineInRange("dimensionImpactFlashFrames", 5, 1, 30);
         DIMENSION_IMPACT_FLASH_MS = c.defineInRange("dimensionImpactFlashMs", 250, 20, 2000);
         DIMENSION_IMPACT_FLASH_STRENGTH = c.defineInRange("dimensionImpactFlashStrength", 0.75, 0.0, 1.0);
+        DIMENSION_IMPACT_TEXTURE_MASKS = c.comment(
+                        "Use optional frame_N.png black/white masks from impact-frames or adaptionwheel:",
+                        "textures/effect/frame_N.png. Missing masks leave the built-in panel unchanged.")
+                .define("dimensionImpactTextureMasks", true);
+        DIMENSION_IMPACT_TEXTURE_STRETCH = c.comment(
+                        "Stretch a frame mask to the screen; off preserves its aspect ratio and center-crops.")
+                .define("dimensionImpactTextureStretch", false);
+        DIMENSION_IMPACT_TEXTURE_SMOOTH_INVERT = c.comment(
+                        "Blend mask luminance continuously between the paper/ink image and its inverse.",
+                        "Off uses a hard black/white threshold, matching the original impact-frame shader.")
+                .define("dimensionImpactTextureSmoothInvert", false);
 
         c.pop();
 

@@ -1,26 +1,25 @@
 package ru.adaptionwheel.client.render;
 
+import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
-import net.minecraft.resources.Identifier;
-import ru.adaptionwheel.AdaptionWheel;
+import ru.adaptionwheel.client.render.pipeline.ModRenderPipelines;
 
-/** Render types for the mod's own hand-built geometry. */
+/** Render types for the mod's hand-built geometry. */
 public final class ModRenderTypes {
 
-    /**
-     * The slash mesh samples no texture -- its colour is baked per vertex by {@link
-     * SlashBladeMesh} -- so this reuses the same 1x1 white surface trick {@code
-     * FlyingSlashRenderer} uses for its own translucent quads: {@code entityTranslucent} needs a
-     * bound texture, and this one is never actually read.
-     */
-    private static final Identifier SURFACE =
-            Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "textures/entity/white.png");
+    private static final RenderType SLASH = RenderType.create("adaptionwheel_slash",
+            RenderSetup.builder(ModRenderPipelines.SLASH)
+                    .setOutline(RenderSetup.OutlineProperty.NONE)
+                    .createRenderSetup());
 
     private ModRenderTypes() {
     }
 
+    /**
+     * The custom slash pipeline is essential: vanilla's {@code entityTranslucent} pipeline ignores
+     * {@code slash.fsh}, so the coreness UVs and animated manga shading otherwise never render.
+     */
     public static RenderType slash() {
-        return RenderTypes.entityTranslucent(SURFACE);
+        return SLASH;
     }
 }
