@@ -423,6 +423,38 @@ public class AdaptionEvents {
         }
     }
 
+    @SubscribeEvent
+    public static void onDamagePost(LivingDamageEvent.Post event) {
+        LivingEntity target = event.getEntity();
+        if (target.level().isClientSide() || !target.isAlive() || target.isRemoved()) {
+            return;
+        }
+
+        if (!(event.getSource().getEntity() instanceof ServerPlayer attacker)
+                || target == attacker
+                || !wearingWheel(attacker)) {
+            return;
+        }
+
+        PlayerAdaption data = data(attacker);
+        if (data.levelOrZero(Concepts.offense(pathOf(target))) < 8
+                || attacker.getRandom().nextFloat() * 100f >= AdaptionConfig.DIMENSION_SLASH_CHANCE.get()
+                || !claimDimensionSlash(attacker)) {
+            return;
+        }
+
+        // This extra hit must happen after the original Pre event has returned. Server.execute()
+        // runs inline when called on the server thread, so using it from Pre re-entered hurtServer
+        // and could kill this same target before NeoForge's Pre lifecycle check.
+        float slashDamage = Math.max(1f, (float) (target.getMaxHealth()
+                * AdaptionConfig.DIMENSION_SLASH_HP_PERCENT.get() / 100.0));
+        target.hurt(attacker.damageSources().playerAttack(attacker), slashDamage);
+        attacker.sendSystemMessage(Component.translatable("adaptionwheel.msg.dimension_slash")
+                .withStyle(ChatFormatting.DARK_AQUA, ChatFormatting.BOLD));
+        attacker.level().playSound(null, target.blockPosition(), ModSounds.DIMENSION_CUT.get(),
+                SoundSource.PLAYERS, 1f, 1f);
+    }
+
     private static boolean tryAdversitySurvival(ServerPlayer player, PlayerAdaption data, float damage) {
         if (!AdaptionConfig.ENABLE_ADVERSITY.get()
                 || player.isCreative()
@@ -583,22 +615,6 @@ public class AdaptionEvents {
             event.setNewDamage(base);
 
             SynergyEffects.onHit(attacker, target, event.getSource());
-
-            if (level >= 8 && attacker.getRandom().nextFloat() * 100f
-                    < AdaptionConfig.DIMENSION_SLASH_CHANCE.get()
-                    && claimDimensionSlash(attacker)) {
-                float slashDamage = Math.max(1f, (float) (target.getMaxHealth()
-                        * AdaptionConfig.DIMENSION_SLASH_HP_PERCENT.get() / 100.0));
-                attacker.level().getServer().execute(() -> {
-                    if (target.isAlive() && !target.isRemoved()) {
-                        target.hurt(attacker.damageSources().playerAttack(attacker), slashDamage);
-                    }
-                });
-                attacker.sendSystemMessage(Component.translatable("adaptionwheel.msg.dimension_slash")
-                        .withStyle(ChatFormatting.DARK_AQUA, ChatFormatting.BOLD));
-                attacker.level().playSound(null, target.blockPosition(), ModSounds.DIMENSION_CUT.get(),
-                        SoundSource.PLAYERS, 1f, 1f);
-            }
         }
 
         if (level < PlayerAdaption.MAX_LEVEL && AdaptionConfig.ENABLE_OFFENSE.get()) {
