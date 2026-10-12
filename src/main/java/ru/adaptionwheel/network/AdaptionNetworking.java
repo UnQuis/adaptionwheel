@@ -6,8 +6,8 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.client.ClientAdaption;
-import ru.adaptionwheel.client.DimensionImpactFX;
 import ru.adaptionwheel.client.ExistenceCinematicFX;
+import ru.adaptionwheel.client.fx.dimension.DimensionImpactFX;
 
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public class AdaptionNetworking {

@@ -133,7 +133,8 @@ public class CursedSlashProjectile extends Projectile {
         // so anything standing between the two points used to be skipped over entirely.
         AABB box = new AABB(from, to).inflate(1.6);
         for (LivingEntity target : level().getEntitiesOfClass(LivingEntity.class, box, this::canHitEntity)) {
-            if (!alreadyHit.add(target.getUUID())) {
+            // Earlier hits can invoke effects which kill later entries from this snapshot.
+            if (target.isRemoved() || !target.isAlive() || !alreadyHit.add(target.getUUID())) {
                 continue;
             }
             DamageSource source = damageSources().mobProjectile(this, getOwner() instanceof LivingEntity living ? living : null);

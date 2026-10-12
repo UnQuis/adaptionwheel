@@ -1,5 +1,7 @@
 package ru.adaptionwheel.cinematic;
 
+import net.minecraft.util.Mth;
+
 /**
  * The Existence cinematic's schedule, converted from the original mod's Terraria ticks.
  *
@@ -45,6 +47,16 @@ public final class ExistenceCinematicTiming {
     /** The finale: tick 450, where the big burst and the punch happen. */
     public static final int FINALE_MS = toMs(450);
 
+    /** Seven rising levels plus the finale, which completes level eight. */
+    public static final int[] LEVEL_BOUNDARIES_MS = buildBoundaries();
+
+    private static int[] buildBoundaries() {
+        int[] boundaries = new int[LEVEL_MS.length + 1];
+        System.arraycopy(LEVEL_MS, 0, boundaries, 0, LEVEL_MS.length);
+        boundaries[LEVEL_MS.length] = FINALE_MS;
+        return boundaries;
+    }
+
     /** The original's floating lines, at ticks 60, 240 and 450. */
     public static final int LINE_OPENING_MS = toMs(60);
     public static final int LINE_MIDDLE_MS = toMs(240);
@@ -85,6 +97,34 @@ public final class ExistenceCinematicTiming {
             }
         }
         return passed;
+    }
+
+    /** Number of existence levels reached, including level eight at the finale. */
+    public static int existenceLevel(int elapsedMs) {
+        int level = 0;
+        for (int boundary : LEVEL_BOUNDARIES_MS) {
+            if (elapsedMs >= boundary) {
+                level++;
+            }
+        }
+        return level;
+    }
+
+    /**
+     * Fractional fill of the current level segment. It approaches full before each cue, resets when
+     * that cue increments the level, and stays full after the finale.
+     */
+    public static float existenceLevelFraction(int elapsedMs) {
+        int level = existenceLevel(elapsedMs);
+        if (level >= LEVEL_BOUNDARIES_MS.length) {
+            return 1f;
+        }
+        int segmentStart = level == 0 ? 0 : LEVEL_BOUNDARIES_MS[level - 1];
+        int segmentEnd = LEVEL_BOUNDARIES_MS[level];
+        if (segmentEnd <= segmentStart) {
+            return 1f;
+        }
+        return Mth.clamp((elapsedMs - segmentStart) / (float) (segmentEnd - segmentStart), 0f, 1f);
     }
 
     /** True once the finale burst is due. */

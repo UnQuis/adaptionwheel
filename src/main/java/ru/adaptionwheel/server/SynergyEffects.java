@@ -45,6 +45,13 @@ public final class SynergyEffects {
 
     private static final Set<UUID> CHAINED = new HashSet<>();
 
+    /**
+     * Gravebloom deals damage synchronously from the hurt callback. The returned damage can in
+     * turn trigger another player's Gravebloom, so this guard is deliberately global to the
+     * current call stack rather than keyed by player.
+     */
+    private static final ThreadLocal<Boolean> GRAVEBLOOM_RETALIATION = ThreadLocal.withInitial(() -> false);
+
     private static final Map<UUID, Long> LAST_ON_FIRE = new HashMap<>();
 
     /**
@@ -161,12 +168,10 @@ public final class SynergyEffects {
     }
 
     private static void chainLightning(ServerPlayer attacker, LivingEntity first, double power) {
-        if (!CHAINED.add(attacker.getUUID())) {
+        UUID attackerId = attacker.getUUID();
+        if (!CHAINED.add(attackerId)) {
             return;
         }
-        ((ServerLevel) attacker.level()).getServer()
-                .execute(() -> CHAINED.remove(attacker.getUUID()));
-        boolean scheduled = true;
         try {
             AABB box = attacker.getBoundingBox().inflate(6.0);
             List<LivingEntity> near = attacker.level().getEntitiesOfClass(LivingEntity.class, box,
@@ -188,9 +193,9 @@ public final class SynergyEffects {
                         first.getX(), first.getY(0.5), first.getZ(), 8, 0.3, 0.3, 0.3, 0.05);
             }
         } finally {
-            if (!scheduled) {
-                CHAINED.remove(attacker.getUUID());
-            }
+            // Keep the guard for the whole synchronous damage chain. Server.execute() would run
+            // inline here and clear it before nested hurt callbacks could observe it.
+            CHAINED.remove(attackerId);
         }
     }
 
@@ -206,12 +211,24 @@ public final class SynergyEffects {
     }
 
     public static void onHurtTaken(ServerPlayer player, LivingEntity attacker, float amount) {
-        if (amount <= 0 || player.level().isClientSide() || !isActive(player, Synergies.GRAVEBLOOM)) {
+        if (GRAVEBLOOM_RETALIATION.get()
+                || amount <= 0
+                || player.level().isClientSide()
+                || !isActive(player, Synergies.GRAVEBLOOM)
+                || attacker == null
+                || !attacker.isAlive()
+                || attacker.isAlliedTo(player)) {
             return;
         }
-        if (attacker != null && attacker.isAlive() && !attacker.isAlliedTo(player)) {
+
+        GRAVEBLOOM_RETALIATION.set(true);
+        try {
             attacker.hurt(player.damageSources().playerAttack(player),
                     (float) (amount * 0.12 * strength(player, Synergies.GRAVEBLOOM)));
+        } finally {
+            // hurt() is synchronous and can throw from another damage listener; never leave
+            // retaliation disabled for the rest of this server-thread call stack.
+            GRAVEBLOOM_RETALIATION.remove();
         }
     }
 
