@@ -142,14 +142,14 @@ public final class DimensionImpactFX {
         TextureTarget target = scratchFor(main.width, main.height);
 
         target.bindWrite(true);
-        pass(main.getColorTextureId(), target.width, target.height, 0f, 0f, 0f, 1f, 0f, 0f);
+        pass(main.getColorTextureId(), target.width, target.height, 0f, 0f, 0f, 1f, 0f, 0f, true);
 
         main.bindWrite(true);
         pass(target.getColorTextureId(), main.width, main.height,
                 current * configStrength,
                 AdaptionConfig.DIMENSION_IMPACT_ABERRATION.get().floatValue(),
                 flashAmount * 0.35f,
-                1f, progress, configStrength);
+                1f, progress, configStrength, false);
     }
 
     /**
@@ -172,16 +172,48 @@ public final class DimensionImpactFX {
             graphics.fill(0, 0, graphics.guiWidth(), graphics.guiHeight(), (alpha << 24) | 0xFFFFFF);
         }
 
-        float duration = AdaptionConfig.DIMENSION_IMPACT_FLASH_MS.get().floatValue() / 1000f;
-        if (elapsed >= duration) {
+        int index = flashFrameIndex();
+        if (index < 0) {
             return;
         }
-        int frames = Math.max(1, AdaptionConfig.DIMENSION_IMPACT_FLASH_FRAMES.get());
-        int index = Mth.clamp((int) (elapsed / duration * frames), 0, frames - 1);
 
         float alpha = Mth.clamp(AdaptionConfig.DIMENSION_IMPACT_FLASH_STRENGTH.get().floatValue(), 0f, 1f);
         int argb = ((int) (alpha * 255f) << 24) | (index % 2 == 0 ? VOID_PAPER_RGB : VOID_INK_RGB);
         graphics.fill(0, 0, graphics.guiWidth(), graphics.guiHeight(), argb);
+    }
+
+    /**
+     * Index of the flash step shown right now, or {@code -1} once the flash sequence has finished.
+     *
+     * <p>Shared between {@link #renderFlash} and {@link #currentMask} so the colour flash and the
+     * texture mask can never disagree about which step is on screen, and so retuning one keeps the
+     * other in step by construction rather than by remembering.
+     */
+    private static int flashFrameIndex() {
+        float duration = AdaptionConfig.DIMENSION_IMPACT_FLASH_MS.get().floatValue() / 1000f;
+        if (elapsed >= duration) {
+            return -1;
+        }
+        int frames = Math.max(1, AdaptionConfig.DIMENSION_IMPACT_FLASH_FRAMES.get());
+        return Mth.clamp((int) (elapsed / duration * frames), 0, frames - 1);
+    }
+
+    /**
+     * The texture mask for the current flash step, or {@code null} when masks are disabled, no step
+     * is showing, or no {@code frame_N.png} exists in any known namespace. Mirrors the original
+     * mod's resolver: masks ride the flash clock but are not gated on the flash overlay being
+     * enabled, so composing frames works even with the white/black alternation turned off.
+     *
+     * <p>Resolved fresh on each panel pass rather than cached: the work is a handful of map lookups
+     * and a 24-byte header read, it only happens while the panel is on screen, and a cache would
+     * hold a released {@code AbstractTexture} across a resource-pack reload.
+     */
+    @Nullable
+    private static ImpactMaskResolver.Mask currentMask() {
+        if (!AdaptionConfig.DIMENSION_IMPACT_TEXTURE_MASKS.get()) {
+            return null;
+        }
+        return ImpactMaskResolver.resolve(Minecraft.getInstance(), flashFrameIndex());
     }
 
     /**
@@ -286,7 +318,7 @@ public final class DimensionImpactFX {
      */
     private static void pass(int sourceTexture, int width, int height,
                              float passStrength, float aberration, float flashAmount, float edgeGain,
-                             float progress, float burstGain) {
+                             float progress, float burstGain, boolean copyPass) {
         ShaderInstance active = shader;
         if (active == null) {
             return;
@@ -297,7 +329,19 @@ public final class DimensionImpactFX {
         RenderSystem.disableScissor();
         RenderSystem.depthMask(false);
 
+        // The copy pass exists only to move the frame into the scratch target, so it must not draw
+        // a mask - it does not even read its neighbours. Java decides this explicitly rather than
+        // leaning on the shader's strength early-out, so the sampler it binds is always one it
+        // actually means.
+        ImpactMaskResolver.Mask mask = copyPass ? null : currentMask();
+
         active.setSampler("Sampler0", sourceTexture);
+        // ImpactSampler is declared in the program, so it must always be bound: ShaderInstance
+        // skips binding a sampler it has no mapping for, which would leave the mask sampling
+        // whatever unit 1 last held. When there is no mask the scene texture stands in and the
+        // shader's options.x gate keeps it out of the maths entirely.
+        active.setSampler("ImpactSampler", mask != null ? mask.texture() : sourceTexture);
+
         active.safeGetUniform("ImpactSize").set((float) width, (float) height);
         active.safeGetUniform("ImpactParams").set(passStrength, aberration, flashAmount, edgeGain);
         // zw is the shockwave/speed-line origin in screen uv. This was (0, 0) - the top-left
@@ -308,6 +352,14 @@ public final class DimensionImpactFX {
                 BURST_LINES_GAIN * burstGain,
                 BURST_SCREENTONE_CRAWL,
                 BURST_INK_DARKNESS);
+        active.safeGetUniform("ImpactMaskOptions").set(
+                mask != null ? 1f : 0f,
+                AdaptionConfig.DIMENSION_IMPACT_TEXTURE_SMOOTH_INVERT.get() ? 1f : 0f,
+                AdaptionConfig.DIMENSION_IMPACT_TEXTURE_STRETCH.get() ? 1f : 0f,
+                0f);
+        active.safeGetUniform("ImpactMaskSize").set(
+                mask != null ? (float) mask.width() : 1f,
+                mask != null ? (float) mask.height() : 1f);
         active.apply();
 
         BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);

@@ -108,6 +108,16 @@ All six exist on **both** branches (`1.21.1` and `26.3`) and are configured, not
   `adaptedExistenceTarget`, and `tickFlight` (which **revokes** `mayfly` again). `startTask` and
   `startOrAccelerate` both refuse to start or accelerate a disabled concept, so a disabled adaptation does not
   re-analyse either. `AdaptionHud` greys the row and prints `[OFF]`.
+  **`active()` is only valid for ONE-TIME concepts — never call it on a leveled one.** `applyGrant` puts leveled
+  concepts (`Type_*`, `Mine_Labor`, the fists' `Fist_*` stages, …) only in the `levels` map and never in the
+  `adapted` set, so `active(Fist_Diamond)` is *always* false no matter the level. The server-side fist-speed gate
+  ("same split as FistLuck") used exactly that accessor: the server silently returned hand speed while the raw
+  client mined at fist speed, and every break snapped back in place (the client-faster-than-server shape). When
+  the same gate was later mirrored to the client, the speed died on both sides instead — both fixes false, zero
+  reverts, zero speed, a clean report of "dirt no longer breaks instantly". A reach-derived stage must gate on
+  **`isEnabled(concept(tier))`**, not `active()` and not `levelOrZero(...) > 0` — `currentTier` already encodes
+  reach, and a freshly-unlocked stage legitimately sits at level 0 (maxing Wood *is* why Stone speed applies).
+  Pinned by `DisableTests.aLeveledStageIsGatedByIsEnabledNotActive`.
   **The client mirror needs the same two accessors or the switch is half a switch.** This was shipped broken and
   the server half hid it: the switch worked, the switch showed, the switch stopped the damage reduction — and the
   darkness lightmap kept lifting the lightmap anyway. `ClientAdaption` now carries `active`/`levelOrZero`

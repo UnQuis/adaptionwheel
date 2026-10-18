@@ -151,4 +151,37 @@ public class DisableTests {
         return data;
     }
 
+    /**
+     * The fist's stage concepts (Fist_Wood..Fist_Netherite) are LEVELED, and applyGrant puts
+     * leveled concepts only in the levels map, never in the adapted set. active(Fist_*) is
+     * therefore always false, no matter the levels. The server-side speed gate ("same split as
+     * FistLuck") used exactly that accessor, so the server silently kept the fist at hand speed
+     * while the raw client ran at full fist speed: every break snapped back. When the same gate
+     * was mirrored to the client the speed died on both sides instead. The gate must be
+     * isEnabled().
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aLeveledStageIsGatedByIsEnabledNotActive(GameTestHelper helper) {
+
+        String stage = ru.adaptionwheel.category.FistTiers.concept(3); // Fist_Diamond
+        PlayerAdaption data = new PlayerAdaption();
+        data.levels.put(stage, 2);
+        data.invalidateAdaptCount();
+
+        helper.assertTrue(data.level(stage) == 2, "test setup: the stage must be leveled and stored");
+        helper.assertTrue(!data.active(stage),
+                "active() is false for a leveled stage (the adapted set only ever holds one-time "
+                        + "concepts) -- the gate that speeds the fist must NOT be active()");
+        helper.assertTrue(data.isEnabled(stage),
+                "isEnabled() is the switch check that works for a leveled stage");
+
+        data.toggleEnabled(stage);
+        helper.assertTrue(!data.isEnabled(stage),
+                "switching the stage off must be visible to isEnabled(), or the speed keeps running "
+                        + "while the row shows off");
+        helper.assertTrue(data.level(stage) == 2,
+                "and the level must survive the switch, like leveledKeepsItsNumberWhileOff");
+        helper.succeed();
+    }
+
 }

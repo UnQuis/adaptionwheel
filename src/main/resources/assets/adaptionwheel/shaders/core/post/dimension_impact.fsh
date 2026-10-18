@@ -1,6 +1,7 @@
 #version 150
 
 uniform sampler2D Sampler0;
+uniform sampler2D ImpactSampler;
 
 uniform vec2 ImpactSize;
 // x strength, y chromatic aberration, z flash, w edge gain.
@@ -11,6 +12,10 @@ uniform vec4 ImpactProgress;
 uniform vec4 ImpactBurst;
 uniform vec4 ImpactInk;
 uniform vec4 ImpactPaper;
+// x use texture mask, y smooth invert, z stretch to screen, w reserved.
+uniform vec4 ImpactMaskOptions;
+// xy frame_N.png size in pixels, for the aspect-preserving crop.
+uniform vec2 ImpactMaskSize;
 
 in vec2 texCoord;
 out vec4 fragColor;
@@ -85,6 +90,50 @@ void main() {
     frame = mix(frame, ImpactInk.rgb * dots, mid * 0.8);
     frame = mix(frame, ImpactInk.rgb * 0.25, ink * ImpactBurst.w);
     frame = mix(frame, vec3(1.0), core);
+
+    // Optional frame_N.png masks. The mask is a black/white image: white keeps the
+    // threshold-converted scene, black selects its inverse. This is how the original mod
+    // composed its frames by hand, and it folds its textured-invert pass in without a second
+    // program. Options.x is set false on the copy pass and when no mask resolves, in which case
+    // the procedural two-tone above stands.
+    if (ImpactMaskOptions.x > 0.5) {
+        vec3 baseConvertedColor = mix(ImpactInk.rgb, ImpactPaper.rgb, step(vec3(0.5), col));
+        vec3 targetColor = mix(ImpactPaper.rgb, ImpactInk.rgb, step(vec3(0.5), col));
+        vec2 maskUv = uv;
+
+        if (ImpactMaskOptions.z < 0.5) {
+            // Preserve the mask's aspect ratio and centre-crop it to the screen; uv runs
+            // outside [0, 1] where the mask does not reach and is left as the plain frame.
+            //
+            // No vertical flip here, unlike the 26.3 port: this branch samples a plain texture
+            // through Sampler0's own convention, where v = 0 is the image's top row (the same
+            // convention GuiGraphics.blit uses), and the quad's uv.y = 0 already lands on the top
+            // of the screen. 26.3's mask sampler goes through its own pipeline and needed the
+            // flip; copying it here would draw the mask upside down.
+            vec2 inputSize = max(ImpactSize, vec2(1.0));
+            vec2 frameSize = max(ImpactMaskSize, vec2(1.0));
+            vec2 ratio = frameSize / inputSize;
+            ratio /= max(ratio.x, ratio.y);
+            vec2 overflow = 1.0 - ratio;
+            maskUv = (uv - overflow * 0.5) / ratio;
+        }
+
+        vec3 textureFrame = baseConvertedColor;
+        bool insideMask = all(greaterThanEqual(maskUv, vec2(0.0)))
+                && all(lessThanEqual(maskUv, vec2(1.0)));
+        if (insideMask) {
+            vec4 mask = texture(ImpactSampler, maskUv);
+            float invertAmount = dot(mask.rgb, vec3(1.0 / 3.0));
+            vec3 maskedColor;
+            if (ImpactMaskOptions.y > 0.5) {
+                maskedColor = mix(baseConvertedColor, targetColor, 1.0 - invertAmount);
+            } else {
+                maskedColor = invertAmount < 0.5 ? targetColor : baseConvertedColor;
+            }
+            textureFrame = mix(baseConvertedColor, maskedColor, mask.a);
+        }
+        frame = textureFrame;
+    }
 
     // The drawn burst: one hard ring leaving the impact centre, sized to reach the edges as its
     // own short window ends, plus radial speed lines. Both decay on their own fast clock

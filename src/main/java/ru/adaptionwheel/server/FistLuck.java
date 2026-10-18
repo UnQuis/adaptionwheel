@@ -36,8 +36,12 @@ public final class FistLuck {
         PlayerAdaption data = AdaptionEvents.dataOf(player);
         // currentTier answers "which stage did the player reach", which is permanent, so the
         // switch is applied here instead: luck is an effect and must stop when the fist is off.
-        int multiplier = FistTiers.luckMultiplier(data.active(FistTiers.concept(
-                FistMastery.currentTier(data))) ? FistMastery.currentTier(data) : -1);
+        // isEnabled(), not active(): the tier concept is LEVELED and active(Fist_*) is always
+        // false (leveled concepts never enter the adapted set, see applyGrant), so the old gate
+        // dead-listed this whole method to a x1 multiplier while the fist was visibly on.
+        int tier = FistMastery.currentTier(data);
+        int multiplier = FistTiers.luckMultiplier(
+                tier >= 0 && data.isEnabled(FistTiers.concept(tier)) ? tier : -1);
         if (multiplier <= 1 || event.getDrops().isEmpty()) {
             return;
         }

@@ -233,7 +233,7 @@ public final class AdaptionCommand {
                         .executes(ctx -> aggro(ctx, self(ctx))))
                 .then(Commands.literal("altar")
                         .executes(ctx -> altarLookup(ctx, null))
-                        .then(Commands.argument("item", StringArgumentType.word())
+                        .then(Commands.argument("item", StringArgumentType.greedyString())
                                 .executes(ctx -> altarLookup(ctx,
                                         StringArgumentType.getString(ctx, "item")))))
                 .then(Commands.literal("flight")

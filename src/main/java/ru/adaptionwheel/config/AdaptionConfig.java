@@ -141,6 +141,9 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_FLASH_FRAMES;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FLASH_MS;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FLASH_STRENGTH;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_TEXTURE_MASKS;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_TEXTURE_STRETCH;
+    public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_TEXTURE_SMOOTH_INVERT;
     public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_FOV_PUNCH_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_FOV_PUNCH_STRENGTH;
     public static final ModConfigSpec.ConfigValue<Boolean> EXISTENCE_CINEMATIC_ENABLED;
@@ -762,6 +765,20 @@ public final class AdaptionConfig {
                         "0.75 gives a 75% white then 75% black. A weak black half reads as dirt on",
                         "the screen rather than as an impact.")
                 .defineInRange("dimensionImpactFlashStrength", 0.75, 0.0, 1.0);
+        DIMENSION_IMPACT_TEXTURE_MASKS = c.comment(
+                        "Use optional frame_N.png black/white masks from impact-frames, impact_frames or",
+                        "adaptionwheel:textures/effect/frame_N.png. The mask is a black/white image whose",
+                        "white areas keep the threshold-converted scene and whose black areas select its",
+                        "inverse, which is how the original mod composed its frames by hand. Missing",
+                        "masks leave the built-in procedural two-tone panel unchanged.")
+                .define("dimensionImpactTextureMasks", true);
+        DIMENSION_IMPACT_TEXTURE_STRETCH = c.comment(
+                        "Stretch a frame mask to the screen; off preserves its aspect ratio and center-crops.")
+                .define("dimensionImpactTextureStretch", false);
+        DIMENSION_IMPACT_TEXTURE_SMOOTH_INVERT = c.comment(
+                        "Blend mask luminance continuously between the paper/ink image and its inverse.",
+                        "Off uses a hard black/white threshold, matching the original impact-frame shader.")
+                .define("dimensionImpactTextureSmoothInvert", false);
         c.pop();
         DIMENSION_IMPACT_FOV_PUNCH_ENABLED = c.comment("Pull the FOV inward for the opening instant of the",
                         "frame, on the same clock as the panel. A narrowing lens on detonation reads as",

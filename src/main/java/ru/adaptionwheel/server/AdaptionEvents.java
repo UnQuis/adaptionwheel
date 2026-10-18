@@ -78,6 +78,10 @@ public class AdaptionEvents {
 
     private static final ResourceLocation HP_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "hp");
     private static final ResourceLocation ARMOR_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "armor");
+    private static final ResourceLocation ADAPTATION_COUNT_SPEED_MODIFIER =
+            ResourceLocation.fromNamespaceAndPath("adaptionwheel", "adaptation_count_speed");
+    private static final ResourceLocation ADAPTATION_COUNT_JUMP_MODIFIER =
+            ResourceLocation.fromNamespaceAndPath("adaptionwheel", "adaptation_count_jump");
     private static final ResourceLocation SWIM_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "swim");
     private static final ResourceLocation LIQUID_SPEED_MODIFIER = ResourceLocation.fromNamespaceAndPath("adaptionwheel", "liquid_speed");
     private static final ResourceLocation SUBMERGED_MINING_MODIFIER =
@@ -1445,16 +1449,34 @@ public class AdaptionEvents {
     }
 
     private static void triggerImpactShockwave(ServerPlayer player, float fallDistance) {
+        if (!Float.isFinite(fallDistance) || fallDistance <= 0f) {
+            return;
+        }
+
         ServerLevel level = (ServerLevel) player.level();
         double radius = SynergyEffects.impactRadius(player, AdaptionConfig.IMPACT_STOMP_RADIUS.get());
-        float damage = Math.max(2f, (float) ((fallDistance - AdaptionConfig.IMPACT_STOMP_MIN_FALL.get() * 0.5)
-                * AdaptionConfig.IMPACT_STOMP_DAMAGE_PER_BLOCK.get()));
+        double rawDamage = (fallDistance - AdaptionConfig.IMPACT_STOMP_MIN_FALL.get() * 0.5)
+                * AdaptionConfig.IMPACT_STOMP_DAMAGE_PER_BLOCK.get();
+        if (!Double.isFinite(radius) || radius <= 0.0
+                || !Double.isFinite(rawDamage) || rawDamage > Float.MAX_VALUE) {
+            return;
+        }
+        float damage = Math.max(2f, (float) rawDamage);
+        var source = player.damageSources().playerAttack(player);
 
         List<LivingEntity> targets = level.getEntitiesOfClass(LivingEntity.class,
                 player.getBoundingBox().inflate(radius),
                 e -> e != player && e.isAlive() && !e.isAlliedTo(player));
         for (LivingEntity target : targets) {
-            target.hurt(player.damageSources().playerAttack(player), damage);
+            // The list is a snapshot: an earlier hit (or another listener it invokes) may have
+            // killed a later target before we reach it. Never begin a second hurt pipeline for a
+            // dead/removed entity; NeoForge rejects entities killed from inside LivingDamageEvent.Pre.
+            if (target == player || target.isRemoved() || !target.isAlive()) {
+                continue;
+            }
+            if (!target.hurt(source, damage) || target.isRemoved() || !target.isAlive()) {
+                continue;
+            }
             Vec3 away = target.position().subtract(player.position());
             double horizontal = Math.max(0.25, Math.sqrt(away.x * away.x + away.z * away.z));
             target.push(away.x / horizontal * 1.2, 0.5, away.z / horizontal * 1.2);
@@ -1680,6 +1702,7 @@ public class AdaptionEvents {
     public static void grantConceptUpTo(ServerPlayer player, PlayerAdaption data, String concept,
                                         int targetLevel) {
         applyGrant(player, data, concept, targetLevel);
+        applyStats(player, data);
 
         applyEnvEffects(player, data);
         saveToItem(player, data);
@@ -1945,6 +1968,7 @@ public class AdaptionEvents {
     @SubscribeEvent
     public static void onBreakSpeed(PlayerEvent.BreakSpeed event) {
         Player player = event.getEntity();
+        float base = event.getNewSpeed();
 
         float speed = FistMastery.breakSpeed(player, event.getNewSpeed(), event.getState());
 
@@ -1962,6 +1986,28 @@ public class AdaptionEvents {
 
         if (SurfaceAdaptations.hasAquaticMastery(player)) {
             event.setNewSpeed(event.getNewSpeed() * 1.5f);
+        }
+
+        // TEMPORARY diagnostics for the block-revert investigation: enable with
+        // -Daw.debugBreakSpeed on the run. Logs every input that feeds the destroy
+        // speed on whichever side the event fired, once per second while breaking,
+        // so a client/server divergence is visible as two lines with different numbers.
+        if (Boolean.getBoolean("aw.debugBreakSpeed") && player.tickCount % 20 == 0) {
+            String side = player.level().isClientSide ? "CLIENT" : "SERVER";
+            String state = String.valueOf(event.getState());
+            int idx = state.indexOf('[');
+            if (idx >= 0) state = state.substring(0, idx);
+            System.out.println("[aw-break] " + side
+                    + " state=" + state
+                    + " base=" + base
+                    + " final=" + event.getNewSpeed()
+                    + " fistTier=" + SurfaceAdaptations.fistTier(player)
+                    + " instaUnlocked=" + SurfaceAdaptations.instabreakUnlocked(player)
+                    + " instaActive=" + SurfaceAdaptations.instabreakActive(player)
+                    + " labor=" + laborLevel
+                    + " onGround=" + player.onGround()
+                    + " eyeInWater=" + player.isEyeInFluid(net.minecraft.tags.FluidTags.WATER)
+                    + " wearing=" + SurfaceAdaptations.wearingWheel(player));
         }
     }
 
@@ -2024,6 +2070,13 @@ public class AdaptionEvents {
         applyStat(player.getAttribute(Attributes.ARMOR), ARMOR_MODIFIER,
                 count * AdaptionConfig.BONUS_ARMOR_FLAT.get(),
                 AttributeModifier.Operation.ADD_VALUE);
+
+        // Apply the requested movement bonuses directly as attributes (no potion effects); both
+        // scale linearly and stop increasing after the 400-adaptation progression cap.
+        applyStat(player.getAttribute(Attributes.MOVEMENT_SPEED), ADAPTATION_COUNT_SPEED_MODIFIER,
+                AdaptationProgression.movementSpeedBonus(count), AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL);
+        applyStat(player.getAttribute(Attributes.JUMP_STRENGTH), ADAPTATION_COUNT_JUMP_MODIFIER,
+                AdaptationProgression.jumpStrengthBonus(count), AttributeModifier.Operation.ADD_VALUE);
 
         boolean liquid = data.isEnabled(Concepts.ENV_LIQUID) && data.active(Concepts.ENV_LIQUID);
         applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), SWIM_MODIFIER,
