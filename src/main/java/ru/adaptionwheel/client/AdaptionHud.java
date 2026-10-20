@@ -60,16 +60,28 @@ public class AdaptionHud {
 
     @SubscribeEvent
     public static void render(RenderGuiEvent.Post event) {
-        if (!AdaptionConfig.HUD_ENABLED.get() || !ClientAdaption.wearingWheel) {
-            return;
-        }
-        if (ClientAdaption.TASKS.isEmpty() && !ClientAdaption.adversityActive
-                && ClientAdaption.EXISTENCE_PROGRESS.isEmpty() && !hasFistRow()
-                && !ClientAdaption.instabreakUnlocked) {
+        if (!ClientAdaption.wearingWheel) {
             return;
         }
         GuiGraphics graphics = event.getGuiGraphics();
         Minecraft mc = Minecraft.getInstance();
+
+        // The Instabreak switch is a state readout, not an analysis row, so it is drawn directly
+        // in screen space near the hotbar and survives the "nothing is being analysed" early
+        // return below. It is deliberately independent of showAnalysisHud: a player who hides the
+        // analysis list still needs to know whether their fist is about to break the block in front
+        // of them.
+        if (ClientAdaption.instabreakUnlocked) {
+            drawInstabreakPanel(graphics, mc);
+        }
+
+        if (!AdaptionConfig.HUD_ENABLED.get()) {
+            return;
+        }
+        if (ClientAdaption.TASKS.isEmpty() && !ClientAdaption.adversityActive
+                && ClientAdaption.EXISTENCE_PROGRESS.isEmpty() && !hasFistRow()) {
+            return;
+        }
         Font font = mc.font;
         int opacity = AdaptionConfig.HUD_OPACITY.get();
         float scale = (float) (double) AdaptionConfig.HUD_SCALE.get();
@@ -94,9 +106,6 @@ public class AdaptionHud {
                 withAlpha(HEADER_COLOR, headerOpacity), true);
         graphics.drawString(font, Component.literal("ADAPTATION_ANALYSIS"), 0, font.lineHeight,
                 withAlpha(HEADER_COLOR, headerOpacity), true);
-        if (ClientAdaption.instabreakUnlocked) {
-            drawInstabreakBadge(graphics, font, opacity);
-        }
 
         List<Row> rows = new ArrayList<>();
         if (ClientAdaption.adversityActive) {
@@ -130,23 +139,19 @@ public class AdaptionHud {
                     ru.adaptionwheel.category.FistTiers::color));
         }
 
-        // The row appears only once the punch is trainable -- the first bare-handed hostile kill --
-        // and then stays for good. The gate is `combatFistTier()`, derived from the synced LEVELS
-        // map, not from the per-kill progress fields: those travel on `CombatFistProgressPayload`,
-        // which is only sent when a kill lands and is cleared on logout, so gating on them would
-        // make the row vanish again on every relogin after the player had already unlocked it.
+        // Only show a row while there is a next level to earn. Once the last material is maxed the
+        // server reports total 0; the old code still added a row, which drew a full bar under
+        // "100.0% MAX" and was the only thing left on an otherwise finished HUD. The permanent
+        // Instabreak chip near the hotbar now carries the finished-ladder state.
         {
             int trained = ClientAdaption.combatFistTier();
-            if (trained >= 0) {
+            if (trained >= 0 && ClientAdaption.combatFistProgressTotal > 0) {
                 int tierCount = ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT;
                 int tier = Math.min(trained, tierCount - 1);
-                boolean maxed = ClientAdaption.combatFistProgressTotal <= 0;
                 String concept = ru.adaptionwheel.category.CombatFistTiers.concept(tier);
-                // No suffix beyond MAX: the meter already prints "0/6 kills" from blocksDone/Total,
-                // so a repeated counter suffix would just say the same number twice.
-                rows.add(buildFistTierRow(concept, maxed ? 1f : combatFistProgress(),
+                rows.add(buildFistTierRow(concept, combatFistProgress(),
                         ClientAdaption.combatFistProgressDone, ClientAdaption.combatFistProgressTotal,
-                        maxed ? "MAX" : null, ClientAdaption.level(concept), tier, tierCount,
+                        null, ClientAdaption.level(concept), tier, tierCount,
                         ru.adaptionwheel.category.CombatFistTiers::concept,
                         ru.adaptionwheel.category.CombatFistTiers::color));
             }
@@ -381,21 +386,42 @@ public class AdaptionHud {
     }
 
     /**
-     * A persistent Instabreak on/off badge. It sits under the header rather than in a fist row
-     * because the netherite fist row disappears when the ladder is maxed -- exactly when
-     * Instabreak unlocks -- so a row-bound indicator would vanish at the moment it matters most.
+     * A permanent Instabreak on/off chip beside the hotbar.
+     *
+     * <p>It used to sit under the adaptation header, which meant it vanished whenever the analysis
+     * list had nothing to show. It is a state readout, so it is drawn in screen space and anchored
+     * to the hotbar instead: to the right of the hotbar when the screen is wide enough, otherwise
+     * clamped to the screen edge, and just above the experience bar so it covers neither the
+     * hotbar nor the level number.
      */
-    private static void drawInstabreakBadge(GuiGraphics graphics, Font font, int opacity) {
+    private static void drawInstabreakPanel(GuiGraphics graphics, Minecraft mc) {
         boolean active = ClientAdaption.instabreakActive;
         int color = active ? 0xFF57D68D : 0xFF9A9A9A;
         Component label = Component.translatable(active
                 ? "adaptionwheel.instabreak.on"
                 : "adaptionwheel.instabreak.off");
-        int width = font.width(label);
-        int y = font.lineHeight * 2 + 3;
-        graphics.fill(-2, y - 2, width + 4, y + 9, withAlpha(color, Math.round(opacity * 0.16f)));
-        graphics.fill(-2, y - 2, -1, y + 9, withAlpha(color, opacity));
-        graphics.drawString(font, label, 0, y, withAlpha(color, opacity), true);
+        Font font = mc.font;
+        int panelWidth = font.width(label) + 12;
+        int panelHeight = 14;
+        int screenWidth = mc.getWindow().getGuiScaledWidth();
+        int screenHeight = mc.getWindow().getGuiScaledHeight();
+        int hotbarRight = screenWidth / 2 + 91;
+        int x = hotbarRight + 4;
+        if (x + panelWidth > screenWidth - 2) {
+            x = Math.max(2, screenWidth - panelWidth - 2);
+        }
+        // The experience bar occupies screenHeight-29 .. screenHeight-24; sit above it so the
+        // permanent chip never covers the level bar. The hotbar itself starts at screenHeight-22.
+        int y = screenHeight - 46;
+        int opacity = AdaptionConfig.HUD_OPACITY.get();
+        graphics.fill(x, y, x + panelWidth, y + panelHeight,
+                withAlpha(0x101012, Math.round(opacity * 0.86f)));
+        graphics.fill(x, y, x + panelWidth, y + 1,
+                withAlpha(0xFFFFFF, Math.round(opacity * 0.12f)));
+        graphics.fill(x, y + panelHeight - 1, x + panelWidth, y + panelHeight,
+                withAlpha(0xFFFFFF, Math.round(opacity * 0.08f)));
+        graphics.fill(x, y, x + 2, y + panelHeight, withAlpha(color, opacity));
+        graphics.drawString(font, label, x + 7, y + 3, withAlpha(color, opacity), true);
     }
 
     private static int withAlpha(int rgb, int alphaPercent) {

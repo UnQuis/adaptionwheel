@@ -164,6 +164,25 @@ public class AllAdaptationTests {
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aConceptStoredInBothSetsCountsOnce(GameTestHelper helper) {
+
+        // The All Adaptation item puts debuffs in both `adapted` and `levels`. The old count summed
+        // the two collections, so the HUD reported more adaptations than the menu listed for the
+        // same wheel. The union is the number a player actually has.
+        PlayerAdaption data = new PlayerAdaption();
+        String levitation = Concepts.debuff(MobEffects.LEVITATION);
+        data.adapted.add(levitation);
+        data.levels.put(levitation, PlayerAdaption.MAX_LEVEL);
+        data.adapted.add("Env_Void");
+        data.levels.put("Type_Fire", 1);
+
+        helper.assertTrue(data.getAdaptCount() == 3,
+                "one debuff stored in both collections plus two distinct concepts must count as 3,"
+                        + " got " + data.getAdaptCount());
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void migratingNeverCostsAKnownedLevel(GameTestHelper helper) {
 
         // The merging rules have to compose: copper folded into Iron and the flat punching fist folded

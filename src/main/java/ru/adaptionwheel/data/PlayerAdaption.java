@@ -147,7 +147,17 @@ public class PlayerAdaption {
 
     public int getAdaptCount() {
         if (cachedAdaptCount < 0) {
-            cachedAdaptCount = adapted.size() + (int) levels.values().stream().filter(l -> l > 0).count();
+            // Count concepts, not storage locations. A few keys (notably the debuff adaptations
+            // granted by the All Adaptation item) live in both `adapted` and `levels`, and summing
+            // the two collections counted those twice: the menu showed 483 while the HUD showed
+            // 503 for the same wheel. The union is the number the player actually has.
+            cachedAdaptCount = (int) java.util.stream.Stream.concat(
+                    adapted.stream(),
+                    levels.entrySet().stream()
+                            .filter(entry -> entry.getValue() > 0)
+                            .map(Map.Entry::getKey))
+                    .distinct()
+                    .count();
         }
         return cachedAdaptCount;
     }

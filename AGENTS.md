@@ -405,12 +405,23 @@ All three are on **both** branches and configured, not hard-coded.
   advancements meant rewiring 23 others**, since a missing parent drops its whole subtree with one
   `ERROR Couldn't load advancements` line and no per-file reason; the rewire was verified to leave
   nothing parented to a deleted tier and no unresolvable parent.
-- **The punching fist's HUD row is now drawn unconditionally**, like the breaking fist's. It used to
-  be gated on `combatFistProgressTotal > 0`, so a player who had never killed anything bare-handed saw
-  **no row at all** and therefore never learned the punch was trainable — a row that only appears once
-  you already know about it is not information. It reads `LOCKED - bare-handed kills` before the first
-  kill, and the meter now says **kills** rather than blocks (`Row.unit()`), because the breaking fist
-  counts blocks and the punching fist counts kills and both used to say "blocks".
+- **The punching fist's HUD row is drawn only while there is something to train.** It appears once
+  `combatFistTier()` has a stage and disappears when `combatFistProgressTotal` reaches 0 on the
+  finished Netherite ladder; the old code kept the final row and drew a full bar under
+  `100.0% MAX` with no next level to earn. The meter says **kills** rather than blocks
+  (`Row.unit()`), because the breaking fist counts blocks and the punching fist counts kills and both
+  used to say "blocks". The menu's Martial Arts ladder still shows the finished stages.
+- **The two adaptation counters disagreed because one counted storage slots.** `PlayerAdaption.getAdaptCount()`
+  summed `adapted.size()` and the number of positive `levels`, while the menu counted the union of the
+  two sets. The All Adaptation item stores debuffs in both, so ~20 concepts were counted twice and the
+  HUD read 503 against the menu's 483. It now counts `.distinct()` over both. Pinned by
+  `AllAdaptationTests.aConceptStoredInBothSetsCountsOnce`.
+- **Instabreak is a chip beside the hotbar, not an analysis row.** It used to sit under the HUD header,
+  which disappeared whenever nothing was being analysed and kept an otherwise empty header alive when
+  it was unlocked. It is now drawn in screen space at the hotbar's right edge (clamped on narrow
+  screens), above the XP bar, and survives `showAnalysisHud=false`; the finished Martial Arts row is
+  omitted instead of drawing `100.0% MAX`. The chip is hidden until `ClientAdaption.instabreakUnlocked`
+  is true.
 - **The fist counters reset on every rejoin, and the save was never lost — the counter was never in
   one.** "Netherite fist 20/166 blocks, log out, log back in, 0/166." `TIER_PROGRESS` (breaking) and
   `KILL_PROGRESS` (punching) were **static UUID-keyed maps**, and `forget()` clears those on logout,
@@ -459,15 +470,17 @@ All three are on **both** branches and configured, not hard-coded.
   player back to 0), and that the disabled set round trips a save — its first version asserted a
   codec was non-null, which passes even if the set were dropped from the record, so it was rewritten
   as a real round trip. 109 gametests.
-- **The punching fist's HUD row appears on the first bare-handed kill and then stays forever.** The
-  gate is `ClientAdaption.combatFistTier()`, derived from the synced `LEVELS` map — **not** from
-  `combatFistProgressTier`, which arrives on `CombatFistProgressPayload` and is cleared on logout, so
-  gating on it would make the row vanish again on every relog. Deriving it from levels also makes
-  "unlocked" the same condition the server used instead of a second one that can disagree. That
+- **The punching fist's HUD row appears once training starts and disappears when the ladder is
+  finished.** The gate is `ClientAdaption.combatFistTier()`, derived from the synced `LEVELS` map —
+  **not** from `combatFistProgressTier`, which arrives on `CombatFistProgressPayload` and is cleared on
+  logout, so gating on it would make the row vanish again on every relog. Deriving it from levels also
+  makes "unlocked" the same condition the server used instead of a second one that can disagree. That
   exposed a gap: the punching fist's counters were **never in the 1 Hz sync at all** (the breaking
   fist's were), so after a relog the row came back with an empty bar until the player killed
   something. `AdaptionSyncPayload` now carries `combatFistDone`/`combatFistTotal` as the recovery
-  path; the per-kill payload stays because that is what makes a kill show up immediately.
+  path; the per-kill payload stays because that is what makes a kill show up immediately. A finished
+  ladder has total 0 and no row; the permanent Instabreak chip near the hotbar carries that endgame
+  state.
 - **Two panel rows were both labelled "Starvation", "Drowning", "Suffocation" and "The Void" — one
   immunity and one resistance — and only the immunity one is gated.** `Env_Starve` cancels starve
   damage and refills the hunger bar; `Type_Starve` is a *damage reduction* in the generic loop.
