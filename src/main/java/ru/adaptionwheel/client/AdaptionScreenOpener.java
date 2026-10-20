@@ -21,9 +21,11 @@ public final class AdaptionScreenOpener {
         while (AdaptionKeybinds.OPEN_SCREEN_KEY.consumeClick()) {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null && mc.screen == null && ClientAdaption.wearingWheel) {
-                mc.setScreen(new AdaptationScreen());
-            } else if (mc.screen instanceof AdaptationScreen) {
-                mc.screen.onClose();
+                mc.setScreen(new AdaptationWheelScreen());
+            } else if (mc.screen instanceof AdaptationWheelScreen wheel) {
+                if (!wheel.isSearchFocused()) {
+                    wheel.onClose();
+                }
             }
         }
 

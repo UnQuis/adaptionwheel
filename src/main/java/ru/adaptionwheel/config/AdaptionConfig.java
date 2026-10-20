@@ -203,6 +203,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Double> EXISTENCE_REFLECT_MULTIPLIER;
 
     public static final ModConfigSpec.ConfigValue<Boolean> HUD_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Boolean> ABILITY_HUD_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> HUD_SCALE;
     public static final ModConfigSpec.ConfigValue<Integer> HUD_OFFSET_X;
     public static final ModConfigSpec.ConfigValue<Integer> HUD_OFFSET_Y;
@@ -466,6 +467,11 @@ public final class AdaptionConfig {
                         "Diamond and Netherite) and x16 at 100, i.e. a well-developed wheel reaches",
                         "Netherite by breadth rather than by 40 bare-handed kills.").comment()
                 .defineInRange("damagePerAdaptation", 0.15, 0.0, 10.0);
+        // Closed HERE, where the section is defined. It used to stay open, so fistMastery,
+        // skillIssue and dimensionDestroy were all written one level too deep
+        // (mutations.fistDamage.fistMastery.*) and the tracker could not find the keys at the
+        // documented paths, silently resetting whatever the player had set there.
+        s.pop();
 
         s.comment("--- Fist Mastery (Mutation_Fist: adaptation to breaking) ---").push("fistMastery");
         FIST_ENABLED = s.comment("Fist Mastery: max Mine_Labor and break a stone block bare-handed to",
@@ -531,8 +537,6 @@ public final class AdaptionConfig {
         DIMENSION_DESTROY_REQUIRED = s.comment("Adaptations on the wheel required to unlock Dimension Destroy.",
                         "The original gates it behind Transcendence; this mod uses the same idea.")
                 .defineInRange("adaptationsRequired", 450, 1, 1000);
-        s.pop();
-
         s.pop();
 
         s.pop();
@@ -694,6 +698,8 @@ public final class AdaptionConfig {
         c.comment("--- Visual Settings ---").push("visual");
 
         HUD_ENABLED = c.define("showAnalysisHud", true);
+        ABILITY_HUD_ENABLED = c.comment("Show the active-ability card beside the hotbar once abilities exist.")
+                .define("showAbilityHud", true);
         HUD_SCALE = c.defineInRange("hudScale", 0.8, 0.25, 3.0);
         HUD_OFFSET_X = c.defineInRange("hudOffsetX", -8, -500, 500);
         HUD_OFFSET_Y = c.defineInRange("hudOffsetY", 8, -500, 500);

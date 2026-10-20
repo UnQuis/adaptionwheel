@@ -51,11 +51,11 @@ public class MahoragaWheelItem extends Item implements ICurioItem {
         }
 
         if (net.neoforged.fml.loading.FMLEnvironment.dist.isClient()) {
-            net.minecraft.client.KeyMapping key = ru.adaptionwheel.client.AdaptionKeybinds.OPEN_SCREEN_KEY;
-            if (key != null && !key.isUnbound()) {
+            net.minecraft.client.KeyMapping menu = ru.adaptionwheel.client.AdaptionKeybinds.OPEN_SCREEN_KEY;
+            if (menu != null) {
                 tooltipComponents.add(Component.translatable(
                                 "item.adaptionwheel.mahoraga_wheel.tooltip4",
-                                key.getTranslatedKeyMessage())
+                                menu.getTranslatedKeyMessage())
                         .withStyle(ChatFormatting.DARK_GRAY));
             }
         }
