@@ -431,8 +431,8 @@ public final class AdaptionConfig {
         INVENTORY_ADAPTATION_SECONDS = s.comment("Seconds of a full inventory for the analysis to finish.")
                 .defineInRange("inventoryAnalysisSeconds", 60.0, 1.0, 3600.0);
 
-        s.comment("--- Hard Fist (the punching fist, five material stages) ---").push("fistDamage");
-        FIST_DAMAGE_ENABLED = s.comment("The punching fist: unlocked by killing a hostile mob with a bare",
+        s.comment("--- Martial Arts (the punching fist, five material stages) ---").push("fistDamage");
+        FIST_DAMAGE_ENABLED = s.comment("Martial Arts: unlocked by killing a hostile mob with a bare",
                         "hand -- a KILL, with the last blow landed by the hand and nothing in it that adds",
                         "attack damage. Every level is trained the same way, and the stages run",
                         "wood > stone > iron > diamond > netherite, 8 levels each, a stage opening",

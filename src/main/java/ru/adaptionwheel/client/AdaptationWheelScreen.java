@@ -14,7 +14,9 @@ import ru.adaptionwheel.ability.ActiveAbility;
 import ru.adaptionwheel.ability.ActiveAbilities;
 import ru.adaptionwheel.adapt.AdaptationDomain;
 import ru.adaptionwheel.adapt.AdaptationRegistry;
+import ru.adaptionwheel.category.CombatFistTiers;
 import ru.adaptionwheel.category.Concepts;
+import ru.adaptionwheel.category.FistTiers;
 import ru.adaptionwheel.category.Synergies;
 import ru.adaptionwheel.data.AdaptionTask;
 import ru.adaptionwheel.data.PlayerAdaption;
@@ -133,8 +135,6 @@ public final class AdaptationWheelScreen extends Screen {
     private int adaptLabelY;
     private int scrollViewportTop;
     private int scrollViewportBottom;
-    private int crossX;
-    private int crossY;
     private Rect searchRect = Rect.EMPTY;
     private Rect clearRect = Rect.EMPTY;
     private Rect trackHit = Rect.EMPTY;
@@ -175,7 +175,7 @@ public final class AdaptationWheelScreen extends Screen {
         drawSearch(graphics);
         if (twoColumn) {
             drawLeftCard(graphics);
-            drawCrosshair(graphics);
+            drawFloatingWheel(graphics);
         }
         drawTabs(graphics);
         drawRightColumn(graphics);
@@ -279,7 +279,7 @@ public final class AdaptationWheelScreen extends Screen {
                 if (group.isEmpty()) {
                     continue;
                 }
-                group.sort((a, b) -> menuName(a).getString().compareToIgnoreCase(menuName(b).getString()));
+                sortConcepts(group);
                 rows.add(new Row(Kind.GROUP, domain, null));
                 for (String concept : group) {
                     rows.add(new Row(Kind.CONCEPT, domain, concept));
@@ -287,7 +287,7 @@ public final class AdaptationWheelScreen extends Screen {
             }
         } else {
             List<String> group = new ArrayList<>(visible);
-            group.sort((a, b) -> menuName(a).getString().compareToIgnoreCase(menuName(b).getString()));
+            sortConcepts(group);
             for (String concept : group) {
                 rows.add(new Row(Kind.CONCEPT, selectedTab, concept));
             }
@@ -304,6 +304,39 @@ public final class AdaptationWheelScreen extends Screen {
             scrollTarget = Mth.clamp(scrollTarget, 0, maxScroll());
             scroll = Mth.clamp(scroll, 0, maxScroll());
         }
+    }
+
+    /**
+     * Fist rows read as a ladder, not as a dictionary.
+     *
+     * <p>Alphabetical order put Wooden above Netherite, which is exactly backwards from the way
+     * the stages are climbed. Labor stays above the whole ladder because it is the concept that
+     * unlocks it; every other concept in the domain still sorts by its display name.
+     */
+    private void sortConcepts(List<String> group) {
+        group.sort((a, b) -> {
+            int byRank = Integer.compare(menuRank(a), menuRank(b));
+            return byRank != 0
+                    ? byRank
+                    : menuName(a).getString().compareToIgnoreCase(menuName(b).getString());
+        });
+    }
+
+    private int menuRank(String concept) {
+        if (Concepts.MINE_LABOR.equals(concept)) {
+            return 0;
+        }
+        for (int tier = 0; tier < FistTiers.TIER_COUNT; tier++) {
+            if (FistTiers.concept(tier).equals(concept)) {
+                return 10 + FistTiers.TIER_COUNT - 1 - tier;
+            }
+        }
+        for (int tier = 0; tier < CombatFistTiers.TIER_COUNT; tier++) {
+            if (CombatFistTiers.concept(tier).equals(concept)) {
+                return 10 + CombatFistTiers.TIER_COUNT - 1 - tier;
+            }
+        }
+        return 100;
     }
 
     private boolean matches(String concept) {
@@ -565,11 +598,6 @@ public final class AdaptationWheelScreen extends Screen {
         adaptLabelY = abilityTop + abilityAreaH + 10;
         scrollViewportTop = adaptLabelY + 18;
         scrollViewportBottom = listBottom;
-
-        crossX = twoColumn ? (leftX + leftW + listX) / 2 : width / 2;
-        crossY = twoColumn
-                ? leftY + leftH / 2
-                : (scrollViewportTop + scrollViewportBottom) / 2;
 
         scrollTarget = Mth.clamp(scrollTarget, 0, maxScroll());
         scroll = Mth.clamp(scroll, 0, maxScroll());
@@ -1107,37 +1135,24 @@ public final class AdaptationWheelScreen extends Screen {
         }
     }
 
-    private void drawCrosshair(GuiGraphics graphics) {
+    /**
+     * The wheel is decoration, not a control. It used to sit in the middle of the gap with a
+     * crosshair, which put both directly over the domain rail -- and a crosshair that does nothing
+     * promises movement the panel does not have. The crosshair is gone; the wheel is pinned to the
+     * bottom of the gap, below the rail, and is simply not drawn when the rail has no space left.
+     */
+    private void drawFloatingWheel(GuiGraphics graphics) {
         int gap = listX - (leftX + leftW);
-        if (gap < 100) {
-            int arm = Mth.clamp(gap / 2 - 2, 4, 14);
-            int inner = Math.max(2, arm / 3);
-            int color = WheelUi.withAlpha(INK, 0.55f);
-            graphics.fill(crossX - arm, crossY, crossX - inner, crossY + 1, color);
-            graphics.fill(crossX + inner + 1, crossY, crossX + arm + 1, crossY + 1, color);
-            graphics.fill(crossX, crossY - arm, crossX + 1, crossY - inner, color);
-            graphics.fill(crossX, crossY + inner + 1, crossX + 1, crossY + arm + 1, color);
-            WheelUi.ringCircle(graphics, crossX, crossY, Math.max(3, gap / 2 - 1),
-                    WheelUi.withAlpha(INK, 0.10f));
-            graphics.fill(crossX, crossY, crossX + 1, crossY + 1, GOLD);
+        if (gap < 44) {
             return;
         }
-
-        WheelUi.ringCircle(graphics, crossX, crossY, 18, WheelUi.withAlpha(INK, 0.055f));
-        WheelUi.ringCircle(graphics, crossX, crossY, 48, WheelUi.withAlpha(INK, 0.030f));
-
-        int color = WheelUi.withAlpha(INK, 0.55f);
-        int arm = 15;
-        int gapPx = 5;
-        graphics.fill(crossX - arm, crossY, crossX - gapPx, crossY + 1, color);
-        graphics.fill(crossX + gapPx + 1, crossY, crossX + arm + 1, crossY + 1, color);
-        graphics.fill(crossX, crossY - arm, crossX + 1, crossY - gapPx, color);
-        graphics.fill(crossX, crossY + gapPx + 1, crossX + 1, crossY + arm + 1, color);
-        WheelUi.ringCircle(graphics, crossX, crossY, 4, WheelUi.withAlpha(INK, 0.38f));
-        graphics.fill(crossX, crossY, crossX + 1, crossY + 1, GOLD);
-
-        int floatCX = Mth.clamp(crossX - 70, leftX + leftW + 30, listX - 28);
-        int floatCY = crossY + 38;
+        int railBottom = tabY + (availableDomains.size() + 1) * TAB_HEIGHT
+                - (int) Math.round(tabScroll);
+        int floatCX = (leftX + leftW + listX) / 2;
+        int floatCY = footerY - 44;
+        if (floatCY - 24 < railBottom + 6) {
+            return;
+        }
         int bob = (int) Math.round(Math.sin((Util.getMillis() - openedAt) / 700.0) * 2.0);
         graphics.pose().pushPose();
         graphics.pose().translate(floatCX, floatCY + 26, 0);
@@ -1528,18 +1543,21 @@ public final class AdaptationWheelScreen extends Screen {
         if (max <= 0) {
             return;
         }
+        // These bands used to be white, which read as a light source glowing out of the paper at
+        // both ends of the list. They are meant to hide a card crossing the scroll viewport, not
+        // brighten it, so they now fade into the same near-black the page is drawn on.
         if (scroll > 2) {
             for (int i = 0; i < 8; i++) {
-                int alpha = (int) (255 * 0.08f * (8 - i));
+                int alpha = (int) (255 * 0.10f * (8 - i));
                 graphics.fill(listX, scrollViewportTop + i, listX + listW,
-                        scrollViewportTop + i + 1, (alpha << 24) | 0xFFFFFF);
+                        scrollViewportTop + i + 1, (alpha << 24) | 0x070708);
             }
         }
         if (scroll < max - 2) {
             for (int i = 0; i < 8; i++) {
-                int alpha = (int) (255 * 0.08f * (i + 1));
+                int alpha = (int) (255 * 0.10f * (i + 1));
                 int y = scrollViewportBottom - 8 + i;
-                graphics.fill(listX, y, listX + listW, y + 1, (alpha << 24) | 0xFFFFFF);
+                graphics.fill(listX, y, listX + listW, y + 1, (alpha << 24) | 0x111114);
             }
         }
     }

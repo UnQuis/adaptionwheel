@@ -139,7 +139,7 @@ public final class SwordOfExterminationHandler {
             // The tooltip promises "Melee hits". An arrow, a thrown trident or any other projectile
             // carries itself as the direct entity, so it must not inherit the current-HP bonus just
             // because the player who fired it is holding the sword. This is the same swing/shot test
-            // HardFist.trains uses; melee arrives with no direct entity or with the player himself.
+            // MartialArts.trains uses; melee arrives with no direct entity or with the player himself.
             return;
         }
 

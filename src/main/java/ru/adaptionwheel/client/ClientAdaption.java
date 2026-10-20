@@ -190,7 +190,7 @@ public final class ClientAdaption {
                 && level(ru.adaptionwheel.category.CombatFistTiers.concept(granted))
                         >= PlayerAdaption.MAX_LEVEL
                 && granted + 1 < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT) {
-            // The mirror of HardFist.trainingTier: a maxed stage hands the next one the kills, and
+            // The mirror of MartialArts.trainingTier: a maxed stage hands the next one the kills, and
             // the row has to name the stage the server is actually counting towards.
             return granted + 1;
         }

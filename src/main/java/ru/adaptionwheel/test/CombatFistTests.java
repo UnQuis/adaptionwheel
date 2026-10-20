@@ -65,12 +65,12 @@ public class CombatFistTests {
         data.levels.put(CombatFistTiers.concept(1), 1);
         data.invalidateAdaptCount();
 
-        helper.assertTrue(ru.adaptionwheel.server.HardFist.currentTier(data) == 1,
+        helper.assertTrue(ru.adaptionwheel.server.MartialArts.currentTier(data) == 1,
                 "with wood maxed and stone at level 1, the player is a Stone fighter, got tier "
-                        + ru.adaptionwheel.server.HardFist.currentTier(data));
-        helper.assertTrue(ru.adaptionwheel.server.HardFist.isMaxed(data, 0),
+                        + ru.adaptionwheel.server.MartialArts.currentTier(data));
+        helper.assertTrue(ru.adaptionwheel.server.MartialArts.isMaxed(data, 0),
                 "wood must still read as maxed, so the handover does not erase what was earned");
-        helper.assertTrue(!ru.adaptionwheel.server.HardFist.isMaxed(data, 1),
+        helper.assertTrue(!ru.adaptionwheel.server.MartialArts.isMaxed(data, 1),
                 "stone at level 1 must not read as maxed");
         helper.succeed();
     }
@@ -169,11 +169,11 @@ public class CombatFistTests {
         data.levels.put(CombatFistTiers.concept(0), PlayerAdaption.MAX_LEVEL);
         data.invalidateAdaptCount();
 
-        helper.assertTrue(ru.adaptionwheel.server.HardFist.currentTier(data) == 0,
+        helper.assertTrue(ru.adaptionwheel.server.MartialArts.currentTier(data) == 0,
                 "the stage reached is still Wood, which is permanent");
-        helper.assertTrue(ru.adaptionwheel.server.HardFist.trainingTier(data) == 1,
+        helper.assertTrue(ru.adaptionwheel.server.MartialArts.trainingTier(data) == 1,
                 "but the kills being trained are Stone's, got tier "
-                        + ru.adaptionwheel.server.HardFist.trainingTier(data));
+                        + ru.adaptionwheel.server.MartialArts.trainingTier(data));
 
         // A finished ladder has nothing to hand over to.
         PlayerAdaption done = empty();
@@ -181,20 +181,20 @@ public class CombatFistTests {
             done.levels.put(CombatFistTiers.concept(t), PlayerAdaption.MAX_LEVEL);
         }
         done.invalidateAdaptCount();
-        helper.assertTrue(ru.adaptionwheel.server.HardFist.trainingTier(data) != -1,
+        helper.assertTrue(ru.adaptionwheel.server.MartialArts.trainingTier(data) != -1,
                 "an unfinished ladder still has a stage to train");
-        helper.assertTrue(ru.adaptionwheel.server.HardFist.trainingTier(done)
+        helper.assertTrue(ru.adaptionwheel.server.MartialArts.trainingTier(done)
                         == CombatFistTiers.TIER_COUNT - 1,
                 "Netherite maxed is the end of the ladder, so there is no stage after it, got "
-                        + ru.adaptionwheel.server.HardFist.trainingTier(done));
+                        + ru.adaptionwheel.server.MartialArts.trainingTier(done));
 
         // An unfinished stage trains itself.
         PlayerAdaption mid = empty();
         mid.levels.put(CombatFistTiers.concept(2), 4);
         mid.invalidateAdaptCount();
-        helper.assertTrue(ru.adaptionwheel.server.HardFist.trainingTier(mid) == 2,
+        helper.assertTrue(ru.adaptionwheel.server.MartialArts.trainingTier(mid) == 2,
                 "Iron at level 4 is still being trained, got "
-                        + ru.adaptionwheel.server.HardFist.trainingTier(mid));
+                        + ru.adaptionwheel.server.MartialArts.trainingTier(mid));
         helper.succeed();
     }
 

@@ -19,17 +19,20 @@ import ru.adaptionwheel.item.SwordOfExterminationItem;
 
 
 /**
- * The punching fist: five material stages, walked by killing what you are punching.
+ * Martial Arts: five material stages, walked by killing what you are striking.
+ *
+ * <p>The stored concept keys are still {@code Combat_FistWood} … {@code Combat_FistNetherite}; the
+ * feature was renamed from Hard Fist without touching them, so a player's ladder survives the rename.
  *
  * <p>Unlock and every level are earned the same way — kill a hostile mob with a bare hand. Not a hit: a
  * kill, with the last blow landed by the hand and nothing in it that adds attack damage. That is the
  * "something no normal player does" gate, and it is also why the ladder cannot be side-stepped by
  * swinging at a cow.
  */
-public final class HardFist {
+public final class MartialArts {
 
 
-    private HardFist() {
+    private MartialArts() {
     }
 
     /**

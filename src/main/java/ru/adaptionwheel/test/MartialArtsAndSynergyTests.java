@@ -12,12 +12,12 @@ import ru.adaptionwheel.category.FistTiers;
 import ru.adaptionwheel.category.Synergies;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.PlayerAdaption;
-import ru.adaptionwheel.server.HardFist;
+import ru.adaptionwheel.server.MartialArts;
 import ru.adaptionwheel.server.SynergyEffects;
 
 @GameTestHolder(AdaptionWheel.MODID)
 @PrefixGameTestTemplate(false)
-public class HardFistAndSynergyTests {
+public class MartialArtsAndSynergyTests {
 
     private static PlayerAdaption empty() {
         return new PlayerAdaption();
@@ -41,9 +41,9 @@ public class HardFistAndSynergyTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void anUntrainedFistDealsNoBonus(GameTestHelper helper) {
 
-        helper.assertTrue(HardFist.bonus(empty()) == 0f,
+        helper.assertTrue(MartialArts.bonus(empty()) == 0f,
                 "a wheel with no fist level adds nothing to a punch");
-        helper.assertTrue(HardFist.bonus(withLevel(Concepts.type(AdaptionCategory.FIRE), 8)) == 0f,
+        helper.assertTrue(MartialArts.bonus(withLevel(Concepts.type(AdaptionCategory.FIRE), 8)) == 0f,
                 "an unrelated adaptation does not make the fist train itself");
         helper.succeed();
     }
@@ -67,7 +67,7 @@ public class HardFistAndSynergyTests {
 
         float previous = 0f;
         for (int level = 1; level <= PlayerAdaption.MAX_LEVEL; level++) {
-            float bonus = HardFist.bonus(withFistLevel(0, level));
+            float bonus = MartialArts.bonus(withFistLevel(0, level));
             helper.assertTrue(bonus > previous,
                     "level " + level + " (" + bonus + ") must be stronger than level "
                             + (level - 1) + " (" + previous + ")");
@@ -91,8 +91,8 @@ public class HardFistAndSynergyTests {
         }
         knowsFifty.invalidateAdaptCount();
 
-        float bare = HardFist.bonus(knowsNothing);
-        float broad = HardFist.bonus(knowsFifty);
+        float bare = MartialArts.bonus(knowsNothing);
+        float broad = MartialArts.bonus(knowsFifty);
 
         helper.assertTrue(Math.abs(bare - expectedFist(0, 4, knowsNothing.getAdaptCount())) < 0.0001f,
                 "a level-4 fist on a wheel that knows " + knowsNothing.getAdaptCount()
@@ -110,12 +110,12 @@ public class HardFistAndSynergyTests {
     public static void aFistThatIsSwitchedOffStopsPaying(GameTestHelper helper) {
 
         PlayerAdaption data = withFistLevel(0, 8);
-        helper.assertTrue(HardFist.bonus(data) > 0f, "the fist pays while it is on");
+        helper.assertTrue(MartialArts.bonus(data) > 0f, "the fist pays while it is on");
 
         data.toggleEnabled(CombatFistTiers.concept(0));
         helper.assertTrue(data.level(CombatFistTiers.concept(0)) == 8,
                 "switching it off forgets nothing");
-        helper.assertTrue(HardFist.bonus(data) == 0f,
+        helper.assertTrue(MartialArts.bonus(data) == 0f,
                 "but a fist that is switched off must add no damage at all");
         helper.succeed();
     }
@@ -133,11 +133,11 @@ public class HardFistAndSynergyTests {
         PlayerAdaption data = withFistLevel(0, PlayerAdaption.MAX_LEVEL);
         data.toggleEnabled(CombatFistTiers.concept(0));
 
-        helper.assertTrue(HardFist.currentTier(data) == 0,
+        helper.assertTrue(MartialArts.currentTier(data) == 0,
                 "the switch does not un-reach the stage: the HUD row and the ladder are permanent");
-        helper.assertTrue(HardFist.trainingTier(data) == 1,
+        helper.assertTrue(MartialArts.trainingTier(data) == 1,
                 "a switched-off maxed Wood still hands its kills to Stone, got tier "
-                        + HardFist.trainingTier(data));
+                        + MartialArts.trainingTier(data));
         helper.succeed();
     }
 

@@ -599,7 +599,7 @@ public class AdaptionEvents {
         if (!wearingWheel(attacker)) {
             return;
         }
-        float bonus = HardFist.bonus(data(attacker));
+        float bonus = MartialArts.bonus(data(attacker));
         if (bonus > 0f) {
             event.setNewDamage(event.getNewDamage() + bonus);
         }
@@ -673,7 +673,7 @@ public class AdaptionEvents {
         if (player == null || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
         if (dead instanceof net.minecraft.world.entity.monster.Enemy) {
-            HardFist.onFistKill(player, data, dead, event.getSource());
+            MartialArts.onFistKill(player, data, dead, event.getSource());
         }
         if (data.adversityActive || !AdaptionConfig.ENABLE_LOOT.get() || BossHelper.isBoss(dead)) return;
 
@@ -801,7 +801,7 @@ public class AdaptionEvents {
         REFLECTING.clear();
         DIMENSION_SLASH_LAST.remove(id);
         FistMastery.forget(id);
-        HardFist.forget(id);
+        MartialArts.forget(id);
         SynergyEffects.forget(player);
     }
 
@@ -822,7 +822,7 @@ public class AdaptionEvents {
         data.reset();
         data.wasWearing = wearingWheel(player);
         FistMastery.forget(player.getUUID());
-        HardFist.forget(player.getUUID());
+        MartialArts.forget(player.getUUID());
         PENDING_RESPAWN_HEALTH.remove(player.getUUID());
         PENDING_RESPAWN_ARMED.remove(player.getUUID());
         applyStats(player, data);
@@ -879,7 +879,7 @@ public class AdaptionEvents {
             data.reset();
             revokeWearableState(player);
             FistMastery.forget(player.getUUID());
-        HardFist.forget(player.getUUID());
+            MartialArts.forget(player.getUUID());
             PENDING_RESPAWN_HEALTH.remove(player.getUUID());
             PENDING_RESPAWN_ARMED.remove(player.getUUID());
             applyStats(player, data);
@@ -1938,7 +1938,7 @@ public class AdaptionEvents {
 
         if (ru.adaptionwheel.category.Concepts.MUTATION_FIST.equals(concept)) {
             FistMastery.forget(player.getUUID());
-        HardFist.forget(player.getUUID());
+            MartialArts.forget(player.getUUID());
         }
         saveToItem(player, d);
         sync(player, d, true);
@@ -1951,7 +1951,7 @@ public class AdaptionEvents {
         applyStats(player, d);
         applyEnvEffects(player, d);
         FistMastery.forget(player.getUUID());
-        HardFist.forget(player.getUUID());
+        MartialArts.forget(player.getUUID());
         wipeWheelItem(player, d);
         sync(player, d, false);
     }
@@ -2173,7 +2173,7 @@ public class AdaptionEvents {
      * immediately; this is the recovery path, and it is why the row no longer depends on it.
      */
     private static int combatFistDone(PlayerAdaption data) {
-        int tier = ru.adaptionwheel.server.HardFist.trainingTier(data);
+        int tier = ru.adaptionwheel.server.MartialArts.trainingTier(data);
         if (tier < 0) {
             return 0;
         }
@@ -2192,7 +2192,7 @@ public class AdaptionEvents {
      * <p>Only a finished ladder still reports 0, because then there genuinely is nothing left.
      */
     private static int combatFistTotal(PlayerAdaption data) {
-        int tier = ru.adaptionwheel.server.HardFist.trainingTier(data);
+        int tier = ru.adaptionwheel.server.MartialArts.trainingTier(data);
         if (tier < 0) {
             return 0;
         }
