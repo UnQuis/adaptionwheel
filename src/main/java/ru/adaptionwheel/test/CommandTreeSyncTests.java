@@ -79,10 +79,15 @@ public final class CommandTreeSyncTests {
         helper.assertTrue(kids.contains("target"),
                 "grant <concept> <player> must exist; nesting it under <level> leaves "
                         + "'Expected integer' pointing at the player's name. Children: " + kids);
-        helper.assertTrue(kids.contains("level"), "grant <concept> <level> must exist: " + kids);
+        helper.assertTrue(kids.contains("level"), "grant <concept> level must exist: " + kids);
         var level = concept.getChild("level");
-        helper.assertTrue(level != null && childNames(level).contains("target"),
-                "grant <concept> <level> <player> must exist");
+        helper.assertTrue(level != null && childNames(level).contains("level"),
+                "grant <concept> level <level> must exist: "
+                        + (level == null ? "no level node" : childNames(level)));
+        var amount = level == null ? null : level.getChild("level");
+        helper.assertTrue(amount != null && childNames(amount).contains("target"),
+                "grant <concept> level <level> <player> must exist: "
+                        + (amount == null ? "no amount node" : childNames(amount)));
         helper.succeed();
     }
 
