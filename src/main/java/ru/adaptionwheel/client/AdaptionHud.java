@@ -64,7 +64,8 @@ public class AdaptionHud {
             return;
         }
         if (ClientAdaption.TASKS.isEmpty() && !ClientAdaption.adversityActive
-                && ClientAdaption.EXISTENCE_PROGRESS.isEmpty() && !hasFistRow()) {
+                && ClientAdaption.EXISTENCE_PROGRESS.isEmpty() && !hasFistRow()
+                && !ClientAdaption.instabreakUnlocked) {
             return;
         }
         GuiGraphics graphics = event.getGuiGraphics();
@@ -93,6 +94,9 @@ public class AdaptionHud {
                 withAlpha(HEADER_COLOR, headerOpacity), true);
         graphics.drawString(font, Component.literal("ADAPTATION_ANALYSIS"), 0, font.lineHeight,
                 withAlpha(HEADER_COLOR, headerOpacity), true);
+        if (ClientAdaption.instabreakUnlocked) {
+            drawInstabreakBadge(graphics, font, opacity);
+        }
 
         List<Row> rows = new ArrayList<>();
         if (ClientAdaption.adversityActive) {
@@ -374,6 +378,24 @@ public class AdaptionHud {
         if (concept.startsWith("Offense_")) return 40;
         if (concept.startsWith("Drop_NPC_")) return 1000;
         return 50;
+    }
+
+    /**
+     * A persistent Instabreak on/off badge. It sits under the header rather than in a fist row
+     * because the netherite fist row disappears when the ladder is maxed -- exactly when
+     * Instabreak unlocks -- so a row-bound indicator would vanish at the moment it matters most.
+     */
+    private static void drawInstabreakBadge(GuiGraphics graphics, Font font, int opacity) {
+        boolean active = ClientAdaption.instabreakActive;
+        int color = active ? 0xFF57D68D : 0xFF9A9A9A;
+        Component label = Component.translatable(active
+                ? "adaptionwheel.instabreak.on"
+                : "adaptionwheel.instabreak.off");
+        int width = font.width(label);
+        int y = font.lineHeight * 2 + 3;
+        graphics.fill(-2, y - 2, width + 4, y + 9, withAlpha(color, Math.round(opacity * 0.16f)));
+        graphics.fill(-2, y - 2, -1, y + 9, withAlpha(color, opacity));
+        graphics.drawString(font, label, 0, y, withAlpha(color, opacity), true);
     }
 
     private static int withAlpha(int rgb, int alphaPercent) {

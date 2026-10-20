@@ -83,6 +83,10 @@ public final class FistMastery {
             return;
         }
         INSTABREAK_STANCE.put(player.getUUID(), active);
+        player.displayClientMessage(Component.translatable(active
+                        ? "adaptionwheel.instabreak.on"
+                        : "adaptionwheel.instabreak.off")
+                .withStyle(active ? ChatFormatting.GREEN : ChatFormatting.GRAY), true);
         AdaptionEvents.syncAdaption(player, data, true);
     }
 

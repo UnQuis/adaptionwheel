@@ -1609,11 +1609,21 @@ public final class AdaptationWheelScreen extends Screen {
 
     private void drawFooter(GuiGraphics graphics) {
         graphics.fill(margin, footerY - 9, width - margin, footerY - 8, 0x1FFFFFFF);
-        WheelUi.fillRounded(graphics, margin, footerY + 3, 3, 3, 1,
-                WheelUi.withAlpha(GOLD, 0.65f));
-        WheelUi.trackedLeft(graphics, font, WheelUi.MONO_8,
-                WheelUi.upper(tr("adaptionwheel.gui.menu_credit")),
-                margin + 8, footerY, FAINT, 1.0f);
+        // The old author credit used to live here. It said nothing the player could act on,
+        // so the only permanent footer status is the one that answers a question the wheel
+        // cannot otherwise answer: is Instabreak currently on? It is drawn only once the
+        // netherite fist has unlocked it, so an unavailable ability does not advertise itself.
+        if (ClientAdaption.wearingWheel && ClientAdaption.instabreakUnlocked && width >= 420) {
+            boolean active = ClientAdaption.instabreakActive;
+            int color = active ? GREEN : MUTED;
+            WheelUi.fillRounded(graphics, margin, footerY + 3, 3, 3, 1,
+                    WheelUi.withAlpha(color, 0.65f));
+            WheelUi.trackedLeft(graphics, font, WheelUi.MONO_8,
+                    WheelUi.upper(tr(active
+                            ? "adaptionwheel.instabreak.on"
+                            : "adaptionwheel.instabreak.off")),
+                    margin + 8, footerY, color, 1.0f);
+        }
 
         String hint = width >= 900
                 ? tr("adaptionwheel.gui.menu_footer_hint")

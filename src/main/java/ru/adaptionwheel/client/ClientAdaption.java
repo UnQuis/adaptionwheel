@@ -42,6 +42,7 @@ public final class ClientAdaption {
     public static int existenceThreshold;
 
     public static boolean instabreakActive;
+    public static boolean instabreakUnlocked;
 
     public static int fistProgressDone;
     public static int fistProgressTotal;
@@ -82,6 +83,7 @@ public final class ClientAdaption {
         DISABLED.clear();
         existenceThreshold = 0;
         instabreakActive = false;
+        instabreakUnlocked = false;
         fistProgressDone = 0;
         fistProgressTotal = 0;
         combatFistProgressDone = 0;
@@ -116,6 +118,7 @@ public final class ClientAdaption {
         DISABLED.addAll(payload.disabled());
         existenceThreshold = payload.existenceThreshold();
         instabreakActive = payload.instabreakActive();
+        instabreakUnlocked = payload.instabreakUnlocked();
         fistProgressDone = payload.fistProgressDone();
         fistProgressTotal = payload.fistProgressTotal();
         combatFistProgressDone = payload.combatFistDone();

@@ -28,6 +28,7 @@ public record AdaptionSyncPayload(
         Map<String, Integer> existenceProgress,
         int existenceThreshold,
         boolean instabreakActive,
+        boolean instabreakUnlocked,
         int fistProgressDone,
         int fistProgressTotal,
         int combatFistDone,
@@ -73,6 +74,7 @@ public record AdaptionSyncPayload(
                 });
                 buf.writeVarInt(p.existenceThreshold);
                 buf.writeBoolean(p.instabreakActive);
+                buf.writeBoolean(p.instabreakUnlocked);
                 buf.writeVarInt(p.fistProgressDone);
                 buf.writeVarInt(p.fistProgressTotal);
                 buf.writeVarInt(p.combatFistDone);
@@ -116,6 +118,7 @@ public record AdaptionSyncPayload(
                 }
                 int existenceThreshold = buf.readVarInt();
                 boolean instabreakActive = buf.readBoolean();
+                boolean instabreakUnlocked = buf.readBoolean();
                 int fistProgressDone = buf.readVarInt();
                 int fistProgressTotal = buf.readVarInt();
                 int combatFistDone = buf.readVarInt();
@@ -127,7 +130,7 @@ public record AdaptionSyncPayload(
                 }
                 return new AdaptionSyncPayload(wearing, adversity, count, advTimer, advCooldown,
                         rotation, tasks, levels, adapted, history, existenceProgress, existenceThreshold,
-                        instabreakActive, fistProgressDone, fistProgressTotal,
+                        instabreakActive, instabreakUnlocked, fistProgressDone, fistProgressTotal,
                         combatFistDone, combatFistTotal, disabled);
             }
     );
