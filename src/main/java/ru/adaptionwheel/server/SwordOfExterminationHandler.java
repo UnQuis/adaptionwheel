@@ -134,6 +134,14 @@ public final class SwordOfExterminationHandler {
         if (!(held.getItem() instanceof SwordOfExterminationItem) || SwordOfExterminationItem.isCursed(held)) {
             return;
         }
+        Entity direct = event.getSource().getDirectEntity();
+        if (direct != null && !(direct instanceof Player)) {
+            // The tooltip promises "Melee hits". An arrow, a thrown trident or any other projectile
+            // carries itself as the direct entity, so it must not inherit the current-HP bonus just
+            // because the player who fired it is holding the sword. This is the same swing/shot test
+            // HardFist.trains uses; melee arrives with no direct entity or with the player himself.
+            return;
+        }
 
         event.setNewDamage(event.getNewDamage() + target.getHealth() * 0.01f);
         if (player.level() instanceof ServerLevel serverLevel) {

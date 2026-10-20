@@ -120,6 +120,27 @@ public class HardFistAndSynergyTests {
         helper.succeed();
     }
 
+    /**
+     * Switching a finished stage off must not reopen it as the training target: "this stage is
+     * maxed" is a fact about the ladder, so the kills still hand over to the next material. Reading
+     * the maxed check through {@code levelOrZero()} made a switched-off Wood look like level 0, so
+     * the disabled stage became the target again -- the exact "keeps training a switched-off stage"
+     * shape, one level up from the per-stage gate in {@code onFistKill}.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aFinishedStageSwitchedOffStillHandsItsKillsToTheNext(GameTestHelper helper) {
+
+        PlayerAdaption data = withFistLevel(0, PlayerAdaption.MAX_LEVEL);
+        data.toggleEnabled(CombatFistTiers.concept(0));
+
+        helper.assertTrue(HardFist.currentTier(data) == 0,
+                "the switch does not un-reach the stage: the HUD row and the ladder are permanent");
+        helper.assertTrue(HardFist.trainingTier(data) == 1,
+                "a switched-off maxed Wood still hands its kills to Stone, got tier "
+                        + HardFist.trainingTier(data));
+        helper.succeed();
+    }
+
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void synergyStrengthIsNeverBelowItsFloor(GameTestHelper helper) {
 
@@ -209,6 +230,39 @@ public class HardFistAndSynergyTests {
         helper.assertTrue(SynergyEffects.strengthOf(fireAndThermal, Synergies.ASHWALKER)
                         == SynergyEffects.strengthOf(fireOnly, Synergies.ASHWALKER),
                 "a one-time mutation has no level to average in, so it must not raise the strength");
+        helper.succeed();
+    }
+
+    /**
+     * The switch has to reach synergy matching on both sides. The client asks the same
+     * {@code satisfied(...)} with its mirrored DISABLED set, so a concept that is switched off must
+     * neither light a chip nor keep the server effect running -- otherwise the panel hides the
+     * synergy while the player still burns what they hit.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aSwitchedOffRequirementStopsSatisfyingItsSynergy(GameTestHelper helper) {
+
+        String fire = Concepts.type(AdaptionCategory.FIRE);
+        PlayerAdaption data = withLevel(fire, PlayerAdaption.MAX_LEVEL);
+        data.adapted.add(Concepts.MUTATION_THERMAL);
+        data.invalidateAdaptCount();
+
+        double lit = SynergyEffects.strengthOf(data, Synergies.ASHWALKER);
+        helper.assertTrue(Synergies.satisfied(data, Synergies.ASHWALKER),
+                "fire plus Thermal Mastery lights Ashwalker while both are switched on");
+
+        data.toggleEnabled(Concepts.MUTATION_THERMAL);
+        helper.assertTrue(!Synergies.satisfied(data, Synergies.ASHWALKER),
+                "switching either requirement off must put the synergy out");
+        helper.assertTrue(!Synergies.activeIds(data).contains(Synergies.ASHWALKER.id()),
+                "the active set the server effects read has to agree with satisfied()");
+
+        data.toggleEnabled(Concepts.MUTATION_THERMAL);
+        data.toggleEnabled(fire);
+        helper.assertTrue(!Synergies.satisfied(data, Synergies.ASHWALKER),
+                "and switching off the leveled half must put it out too");
+        helper.assertTrue(SynergyEffects.strengthOf(data, Synergies.ASHWALKER) < lit,
+                "a switched-off leveled requirement must also stop strengthening the synergy");
         helper.succeed();
     }
 

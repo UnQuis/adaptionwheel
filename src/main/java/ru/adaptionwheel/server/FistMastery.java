@@ -130,7 +130,14 @@ public final class FistMastery {
             tryUnlock(player, data, state);
             return;
         }
-        int level = data.levelOrZero(FistTiers.concept(tier));
+        String concept = FistTiers.concept(tier);
+        // Same rule as the punching fist: turn the stage off and the blocks stop counting. Without
+        // it levelOrZero() read 0, so a switched-off stage silently refilled and a maxed one
+        // re-granted level 8 with its message, heal and voice every N blocks.
+        if (!data.isEnabled(concept)) {
+            return;
+        }
+        int level = data.levelOrZero(concept);
         if (level >= PlayerAdaption.MAX_LEVEL) {
             return;
         }

@@ -91,7 +91,8 @@ public final class SynergyEffects {
             if (requirement[1].equals(Synergies.Requirement.MAXED.name())) {
                 continue;
             }
-            int level = data.levels.getOrDefault(requirement[0], 0);
+            // levelOrZero(): a switched-off requirement must not strengthen (or satisfy) a synergy.
+            int level = data.levelOrZero(requirement[0]);
             if (level <= 0) {
                 continue;
             }

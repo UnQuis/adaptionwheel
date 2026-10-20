@@ -127,7 +127,12 @@ public class AdaptionEvents {
         if (!(player instanceof ServerPlayer serverPlayer) || !wearingWheel(serverPlayer)) {
             return 0;
         }
-        return data(serverPlayer).level(concept);
+        // levelOrZero(), not level(). This feeds the break-speed and movement effects, which run on
+        // BOTH sides, and the client already answers through ClientChecks.level() -> levelOrZero().
+        // Reading the raw level here kept every switched-off adaptation working on the server while
+        // the client stopped applying it: the two sides disagreed about the player's physics and
+        // mining speed, which is the client-server split the switch exists to avoid.
+        return data(serverPlayer).levelOrZero(concept);
     }
 
     public static Optional<ItemStack> getWheelStack(Player player) {
@@ -144,7 +149,12 @@ public class AdaptionEvents {
         if (!(player instanceof ServerPlayer serverPlayer) || !wearingWheel(serverPlayer)) {
             return false;
         }
-        return data(serverPlayer).isAdapted(concept);
+        // active(), not isAdapted(): the switch has to reach the server-side half of the movement
+        // mixins too. The server previously answered raw and the client through ClientChecks.has()
+        // -> active(), so a switched-off adaptation kept clamping friction / ignoring slime on the
+        // server while the client ran vanilla physics. Every caller passes a one-time concept
+        // (Move_*, Mutation_*, Combat_ShieldLock); leveled ones go through conceptLevel above.
+        return data(serverPlayer).active(concept);
     }
 
     /**

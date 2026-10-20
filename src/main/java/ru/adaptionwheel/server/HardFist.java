@@ -82,7 +82,11 @@ public final class HardFist {
         if (reached < 0) {
             return -1;
         }
-        if (data.levelOrZero(CombatFistTiers.concept(reached)) >= PlayerAdaption.MAX_LEVEL
+        // level(), not levelOrZero(): "this stage is finished" is a fact about the ladder, so
+        // switching the finished stage off must hand the kills to the next one rather than reopen
+        // the disabled stage as the training target. The switch stops what a stage pays out; it
+        // does not un-max it. (The stage actually being trained is gated on isEnabled by the caller.)
+        if (data.level(CombatFistTiers.concept(reached)) >= PlayerAdaption.MAX_LEVEL
                 && reached + 1 < CombatFistTiers.TIER_COUNT) {
             return reached + 1;
         }
@@ -166,6 +170,14 @@ public final class HardFist {
             return;
         }
         String concept = CombatFistTiers.concept(tier);
+        // A switched-off stage must not keep banking kills. levelOrZero() below reads 0 while the
+        // stage is off, so without this gate the counters kept filling and the level landed the
+        // moment it was switched back on. Worse, on a stage already at MAX the "level" looked like
+        // 0, so every N kills it re-granted level 8 and re-fired the max message, the heal and the
+        // voice. The switch stops the effect, so it has to stop the training too.
+        if (!data.isEnabled(concept)) {
+            return;
+        }
         int level = data.levelOrZero(concept);
         if (level >= PlayerAdaption.MAX_LEVEL) {
             // Only reachable on a finished ladder: there is no stage after Netherite to train.
