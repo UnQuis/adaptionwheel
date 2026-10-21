@@ -17,15 +17,10 @@ import ru.adaptionwheel.category.FistTiers;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.PlayerAdaption;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public final class FistMastery {
-
-    private static final Map<UUID, Boolean> INSTABREAK_STANCE = new HashMap<>();
-
 
     private FistMastery() {
     }
@@ -51,7 +46,7 @@ public final class FistMastery {
     }
 
     public static boolean instabreakStance(ServerPlayer player) {
-        return Boolean.TRUE.equals(INSTABREAK_STANCE.get(player.getUUID()));
+        return AdaptionEvents.dataOf(player).instabreak;
     }
 
     /**
@@ -68,21 +63,17 @@ public final class FistMastery {
         return data.progress.getOrDefault(ru.adaptionwheel.data.Extras.miningKey(tier), 0);
     }
 
-    public static void forget(UUID id) {
-        INSTABREAK_STANCE.remove(id);
-    }
-
     public static void setInstabreak(ServerPlayer player, boolean active) {
         PlayerAdaption data = AdaptionEvents.dataOf(player);
         if (!AdaptionEvents.isWearingWheel(player) || !instabreakUnlocked(data)) {
-            INSTABREAK_STANCE.put(player.getUUID(), false);
+            data.instabreak = false;
             AdaptionEvents.syncAdaption(player, data, true);
             return;
         }
-        if (instabreakStance(player) == active) {
+        if (data.instabreak == active) {
             return;
         }
-        INSTABREAK_STANCE.put(player.getUUID(), active);
+        data.instabreak = active;
         player.displayClientMessage(Component.translatable(active
                         ? "adaptionwheel.instabreak.on"
                         : "adaptionwheel.instabreak.off")
@@ -161,7 +152,7 @@ public final class FistMastery {
         AdaptionEvents.grantConceptLevel(player, data, FistTiers.concept(tier));
 
         if (level + 1 >= PlayerAdaption.MAX_LEVEL) {
-            announceTierUp(player, tier);
+            announceTierUp(player, data, tier);
         } else {
 
             int newLevel = level + 1;
@@ -173,7 +164,7 @@ public final class FistMastery {
         ru.adaptionwheel.network.FistProgressPayload.send(player, done, total);
     }
 
-    private static void announceTierUp(ServerPlayer player, int tier) {
+    private static void announceTierUp(ServerPlayer player, PlayerAdaption data, int tier) {
         if (tier + 1 < FistTiers.TIER_COUNT) {
             int next = tier + 1;
             player.sendSystemMessage(Component.translatable("adaptionwheel.msg.fist_tier_up",
@@ -190,7 +181,8 @@ public final class FistMastery {
             return;
         }
         if (AdaptionConfig.FIST_INSTABREAK_DEFAULT_ON.get()) {
-            INSTABREAK_STANCE.put(player.getUUID(), true);
+            data.instabreak = true;
+            AdaptionEvents.syncAdaption(player, data, true);
         }
         player.sendSystemMessage(Component.translatable("adaptionwheel.msg.instabreak_unlocked")
                 .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD));

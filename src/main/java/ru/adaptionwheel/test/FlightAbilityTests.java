@@ -17,15 +17,21 @@ public class FlightAbilityTests {
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void grantingLiftsOffAndRevokingShutsDown(GameTestHelper helper) {
+    public static void grantingOnlyGrantsPermission(GameTestHelper helper) {
         Abilities abilities = grounded();
         helper.assertTrue(!abilities.mayfly && !abilities.flying, "vanilla starts with neither");
 
         helper.assertTrue(FlightAbility.apply(abilities, true), "the first grant changes something");
         helper.assertTrue(abilities.mayfly, "permission is granted");
-        helper.assertTrue(abilities.flying,
-                "and the player is lifted off on the transition, so the mutation feels like flight "
-                        + "rather than like hunting for a key");
+        helper.assertTrue(!abilities.flying,
+                "the grant must not lift off: it is replayed on every login, and that is what made "
+                        + "a player who logged out on the ground resume hovering");
+
+        Abilities stale = grounded();
+        stale.flying = true;
+        helper.assertTrue(FlightAbility.apply(stale, true), "a stale saved flag is a change too");
+        helper.assertTrue(stale.mayfly && !stale.flying,
+                "a saved `flying` from the previous session is cleared on the permission transition");
 
         helper.assertTrue(FlightAbility.apply(abilities, false), "revoking from that state is a change");
         helper.assertTrue(!abilities.mayfly, "permission is taken back");

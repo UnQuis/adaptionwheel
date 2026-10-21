@@ -785,6 +785,15 @@ public class AdaptionEvents {
         if (wearing) {
             data.wasWearing = true;
         }
+        // The ability transition is replayed on every join, but if the saved abilities already had
+        // `mayfly` set, FlightAbility sees no transition and cannot repair a `flying` flag left over
+        // from the previous session. Clear it here so logging in never resumes a hover.
+        if (!player.isCreative() && !player.isSpectator()
+                && data.isAdapted(Concepts.MUTATION_FLIGHT)
+                && player.getAbilities().flying) {
+            player.getAbilities().flying = false;
+            player.onUpdateAbilities();
+        }
         sync(player, data, wearing);
     }
 
@@ -800,7 +809,6 @@ public class AdaptionEvents {
         LAST_VOICE_TICK.remove(id);
         REFLECTING.clear();
         DIMENSION_SLASH_LAST.remove(id);
-        FistMastery.forget(id);
         MartialArts.forget(id);
         SynergyEffects.forget(player);
     }
@@ -821,7 +829,6 @@ public class AdaptionEvents {
         PlayerAdaption data = data(player);
         data.reset();
         data.wasWearing = wearingWheel(player);
-        FistMastery.forget(player.getUUID());
         MartialArts.forget(player.getUUID());
         PENDING_RESPAWN_HEALTH.remove(player.getUUID());
         PENDING_RESPAWN_ARMED.remove(player.getUUID());
@@ -878,7 +885,6 @@ public class AdaptionEvents {
             }
             data.reset();
             revokeWearableState(player);
-            FistMastery.forget(player.getUUID());
             MartialArts.forget(player.getUUID());
             PENDING_RESPAWN_HEALTH.remove(player.getUUID());
             PENDING_RESPAWN_ARMED.remove(player.getUUID());
@@ -1367,23 +1373,27 @@ public class AdaptionEvents {
     }
 
     private static void tickFlight(ServerPlayer player, PlayerAdaption data) {
-        if (!data.active(Concepts.MUTATION_FLIGHT)
-                && player.getY() >= AdaptionConfig.FLIGHT_ALTITUDE.get()
-                && data.level(Concepts.contact(FLIGHT_MOB)) >= PlayerAdaption.MAX_LEVEL
-                && data.isAdapted(Concepts.debuff(FLIGHT_LEVITATION))) {
-            grantComboMutation(player, data, Concepts.MUTATION_FLIGHT);
-            return;
-        }
-        if (!data.active(Concepts.MUTATION_FLIGHT) || player.isCreative() || player.isSpectator()) {
-            return;
-        }
-        if (data.isEnabled(Concepts.MUTATION_FLIGHT)) {
-            if (FlightAbility.apply(player.getAbilities(), true)) {
-                player.onUpdateAbilities();
+        if (!data.active(Concepts.MUTATION_FLIGHT)) {
+            // Having the mutation but switching it off must also take the permission back; the old
+            // early return left `mayfly` granted after the panel switch was turned off.
+            if (data.isAdapted(Concepts.MUTATION_FLIGHT)
+                    && !player.isCreative() && !player.isSpectator()) {
+                if (FlightAbility.apply(player.getAbilities(), false)) {
+                    player.onUpdateAbilities();
+                }
+                return;
+            }
+            if (player.getY() >= AdaptionConfig.FLIGHT_ALTITUDE.get()
+                    && data.level(Concepts.contact(FLIGHT_MOB)) >= PlayerAdaption.MAX_LEVEL
+                    && data.isAdapted(Concepts.debuff(FLIGHT_LEVITATION))) {
+                grantComboMutation(player, data, Concepts.MUTATION_FLIGHT);
             }
             return;
         }
-        if (FlightAbility.apply(player.getAbilities(), false)) {
+        if (player.isCreative() || player.isSpectator()) {
+            return;
+        }
+        if (FlightAbility.apply(player.getAbilities(), true)) {
             player.onUpdateAbilities();
         }
     }
@@ -1937,7 +1947,7 @@ public class AdaptionEvents {
         applyEnvEffects(player, d);
 
         if (ru.adaptionwheel.category.Concepts.MUTATION_FIST.equals(concept)) {
-            FistMastery.forget(player.getUUID());
+            d.instabreak = false;
             MartialArts.forget(player.getUUID());
         }
         saveToItem(player, d);
@@ -1950,7 +1960,6 @@ public class AdaptionEvents {
         d.reset();
         applyStats(player, d);
         applyEnvEffects(player, d);
-        FistMastery.forget(player.getUUID());
         MartialArts.forget(player.getUUID());
         wipeWheelItem(player, d);
         sync(player, d, false);
@@ -2154,7 +2163,7 @@ public class AdaptionEvents {
                 new ArrayList<>(data.history),
                 existenceProgress != null ? existenceProgress : java.util.Map.of(),
                 (int) (AdaptionConfig.EXISTENCE_REQUIRED_SECONDS.get() * 20),
-                FistMastery.instabreakStance(player),
+                data.instabreak,
                 SurfaceAdaptations.instabreakUnlocked(player),
                 FistMastery.tierProgress(player.getUUID(), data),
                 fistProgressTotal(data),

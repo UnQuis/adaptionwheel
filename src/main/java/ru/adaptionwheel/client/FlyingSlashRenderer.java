@@ -3,29 +3,36 @@ package ru.adaptionwheel.client;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 
 public final class FlyingSlashRenderer {
 
     private static final float CURVE_AMOUNT = 0.4583f;
-    private static final float TAPER_POWER = 1.35f;
+    private static final float TAPER_POWER = 1.55f;
 
     private FlyingSlashRenderer() {
     }
 
     public static void render(PoseStack poseStack, Vec3 direction, float roll,
                               float age, float length, float glowHalf, float coreHalf,
-                              int[] color, int[] glowColor, float opacity) {
+                              int[] color, int[] glowColor, float opacity,
+                              Matrix4f viewProjection, boolean depthTest, int seed) {
         if (opacity <= 0.01f || !SlashShaderFX.ready()) {
             return;
         }
 
-        float growth = Mth.clamp(age / 3f, 0.15f, 1f);
-        float effectiveLength = length * growth;
+        // A short unfold, then a slow breathing pulse and a wobble about the flight axis. The
+        // wobble is deliberately small: the blade still has to read as one clean cut, not as a
+        // spinning propeller, but a completely static crescent looks pasted on.
+        float growth = Mth.clamp(age / 2.6f, 0.16f, 1f);
+        float breathe = 1f + 0.035f * Mth.sin(age * 1.8f + seed * 0.37f);
+        float animatedRoll = roll + Mth.sin(age * 0.42f + seed * 0.13f) * 0.11f;
+        float effectiveLength = length * growth * (1f + 0.012f * Mth.sin(age * 2.3f + seed));
 
         poseStack.pushPose();
         poseStack.mulPose(aimRotation(direction));
-        poseStack.mulPose(SlashBladeMesh.viewFrame(roll));
+        poseStack.mulPose(SlashBladeMesh.viewFrame(animatedRoll));
 
         // SlashBladeMesh.build() lays the centreline out as X: 0 -> length (the tail-to-tip
         // axis) and Y: 0 -> curveAmount*length (the arc, 0 at both tips, max at the belly).
@@ -48,8 +55,9 @@ public final class FlyingSlashRenderer {
 
         SlashShaderFX.draw(poseStack,
                 effectiveLength, CURVE_AMOUNT,
-                glowHalf * growth, coreHalf * growth, TAPER_POWER,
-                color, opacity, glowColor, 0.85f * opacity);
+                glowHalf * growth * breathe, coreHalf * growth * breathe, TAPER_POWER,
+                color, opacity, glowColor, 0.9f * opacity,
+                viewProjection, depthTest, age, seed);
         poseStack.popPose();
     }
 

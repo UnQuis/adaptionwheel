@@ -63,14 +63,36 @@ public final class DimensionImpactFX {
     private static final float DETONATION_SECONDS = 0.05f;
 
     /**
-     * The strobe and the panel's own ink/paper, as literal RGB rather than generic black/white, so
-     * the flash reads as the same object as the panel instead of a filter bolted on top of it.
-     * Lifted straight from this shader's own {@code ImpactInk}/{@code ImpactPaper} JSON defaults
-     * (0.045/0.02/0.075 and 0.97/0.96/0.98) rather than re-guessed, so the two stay in sync if that
-     * JSON is ever retuned.
+     * A palette is the whole frame's identity: paper, ink and the hot accent used by the core and
+     * the drawn burst. The flash uses the same two colours, so the strobe and the panel cannot
+     * drift into different looks when the style changes.
      */
-    private static final int VOID_INK_RGB = 0x0B0513;
-    private static final int VOID_PAPER_RGB = 0xF7F5FA;
+    private record Palette(int ink, int paper, int accent) {
+    }
+
+    private static Palette palette() {
+        return switch (AdaptionConfig.DIMENSION_IMPACT_STYLE.get()) {
+            case 1 -> new Palette(0x120006, 0xE8201A, 0xFF8A3D); // crimson
+            case 2 -> new Palette(0x020A1C, 0x39C6FF, 0xE8FFFF); // azure
+            case 3 -> new Palette(0x140C02, 0xFFC42E, 0xFFF2B0); // gold
+            case 4 -> new Palette(0x080016, 0xB56BFF, 0x64FFE0); // spectral
+            case 5 -> new Palette(0xF7F5FA, 0x0B0513, 0xFF4B4B); // negative
+            case 6 -> new Palette(0x100604, 0xFF6A1A, 0xFFE0A0); // ember
+            default -> new Palette(0x0B0513, 0xF7F5FA, 0xFFFFFF); // void ink
+        };
+    }
+
+    private static float red(int rgb) {
+        return ((rgb >> 16) & 0xFF) / 255f;
+    }
+
+    private static float green(int rgb) {
+        return ((rgb >> 8) & 0xFF) / 255f;
+    }
+
+    private static float blue(int rgb) {
+        return (rgb & 0xFF) / 255f;
+    }
 
     /**
      * Base shockwave and speed-line gains, scaled by {@code DIMENSION_IMPACT_STRENGTH} every pass
@@ -141,15 +163,21 @@ public final class DimensionImpactFX {
         RenderTarget main = mc.getMainRenderTarget();
         TextureTarget target = scratchFor(main.width, main.height);
 
+        // Radial zoom blur is strongest at the opening instant and unwinds with the panel. It is
+        // a fraction of screen distance, not a time, so the same dial behaves identically at any
+        // resolution or refresh rate.
+        float zoom = (float) (AdaptionConfig.DIMENSION_IMPACT_ZOOM.get() * 0.08 * (1f - progress));
+
         target.bindWrite(true);
-        pass(main.getColorTextureId(), target.width, target.height, 0f, 0f, 0f, 1f, 0f, 0f, true);
+        pass(main.getColorTextureId(), target.width, target.height,
+                0f, 0f, 0f, 1f, 0f, 0f, 0f, true);
 
         main.bindWrite(true);
         pass(target.getColorTextureId(), main.width, main.height,
                 current * configStrength,
                 AdaptionConfig.DIMENSION_IMPACT_ABERRATION.get().floatValue(),
                 flashAmount * 0.35f,
-                1f, progress, configStrength, false);
+                1f, progress, zoom, configStrength, false);
     }
 
     /**
@@ -178,7 +206,9 @@ public final class DimensionImpactFX {
         }
 
         float alpha = Mth.clamp(AdaptionConfig.DIMENSION_IMPACT_FLASH_STRENGTH.get().floatValue(), 0f, 1f);
-        int argb = ((int) (alpha * 255f) << 24) | (index % 2 == 0 ? VOID_PAPER_RGB : VOID_INK_RGB);
+        Palette palette = palette();
+        int argb = ((int) (alpha * 255f) << 24)
+                | (index % 2 == 0 ? palette.paper() : palette.ink());
         graphics.fill(0, 0, graphics.guiWidth(), graphics.guiHeight(), argb);
     }
 
@@ -318,7 +348,7 @@ public final class DimensionImpactFX {
      */
     private static void pass(int sourceTexture, int width, int height,
                              float passStrength, float aberration, float flashAmount, float edgeGain,
-                             float progress, float burstGain, boolean copyPass) {
+                             float progress, float zoom, float burstGain, boolean copyPass) {
         ShaderInstance active = shader;
         if (active == null) {
             return;
@@ -342,11 +372,18 @@ public final class DimensionImpactFX {
         // shader's options.x gate keeps it out of the maths entirely.
         active.setSampler("ImpactSampler", mask != null ? mask.texture() : sourceTexture);
 
+        Palette palette = palette();
         active.safeGetUniform("ImpactSize").set((float) width, (float) height);
         active.safeGetUniform("ImpactParams").set(passStrength, aberration, flashAmount, edgeGain);
-        // zw is the shockwave/speed-line origin in screen uv. This was (0, 0) - the top-left
-        // corner - and is now the screen centre, where the player actually is.
-        active.safeGetUniform("ImpactProgress").set(progress, 0f, 0.5f, 0.5f);
+        // z/w is the shockwave/speed-line origin in screen uv, the screen centre where the
+        // player is. y is the opening zoom-blur amount.
+        active.safeGetUniform("ImpactProgress").set(progress, zoom, 0.5f, 0.5f);
+        active.safeGetUniform("ImpactInk").set(
+                red(palette.ink()), green(palette.ink()), blue(palette.ink()), 1f);
+        active.safeGetUniform("ImpactPaper").set(
+                red(palette.paper()), green(palette.paper()), blue(palette.paper()), 1f);
+        active.safeGetUniform("ImpactAccent").set(
+                red(palette.accent()), green(palette.accent()), blue(palette.accent()), 1f);
         active.safeGetUniform("ImpactBurst").set(
                 BURST_RING_GAIN * burstGain,
                 BURST_LINES_GAIN * burstGain,
@@ -356,7 +393,7 @@ public final class DimensionImpactFX {
                 mask != null ? 1f : 0f,
                 AdaptionConfig.DIMENSION_IMPACT_TEXTURE_SMOOTH_INVERT.get() ? 1f : 0f,
                 AdaptionConfig.DIMENSION_IMPACT_TEXTURE_STRETCH.get() ? 1f : 0f,
-                0f);
+                AdaptionConfig.DIMENSION_IMPACT_MODE.get().floatValue());
         active.safeGetUniform("ImpactMaskSize").set(
                 mask != null ? (float) mask.width() : 1f,
                 mask != null ? (float) mask.height() : 1f);

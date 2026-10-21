@@ -50,6 +50,35 @@ public class ProgressPersistenceTests {
         helper.succeed();
     }
 
+    /**
+     * Instabreak is a player choice, not a session stance. It used to live in a static UUID map and
+     * vanished on every rejoin; this pins the persisted path instead.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void instabreakSurvivesACodecRoundTrip(GameTestHelper helper) {
+
+        PlayerAdaption data = empty();
+        data.instabreak = true;
+
+        var encoded = PlayerAdaption.CODEC.encodeStart(JsonOps.INSTANCE, data).getOrThrow();
+        PlayerAdaption reloaded = PlayerAdaption.CODEC.parse(JsonOps.INSTANCE, encoded).getOrThrow();
+
+        helper.assertTrue(reloaded.instabreak,
+                "the Instabreak stance was lost on a save/load round trip, which is exactly the"
+                        + " rejoin reset this field exists to fix");
+        data.reset();
+        helper.assertFalse(data.instabreak,
+                "reset() left Instabreak enabled, so a wiped wheel would start with a stance the"
+                        + " player never earned");
+
+        DataResult<Extras> old = Extras.CODEC.parse(JsonOps.INSTANCE,
+                JsonParser.parseString("{\"disabled\":[],\"cache\":[]}"));
+        helper.assertTrue(old.result().isPresent() && !old.result().get().instabreak(),
+                "a save written before the Instabreak field existed must default it to off, not"
+                        + " hand the player a free stance");
+        helper.succeed();
+    }
+
     /** Both fists count against different keys, so one must never overwrite the other. */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theTwoFistsCountSeparately(GameTestHelper helper) {

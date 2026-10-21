@@ -18,9 +18,18 @@ import java.util.Map;
  * player can only earn by mining or killing is not something to hand back for free.
  */
 public record Extras(List<String> disabled, List<net.minecraft.world.item.ItemStack> cache,
-                     Map<String, Integer> progress) {
+                     Map<String, Integer> progress, boolean instabreak) {
 
-    public static final Extras EMPTY = new Extras(List.of(), List.of(), Map.of());
+    public static final Extras EMPTY = new Extras(List.of(), List.of(), Map.of(), false);
+
+    /**
+     * Convenience constructor for callers that predate the instabreak flag. Kept so the field can
+     * grow without touching every test and data-building call site.
+     */
+    public Extras(List<String> disabled, List<net.minecraft.world.item.ItemStack> cache,
+                  Map<String, Integer> progress) {
+        this(disabled, cache, progress, false);
+    }
 
     /** Key for the breaking fist's counter, per tier index. */
     public static String miningKey(int tier) {
@@ -37,6 +46,7 @@ public record Extras(List<String> disabled, List<net.minecraft.world.item.ItemSt
             net.minecraft.world.item.ItemStack.CODEC.listOf().optionalFieldOf("cache", List.of())
                     .forGetter(Extras::cache),
             Codec.unboundedMap(Codec.STRING, Codec.INT).optionalFieldOf("progress", Map.of())
-                    .forGetter(Extras::progress)
+                    .forGetter(Extras::progress),
+            Codec.BOOL.optionalFieldOf("instabreak", false).forGetter(Extras::instabreak)
     ).apply(instance, Extras::new));
 }

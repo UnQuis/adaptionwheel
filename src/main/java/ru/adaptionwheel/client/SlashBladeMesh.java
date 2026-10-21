@@ -140,10 +140,13 @@ public final class SlashBladeMesh {
      * @param glowHalf    half-width of the outer aura at the widest point of the sweep
      * @param coreHalf    half-width of the ink; must be below {@code glowHalf}
      * @param taperPower  how sharply both ends pinch to a point (1 is linear, higher is sharper)
+     * @param age         ticks + partial tick; drives the travelling edge wobble
+     * @param seed        entity id, so two slashes never share the same tear pattern
      */
     public static void build(VertexConsumer consumer, PoseStack.Pose pose,
                              float length, float curveAmount,
-                             float glowHalf, float coreHalf, float taperPower) {
+                             float glowHalf, float coreHalf, float taperPower,
+                             float age, int seed) {
 
         Vector3f[] centre = new Vector3f[LENGTH_SEGMENTS];
         float[] widthRadius = new float[LENGTH_SEGMENTS];
@@ -152,7 +155,15 @@ public final class SlashBladeMesh {
             float u = i / (float) (LENGTH_SEGMENTS - 1);
             float arc = Mth.sin(u * (float) Math.PI);
             centre[i] = new Vector3f(u * length, arc * curveAmount * length, 0f);
-            widthRadius[i] = glowHalf * (float) Math.pow(arc, taperPower);
+
+            // Two travelling waves give the edge a torn, breathing silhouette. The frequencies are
+            // deliberately incommensurate so the teeth do not line up into a regular saw; the
+            // amplitude is small enough that the blade still reads as one clean cut. Without this
+            // the swept tube is mathematically perfect, which is exactly what made it look static.
+            float wobble = 1f
+                    + 0.075f * Mth.sin(u * 43f + age * 7.5f + seed * 0.31f)
+                    * Mth.sin(u * 11f - age * 2.6f + seed * 0.17f);
+            widthRadius[i] = glowHalf * (float) Math.pow(arc, taperPower) * wobble;
         }
 
         Vector3f[][] ringPos = new Vector3f[LENGTH_SEGMENTS][RING_SEGMENTS];

@@ -133,8 +133,11 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Double> DARKNESS_LIGHTMAP_FLOOR;
 
     public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_FRAME_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_STYLE;
+    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_IMPACT_MODE;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_STRENGTH;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_ABERRATION;
+    public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_ZOOM;
     public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_SHAKE_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> DIMENSION_IMPACT_SHAKE_STRENGTH;
     public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_IMPACT_FLASH_ENABLED;
@@ -725,9 +728,29 @@ public final class AdaptionConfig {
                         "screen when the wearer's own spatial rifts go out. Client-side only, and",
                         "only for rifts this player fired.")
                 .define("dimensionImpactFrameEnabled", true);
+        DIMENSION_IMPACT_STYLE = c.comment("Impact-frame palette, ported from the variants in TheShootingStar:",
+                        "  0 = void ink (the original default)",
+                        "  1 = crimson, black/red with a hot orange accent",
+                        "  2 = azure, navy/cyan with a white-cyan accent",
+                        "  3 = gold, near-black/gold with a white-gold accent",
+                        "  4 = spectral, deep violet with a cyan/violet accent",
+                        "  5 = negative, inverted white/black with a red accent",
+                        "  6 = ember, charcoal with an orange-white accent",
+                        "The palette applies to the paper/ink frame, the burst accents and the",
+                        "alternating flash together, so the whole effect stays one object.")
+                .defineInRange("dimensionImpactStyle", 0, 0, 6);
+        DIMENSION_IMPACT_MODE = c.comment("Structure of the frame, independent of the palette:",
+                        "  0 = standard two-tone with midtone screentone",
+                        "  1 = line art: clean paper with inked silhouettes only",
+                        "  2 = halftone: the screentone becomes the image, with larger dots")
+                .defineInRange("dimensionImpactMode", 0, 0, 2);
         DIMENSION_IMPACT_STRENGTH = c.comment("How far the frame replaces the picture: 0 leaves the",
                         "world alone and only the chromatic aberration remains, 1 is fully drawn.")
                 .defineInRange("dimensionImpactStrength", 1.0, 0.0, 1.5);
+        DIMENSION_IMPACT_ZOOM = c.comment("Radial zoom blur at the opening of the frame, as a fraction of",
+                        "screen distance. The original's ZoomBlur setting; 0 disables it and leaves",
+                        "the chromatic aberration as the only lens distortion.")
+                .defineInRange("dimensionImpactZoom", 0.55, 0.0, 1.5);
         DIMENSION_IMPACT_ABERRATION = c.comment("Radial red/blue split. The split grows with the square",
                         "of the distance from the centre of the screen, so the middle holds still.",
                         "0 disables it and leaves a plain two-tone frame.")

@@ -31,6 +31,13 @@ import net.minecraft.world.entity.player.Abilities;
  * grant — the player should not have to find a key to take off — it is to write it <em>once</em> on
  * the transition and then leave it alone.
  *
+ * <p><b>But "once on the transition" still made a relogin lift off.</b> The ability transition is
+ * replayed on every join (the server loads {@code mayfly} as false, then the wearer tick grants it),
+ * so setting {@code flying = true} there meant every login with the mutation started in the air,
+ * even when the player had been standing on the ground when they logged out. The grant now only
+ * grants permission and clears any stale flight flag; the player double-taps jump to take off, and
+ * vanilla's own toggle and landing then own the flag for the whole session.
+ *
  * <p>Returns whether anything changed, so the caller only sends {@code ClientboundPlayerAbilitiesPacket}
  * on a real transition instead of every tick.
  */
@@ -45,10 +52,12 @@ public final class FlightAbility {
      */
     public static boolean apply(Abilities abilities, boolean permitted) {
         if (abilities.mayfly != permitted) {
-            // A transition. Lift off immediately so the mutation feels like flight rather than like
-            // finding a key, and shut down cleanly when it is taken away.
+            // A transition. Grant permission, but do NOT take off: this transition is replayed on
+            // every login, and `flying = true` here is what made a player who logged out on the
+            // ground resume hovering. Clearing the flag also repairs a saved `flying` left over
+            // from the previous session.
             abilities.mayfly = permitted;
-            abilities.flying = permitted;
+            abilities.flying = false;
             return true;
         }
         // Permission already matches, so `flying` belongs to the player from here: vanilla's double-tap

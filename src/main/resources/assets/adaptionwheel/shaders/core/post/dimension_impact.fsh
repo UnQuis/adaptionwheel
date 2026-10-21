@@ -12,6 +12,9 @@ uniform vec4 ImpactProgress;
 uniform vec4 ImpactBurst;
 uniform vec4 ImpactInk;
 uniform vec4 ImpactPaper;
+// Hot core/burst colour. The palette selector in Java drives ink, paper and accent together so
+// the frame cannot end up with a crimson paper and a white core from two different styles.
+uniform vec4 ImpactAccent;
 // x use texture mask, y smooth invert, z stretch to screen, w reserved.
 uniform vec4 ImpactMaskOptions;
 // xy frame_N.png size in pixels, for the aspect-preserving crop.
@@ -53,13 +56,36 @@ void main() {
     float r2 = dot(radial, radial);
     float split = ImpactParams.y * r2 * 0.08;
     vec3 col = vec3(scene(uv + radial * split).r, scene(uv).g, scene(uv - radial * split).b);
+
+    // Radial zoom blur, strongest at the opening instant and unwinding with the panel. It samples
+    // along the same radius as the aberration, so the two lens effects agree about where the
+    // frame is being pulled toward. Four taps is the cheap version from TheShootingStar's
+    // ZoomBlur setting; more taps buy very little once the frame is already two-toned.
+    float zoom = ImpactProgress.y;
+    if (zoom > 0.0005) {
+        vec2 zdir = (uv - centre) * zoom;
+        vec3 z = scene(uv + zdir * 0.25);
+        z += scene(uv + zdir * 0.55);
+        z += scene(uv + zdir * 0.85);
+        z += scene(uv + zdir * 1.15);
+        col = mix(col, z * 0.25, 0.7);
+    }
     float l = lum(col);
 
-    // Ink outline off a 1.5px central difference - this is what stops the two-tone split below
-    // reading as a threshold filter: a drawn impact frame inks its silhouettes.
-    float gx = lum(scene(uv + vec2(texel.x, 0.0))) - lum(scene(uv - vec2(texel.x, 0.0)));
-    float gy = lum(scene(uv + vec2(0.0, texel.y))) - lum(scene(uv - vec2(0.0, texel.y)));
-    float ink = smoothstep(0.05, 0.16, length(vec2(gx, gy))) * ImpactParams.w;
+    // Ink outline off a full 3x3 Sobel rather than a central difference. The extra taps are what
+    // make fine silhouettes survive the threshold step; a 3x3 kernel also gives the ink a
+    // direction, which is why the result reads as a drawn outline and not a blurred edge.
+    float tl = lum(scene(uv + vec2(-texel.x, -texel.y)));
+    float tc = lum(scene(uv + vec2(0.0, -texel.y)));
+    float tr = lum(scene(uv + vec2(texel.x, -texel.y)));
+    float ml = lum(scene(uv + vec2(-texel.x, 0.0)));
+    float mr = lum(scene(uv + vec2(texel.x, 0.0)));
+    float bl = lum(scene(uv + vec2(-texel.x, texel.y)));
+    float bc = lum(scene(uv + vec2(0.0, texel.y)));
+    float br = lum(scene(uv + vec2(texel.x, texel.y)));
+    float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
+    float gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);
+    float ink = smoothstep(0.18, 0.55, length(vec2(gx, gy))) * ImpactParams.w;
 
     // Eight-tap ring average. Thresholding against each pixel's own neighbourhood instead of a
     // fixed brightness is what lets the same two tones read over a noon sky and a black cave
@@ -89,7 +115,29 @@ void main() {
     vec3 frame = ImpactPaper.rgb * two;
     frame = mix(frame, ImpactInk.rgb * dots, mid * 0.8);
     frame = mix(frame, ImpactInk.rgb * 0.25, ink * ImpactBurst.w);
-    frame = mix(frame, vec3(1.0), core);
+    frame = mix(frame, ImpactAccent.rgb, core);
+
+    // Structural modes, independent of the palette. Options.w was reserved; it now carries the
+    // mode so no extra uniform or JSON entry is needed.
+    float mode = ImpactMaskOptions.w;
+    if (mode > 0.5 && mode < 1.5) {
+        // Line art: clean paper, silhouettes drawn only by the Sobel ink and the hot core. The
+        // midtone dots are deliberately absent, which is what makes the line-art variant read as
+        // a drawing rather than as a thresholded photograph.
+        float contour = smoothstep(0.10, 0.38, length(vec2(gx, gy)));
+        frame = ImpactPaper.rgb;
+        frame = mix(frame, ImpactInk.rgb, clamp(ink + contour * 0.45, 0.0, 1.0));
+        frame = mix(frame, ImpactAccent.rgb, core);
+    } else if (mode > 1.5) {
+        // Halftone: the screentone becomes the image instead of a midtone overlay. The dot cells
+        // are larger and the coverage follows absolute brightness, so a flat sky still resolves
+        // into clean paper rather than a noise field.
+        float bigDots = step(length(fract(tp * 0.55) - 0.5),
+                            sqrt(clamp(tone, 0.0, 1.0)) * 0.58);
+        frame = mix(ImpactPaper.rgb, ImpactInk.rgb, bigDots);
+        frame = mix(frame, ImpactInk.rgb, ink * 0.35);
+        frame = mix(frame, ImpactAccent.rgb, core * 0.6);
+    }
 
     // Optional frame_N.png masks. The mask is a black/white image: white keeps the
     // threshold-converted scene, black selects its inverse. This is how the original mod
@@ -158,7 +206,8 @@ void main() {
     float band = smoothstep(0.04, 0.28, radius) * (1.0 - smoothstep(0.6, 1.05, radius));
     float lines = pick * ray * taper * band * burst * ImpactBurst.y;
 
-    vec3 harsh = clamp(frame * 0.12, vec3(0.02), vec3(0.35));
+    vec3 harsh = clamp(mix(frame * 0.12, ImpactAccent.rgb * 0.8, 0.55),
+                       vec3(0.02), vec3(1.0));
     float hard = clamp(smoothstep(0.05, 0.45, ring) + smoothstep(0.05, 0.5, lines), 0.0, 1.0) * 0.8;
     frame = mix(frame, harsh, hard);
 

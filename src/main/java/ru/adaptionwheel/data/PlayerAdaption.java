@@ -35,7 +35,7 @@ public class PlayerAdaption {
             Codec.INT.optionalFieldOf("shedCount", 0).forGetter(d -> d.shedCount),
             Extras.CODEC.optionalFieldOf("extras", Extras.EMPTY)
                     .forGetter(d -> new Extras(new ArrayList<>(d.disabled), new ArrayList<>(d.cache),
-                            Map.copyOf(d.progress)))
+                            Map.copyOf(d.progress), d.instabreak))
     ).apply(inst, PlayerAdaption::new));
 
     public final Map<String, Integer> levels = new HashMap<>();
@@ -54,6 +54,12 @@ public class PlayerAdaption {
      * would otherwise lose on every rejoin. Cleared by {@link #reset()} along with everything else.
      */
     public final Map<String, Integer> progress = new HashMap<>();
+
+    /**
+     * Whether the permanent Instabreak stance is switched on. Persisted rather than kept in a static
+     * map: the stance is a player choice, and losing it on every rejoin is the bug this field fixes.
+     */
+    public boolean instabreak;
 
     public final Map<String, Integer> killCounts = new HashMap<>();
 
@@ -104,6 +110,7 @@ public class PlayerAdaption {
         this.disabled.addAll(extras.disabled());
         this.cache.addAll(extras.cache());
         this.progress.putAll(extras.progress());
+        this.instabreak = extras.instabreak();
         this.healingTimer = healingTimer;
         this.adversityCooldownTimer = adversityCooldownTimer;
         this.adversityTimer = adversityTimer;
@@ -185,6 +192,7 @@ public class PlayerAdaption {
         disabled.clear();
         cache.clear();
         progress.clear();
+        instabreak = false;
         healingTimer = 0;
         adversityCooldownTimer = 0;
         adversityTimer = 0;
@@ -213,6 +221,7 @@ public class PlayerAdaption {
         disabled.addAll(other.disabled);
         cache.clear();
         cache.addAll(other.cache);
+        instabreak = other.instabreak;
         healingTimer = other.healingTimer;
         adversityCooldownTimer = other.adversityCooldownTimer;
         adversityTimer = other.adversityTimer;

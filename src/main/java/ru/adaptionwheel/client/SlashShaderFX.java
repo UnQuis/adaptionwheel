@@ -36,7 +36,8 @@ import java.io.IOException;
  * on the uniform, and the mesh is a few hundred triangles, so batching would buy nothing anyway.
  *
  * <p>The transform is deliberately explicit rather than relying on {@code ModelViewMat}/{@code ProjMat}:
- * see {@link #viewProjection()}.
+ * the caller hands in the frame's view-projection, because this draw is deferred out of the entity
+ * pass. See {@link SlashWorldRenderer}.
  */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class SlashShaderFX {
@@ -65,22 +66,6 @@ public final class SlashShaderFX {
                 GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
     }
 
-    /**
-     * View-projection for this draw.
-     *
-     * <p>Both halves are needed and getting this wrong is silent: vanilla's transform is
-     * {@code ProjMat * ModelViewMat * pos}, and in 1.21.1 the camera's view lives in the
-     * <i>model-view</i> matrix — {@code getProjectionMatrix()} is the projection alone. Feeding only
-     * the projection places the blade in unviewed world coordinates, off screen, which looks
-     * exactly like the slash not rendering at all.
-     */
-    private static final Matrix4f VIEW_PROJECTION = new Matrix4f();
-
-    private static Matrix4f viewProjection() {
-        VIEW_PROJECTION.set(RenderSystem.getProjectionMatrix());
-        return VIEW_PROJECTION.mul(RenderSystem.getModelViewMatrix());
-    }
-
     @SubscribeEvent
     public static void onRegisterShaders(RegisterShadersEvent event) {
         try {
@@ -100,20 +85,33 @@ public final class SlashShaderFX {
     /**
      * One slash: a swept tube in world space, oriented by its caller.
      *
-     * @param alpha 0..1 master fade, driven by the entity's life ratio; it rides the uniform
-     *              because a vertex attribute cannot carry it without widening the format
-     * @param glow  0..1 aura strength, same reason
+     * @param alpha        0..1 master fade, driven by the entity's life ratio; it rides the uniform
+     *                     because a vertex attribute cannot carry it without widening the format
+     * @param glowAlpha    0..1 aura strength, same reason
+     * @param depthTest    false for an underwater draw; fast graphics writes water depth and would
+     *                     otherwise hide the deferred blade
+     * @param age          ticks + partial tick, used to animate the torn silhouette
+     * @param seed         entity id, so two slashes never share the same tear pattern
      */
     public static void draw(PoseStack poseStack, float length, float curveAmount,
                             float glowHalf, float coreHalf, float taperPower,
-                            int[] tint, float alpha, int[] glow, float glowAlpha) {
+                            int[] tint, float alpha, int[] glow, float glowAlpha,
+                            Matrix4f viewProjection, boolean depthTest,
+                            float age, int seed) {
         ShaderInstance active = shader;
         if (active == null || alpha <= 0.01f) {
             return;
         }
 
         bladeBlend();
-        RenderSystem.enableDepthTest();
+        if (depthTest) {
+            RenderSystem.enableDepthTest();
+        } else {
+            // Fast graphics renders water into the main target, where it writes depth. Keeping
+            // the depth test on would let that water hide the very blade this deferred pass is
+            // meant to reveal, so an underwater draw deliberately reads through it.
+            RenderSystem.disableDepthTest();
+        }
         RenderSystem.depthMask(false);
         // Culling is ON, which is the opposite of every other pass in this mod and is correct only
         // for this mesh. The tube is closed and its traversal emits outward-facing normals
@@ -125,7 +123,7 @@ public final class SlashShaderFX {
         RenderSystem.enableCull();
 
         try {
-            active.safeGetUniform("SlashProj").set(viewProjection());
+            active.safeGetUniform("SlashProj").set(viewProjection);
             active.safeGetUniform("SlashTint").set(
                     ((tint[0] & 0xFF) / 255f), ((tint[1] & 0xFF) / 255f), ((tint[2] & 0xFF) / 255f), alpha);
             active.safeGetUniform("SlashGlow").set(
@@ -137,7 +135,7 @@ public final class SlashShaderFX {
             // PoseStack rather than a bare Matrix4f because Pose, the thing addVertex(pose, ...)
             // wants, is package-private in blaze3d and cannot be constructed from here.
             SlashBladeMesh.build(buffer, poseStack.last(),
-                    length, curveAmount, glowHalf, coreHalf, taperPower);
+                    length, curveAmount, glowHalf, coreHalf, taperPower, age, seed);
             BufferUploader.draw(buffer.buildOrThrow());
         } finally {
             // This runs INSIDE the world pass, so nothing downstream re-establishes GL state for
@@ -146,6 +144,7 @@ public final class SlashShaderFX {
             // the success path either.
             active.clear();
             RenderSystem.depthMask(true);
+            RenderSystem.enableDepthTest();
             RenderSystem.disableBlend();
         }
     }
