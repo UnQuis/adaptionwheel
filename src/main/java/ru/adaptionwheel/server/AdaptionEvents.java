@@ -2098,20 +2098,31 @@ public class AdaptionEvents {
                 AdaptationProgression.jumpStrengthBonus(count), AttributeModifier.Operation.ADD_VALUE);
 
         boolean liquid = data.isEnabled(Concepts.ENV_LIQUID) && data.active(Concepts.ENV_LIQUID);
+        boolean aquatic = AdaptionConfig.ENABLE_MUTATION_AQUATIC.get()
+                && data.active(Concepts.MUTATION_AQUATIC);
+
+        // These two adaptations occupy the same tier. They used to be added together, so a player
+        // with both felt as if the water had two independent speed multipliers: +1.0 from Liquid
+        // and +2.5 from Aquatic Mastery, plus +0.6 and +1.0 water efficiency. Aquatic now replaces
+        // the Liquid bonus rather than stacking on it, and the efficiency ceiling is kept below
+        // 1.0 so the water does not become frictionless.
+        double swim = aquatic
+                ? Math.clamp(AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get(), 0.35, 1.0)
+                : liquid ? 0.35 : 0.0;
+        double efficiency = aquatic ? 0.75 : liquid ? 0.35 : 0.0;
         applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), SWIM_MODIFIER,
-                liquid ? 0.6 : 0.0, AttributeModifier.Operation.ADD_VALUE);
+                efficiency, AttributeModifier.Operation.ADD_VALUE);
         applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), LIQUID_SPEED_MODIFIER,
-                liquid ? 1.0 : 0.0, AttributeModifier.Operation.ADD_VALUE);
+                swim, AttributeModifier.Operation.ADD_VALUE);
+        // The two names are kept as one modifier each for config compatibility, but only one of
+        // them is ever non-zero now; the old saved modifiers are removed by the amount check.
+        applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), AQUATIC_SWIM_SPEED_MODIFIER,
+                0.0, AttributeModifier.Operation.ADD_VALUE);
+        applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), AQUATIC_SWIM_EFFICIENCY_MODIFIER,
+                0.0, AttributeModifier.Operation.ADD_VALUE);
 
         applyStat(player.getAttribute(Attributes.SUBMERGED_MINING_SPEED), SUBMERGED_MINING_MODIFIER,
                 liquid ? 0.8 : 0.0, AttributeModifier.Operation.ADD_VALUE);
-
-        boolean aquatic = AdaptionConfig.ENABLE_MUTATION_AQUATIC.get()
-                && data.active(Concepts.MUTATION_AQUATIC);
-        applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), AQUATIC_SWIM_SPEED_MODIFIER,
-                aquatic ? AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get() : 0.0, AttributeModifier.Operation.ADD_VALUE);
-        applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), AQUATIC_SWIM_EFFICIENCY_MODIFIER,
-                aquatic ? 1.0 : 0.0, AttributeModifier.Operation.ADD_VALUE);
     }
 
     private static void applyStat(AttributeInstance attribute, ResourceLocation id,

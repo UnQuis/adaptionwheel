@@ -35,7 +35,7 @@ public final class AbilityHud {
                 || minecraft.player.isSpectator() || !ClientAdaption.wearingWheel) {
             return;
         }
-        ActiveAbility ability = ActiveAbilities.selected();
+        ActiveAbility ability = AbilityAvailability.selected();
         if (ability == null) {
             return;
         }
@@ -64,26 +64,30 @@ public final class AbilityHud {
                 WheelUi.tint(accent));
         WheelUi.itemIcon(graphics, ability.iconStack(), x + 11, y + 9, 16);
 
-        int keyWidth = ability.keyLabel().isBlank() ? 0 : 16;
-        int nameMax = cardWidth - 38 - keyWidth;
+        String keyLabel = AbilityAvailability.keyLabel(ability);
+        int keyWidth = keyLabel.isBlank() ? 0 : 16;        int nameMax = cardWidth - 38 - keyWidth;
         WheelUi.text(graphics, minecraft.font, WheelUi.MONO_8,
                 WheelUi.fit(minecraft.font, WheelUi.MONO_8,
                         WheelUi.upper(ability.name().getString()), nameMax),
                 x + 34, y + 5, WheelUi.INK, false);
 
-        // The definition has no live cooldown state yet. A quiet full bar is the readiness
-        // placeholder; ability code can replace the fill with remaining/cooldownTicks when it has
-        // a per-player value to read, without changing the card's geometry.
+        // The bar refills as the server-side cooldown runs out. It is a mirror, not the authority:
+        // a dropped packet shortens a bar, never the wait.
         int barX = x + 34;
         int barW = cardWidth - 44;
+        float recovered = 1f - ClientCooldowns.fraction(ability.id());
         graphics.fill(barX, y + 22, barX + barW, y + 24, 0x24FFFFFF);
-        graphics.fill(barX, y + 22, barX + barW, y + 23, WheelUi.withAlpha(accent, 0.55f));
+        int filled = Math.round(barW * recovered);
+        if (filled > 0) {
+            graphics.fill(barX, y + 22, barX + filled, y + 23,
+                    WheelUi.withAlpha(accent, 0.55f));
+        }
 
-        if (!ability.keyLabel().isBlank()) {
+        if (!keyLabel.isBlank()) {
             int keyX = x + cardWidth - 20;
             WheelUi.fillRounded(graphics, keyX, y + 8, 14, 14, 4,
                     WheelUi.withAlpha(accent, 0.14f));
-            WheelUi.centered(graphics, minecraft.font, WheelUi.MONO_8, ability.keyLabel(),
+            WheelUi.centered(graphics, minecraft.font, WheelUi.MONO_8, keyLabel,
                     keyX + 7, y + 11, accent, false);
         }
     }

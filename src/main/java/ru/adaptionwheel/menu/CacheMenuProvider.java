@@ -11,11 +11,13 @@ public class CacheMenuProvider implements MenuProvider {
 
     @Override
     public Component getDisplayName() {
-        return Component.translatable("adaptionwheel.gui.cache");
+        // The screen the player reaches with E must read as the inventory. Its title sits where
+        // vanilla draws "Crafting", and a second heading there would be a visible seam.
+        return Component.translatable("container.crafting");
     }
 
     @Override
     public @Nullable AbstractContainerMenu createMenu(int windowId, Inventory inventory, Player player) {
-        return new CacheMenu(windowId, player);
+        return new CacheMenu(windowId, inventory, player);
     }
 }

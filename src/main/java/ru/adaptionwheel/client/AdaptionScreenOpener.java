@@ -7,6 +7,8 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.SurfaceAdaptations;
+import ru.adaptionwheel.category.Concepts;
+import ru.adaptionwheel.network.DivePayload;
 import ru.adaptionwheel.network.FistInstabreakPayload;
 import ru.adaptionwheel.network.OpenCachePayload;
 
@@ -48,9 +50,27 @@ public final class AdaptionScreenOpener {
             if (mc.player == null || mc.screen != null) {
                 continue;
             }
-            if (ClientAdaption.active(ru.adaptionwheel.category.Concepts.ENV_INVENTORY)) {
+            if (ClientAdaption.active(Concepts.ENV_INVENTORY)) {
                 OpenCachePayload.send();
             }
+        }
+
+        while (AdaptionKeybinds.DIVE_KEY.consumeClick()) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.screen != null || !ClientAdaption.wearingWheel) {
+                continue;
+            }
+            if (!ClientAdaption.active(Concepts.ENV_FALL)
+                    && !ClientAdaption.active(Concepts.MUTATION_FLIGHT)) {
+                continue;
+            }
+            if (mc.player.onGround() || mc.player.isInWaterOrBubble() || mc.player.isInLava()) {
+                continue;
+            }
+            if (!ClientCooldowns.ready(ru.adaptionwheel.server.DiveAbility.ID)) {
+                continue;
+            }
+            DivePayload.send();
         }
     }
 }

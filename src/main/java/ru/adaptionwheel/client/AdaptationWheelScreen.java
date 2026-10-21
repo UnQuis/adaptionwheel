@@ -194,13 +194,34 @@ public final class AdaptationWheelScreen extends Screen {
 
         // The reference is dark paper, not a flat fill. These specks are deliberately almost
         // invisible: they show up as texture on a bright monitor and disappear on a dim one, which
-        // is exactly the amount of noise an editorial page wants.
+        // is exactly the amount of noise an editorial page wants. They drift upwards at four
+        // different rates so the page reads as moving paper rather than as a static noise texture,
+        // and the speeds are per-index instead of random so the field is reproducible.
+        long now = Util.getMillis();
+        long age = now - openedAt;
         for (int i = 0; i < specks.size(); i++) {
             int[] speck = specks.get(i);
             float alpha = 0.012f + (i % 3) * 0.008f;
             int size = speck[2];
-            graphics.fill(speck[0], speck[1], speck[0] + size, speck[1] + size,
+            int drift = (int) (age * (1 + i % 4) / 1400L);
+            int y = Math.floorMod(speck[1] - drift, Math.max(1, height));
+            graphics.fill(speck[0], y, speck[0] + size, y + size,
                     WheelUi.withAlpha(0xF2EFE7, alpha));
+        }
+
+        // Slow vertical scan lines and a wide travelling sheen. They are intentionally much
+        // quieter than the menu's content: the panel should feel alive, not animated over.
+        int scanOffset = (int) (age / 45L % 6L);
+        for (int y = scanOffset; y < height; y += 6) {
+            graphics.fill(0, y, width, y + 1, 0x08FFFFFF);
+        }
+        int sweep = (int) (((now - openedAt) * 0.055) % (width + 300L)) - 150;
+        int from = Math.max(0, sweep - 140);
+        int to = Math.min(width, sweep + 140);
+        for (int x = from; x < to; x += 2) {
+            float distance = Math.abs(x - sweep) / 140f;
+            float alpha = (1f - distance) * (1f - distance) * 0.035f;
+            graphics.fill(x, 0, x + 2, height, WheelUi.withAlpha(0xFFFFFF, alpha));
         }
     }
 
@@ -588,8 +609,9 @@ public final class AdaptationWheelScreen extends Screen {
         synergyTop = listTop;
         abilityTop = listTop + synergyStripH;
 
-        int abilityRows = Math.min(2, ActiveAbilities.all().size());
-        abilityAreaH = ActiveAbilities.isEmpty()
+        List<ActiveAbility> unlockedAbilities = AbilityAvailability.unlocked();
+        int abilityRows = Math.min(2, unlockedAbilities.size());
+        abilityAreaH = unlockedAbilities.isEmpty()
                 ? (height < 300 ? 48 : ABILITY_HEIGHT)
                 : Math.max(1, abilityRows) * ABILITY_ROW_HEIGHT
                         + Math.max(0, abilityRows - 1) * ABILITY_ROW_GAP;
@@ -1300,15 +1322,15 @@ public final class AdaptationWheelScreen extends Screen {
     }
 
     private void drawAbilityArea(GuiGraphics graphics) {
-        if (ActiveAbilities.isEmpty()) {
+        List<ActiveAbility> unlocked = AbilityAvailability.unlocked();
+        if (unlocked.isEmpty()) {
             drawAbilityPlaceholder(graphics);
             return;
         }
-        List<ActiveAbility> all = ActiveAbilities.all();
-        int shown = Math.min(2, all.size());
+        int shown = Math.min(2, unlocked.size());
         int y = abilityTop;
         for (int i = 0; i < shown; i++) {
-            ActiveAbility ability = all.get(i);
+            ActiveAbility ability = unlocked.get(i);
             drawAbilityCard(graphics, ability, listX, y, listW, ABILITY_ROW_HEIGHT);
             abilityHits.add(new AbilityHit(ability.id(), new Rect(listX, y, listW, ABILITY_ROW_HEIGHT)));
             y += ABILITY_ROW_HEIGHT + ABILITY_ROW_GAP;
@@ -1389,16 +1411,23 @@ public final class AdaptationWheelScreen extends Screen {
     private void drawAbilityCard(GuiGraphics graphics, ActiveAbility ability, int x, int y,
                                  int w, int h) {
         int accent = safeColor(ability.color());
-        boolean selectedAbility = ability.id().equals(ActiveAbilities.selectedId());
+        ActiveAbility choice = AbilityAvailability.selected();
+        boolean selectedAbility = choice != null && choice.id().equals(ability.id());
         WheelUi.card(graphics, x, y, w, h, 8, CARD,
                 selectedAbility ? WheelUi.withAlpha(accent, 0.55f) : WheelUi.BORDER);
+        if (selectedAbility) {
+            float pulse = 0.5f + 0.5f * Mth.sin((Util.getMillis() - openedAt) / 220f);
+            WheelUi.outlineRounded(graphics, x, y, w, h, 8,
+                    WheelUi.withAlpha(accent, 0.16f + pulse * 0.12f), CARD);
+        }
         graphics.fill(x + 4, y + 9, x + 6, y + h - 9, accent);
 
         WheelUi.fillRounded(graphics, x + 10, y + 5, 26, 26, 6,
                 WheelUi.tint(accent));
         WheelUi.itemIcon(graphics, ability.iconStack(), x + 13, y + 8, 20);
 
-        int nameMax = w - (ability.keyLabel().isBlank() ? 58 : 92);
+        String key = AbilityAvailability.keyLabel(ability);
+        int nameMax = w - (key.isBlank() ? 58 : 92);
         WheelUi.text(graphics, font, WheelUi.MONO_11,
                 WheelUi.fit(font, WheelUi.MONO_11, WheelUi.upper(ability.name().getString()), nameMax),
                 x + 44, y + 6, INK, false);
@@ -1406,8 +1435,7 @@ public final class AdaptationWheelScreen extends Screen {
                 WheelUi.fit(font, WheelUi.MONO_8, ability.description().getString(), nameMax),
                 x + 44, y + 20, MUTED, false);
 
-        if (!ability.keyLabel().isBlank()) {
-            String key = ability.keyLabel();
+        if (!key.isBlank()) {
             int keyW = Math.max(16, font.width(WheelUi.mono(WheelUi.MONO_8, key)) + 8);
             int keyX = x + w - 10 - keyW;
             WheelUi.fillRounded(graphics, keyX, y + 10, keyW, 16, 5,
@@ -1460,6 +1488,13 @@ public final class AdaptationWheelScreen extends Screen {
         WheelUi.card(graphics, x, y, w, h, 9, CARD,
                 chosen ? WheelUi.withAlpha(accent, 0.55f)
                         : hoveredCard ? 0x44FFFFFF : 0x30FFFFFF);
+
+        if (chosen || hoveredCard) {
+            float pulse = 0.5f + 0.5f * Mth.sin((Util.getMillis() - openedAt) / 260f);
+            WheelUi.outlineRounded(graphics, x, y, w, h, 9,
+                    WheelUi.withAlpha(accent, (chosen ? 0.20f : 0.10f) + pulse * 0.10f),
+                    CARD);
+        }
 
         graphics.fill(x + 4, y + 12, x + 6, y + h - 12, effective);
 

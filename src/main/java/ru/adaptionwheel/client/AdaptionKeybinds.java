@@ -30,6 +30,12 @@ public final class AdaptionKeybinds {
             GLFW.GLFW_KEY_V,
             "key.categories.adaptionwheel");
 
+    public static final KeyMapping DIVE_KEY = new KeyMapping(
+            "key.adaptionwheel.dive",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_R,
+            "key.categories.adaptionwheel");
+
     private AdaptionKeybinds() {
     }
 
@@ -38,5 +44,6 @@ public final class AdaptionKeybinds {
         event.register(OPEN_SCREEN_KEY);
         event.register(TOGGLE_INSTABREAK_KEY);
         event.register(OPEN_CACHE_KEY);
+        event.register(DIVE_KEY);
     }
 }

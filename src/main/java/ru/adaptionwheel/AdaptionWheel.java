@@ -73,6 +73,8 @@ public class AdaptionWheel {
             Item item = ModItems.MAHORAGA_WHEEL.get();
             CuriosApi.registerCurio(item, (ICurioItem) item);
 
+            ru.adaptionwheel.ability.ActiveAbilities.register(
+                    ru.adaptionwheel.server.DiveAbility.definition());
             ru.adaptionwheel.server.DomainExchange.bootstrap();
         });
     }

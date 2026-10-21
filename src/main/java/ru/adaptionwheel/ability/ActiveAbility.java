@@ -3,6 +3,7 @@ package ru.adaptionwheel.ability;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -22,6 +23,7 @@ import java.util.function.Supplier;
  * @param color         ARGB accent, usually the ability's school colour
  * @param cooldownTicks cooldown length; zero means no cooldown bar
  * @param keyLabel      the key shown in the HUD card, e.g. {@code "R"}; empty hides the badge
+ * @param unlockAny     concepts of which the player needs at least one; empty means always visible
  */
 public record ActiveAbility(
         String id,
@@ -30,7 +32,8 @@ public record ActiveAbility(
         Supplier<ItemStack> icon,
         int color,
         int cooldownTicks,
-        String keyLabel) {
+        String keyLabel,
+        List<String> unlockAny) {
 
     public ActiveAbility {
         Objects.requireNonNull(id, "id");
@@ -39,6 +42,7 @@ public record ActiveAbility(
         Objects.requireNonNull(icon, "icon");
         keyLabel = keyLabel == null ? "" : keyLabel;
         cooldownTicks = Math.max(0, cooldownTicks);
+        unlockAny = unlockAny == null ? List.of() : List.copyOf(unlockAny);
     }
 
     public ItemStack iconStack() {

@@ -92,6 +92,7 @@ public final class ClientAdaption {
         syncedAtGameTime = currentGameTime();
         tasksSyncedAtGameTime = syncedAtGameTime;
         adversityTriggeredAtGameTime = Long.MIN_VALUE;
+        ClientCooldowns.clear();
     }
 
     public static void onSync(AdaptionSyncPayload payload) {

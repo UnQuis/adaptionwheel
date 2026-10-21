@@ -9,9 +9,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * The active-ability registry.
  *
- * <p>Empty on purpose. The menu renders its reserved "coming soon" card while this is empty, and
- * the HUD card returns without drawing. Both read the same list, so registering the first ability
- * lights up both surfaces at once instead of leaving one of them behind.
+ * <p>The menu renders its reserved "coming soon" card while this is empty, and the HUD card returns
+ * without drawing. Both read the same list, so registering an ability lights up both surfaces at
+ * once instead of leaving one of them behind. Dive is the first entry, registered from the common
+ * setup hook.
  *
  * <p>Registration is open and may happen from any mod-loading phase; copies are returned so a
  * caller cannot mutate the registry by holding the list.
@@ -48,7 +49,8 @@ public final class ActiveAbilities {
 
     /** The last explicitly selected ability, or the first registered one. */
     @Nullable
-    public static ActiveAbility selected() {        if (ALL.isEmpty()) {
+    public static ActiveAbility selected() {
+        if (ALL.isEmpty()) {
             return null;
         }
         String id = selectedId;
