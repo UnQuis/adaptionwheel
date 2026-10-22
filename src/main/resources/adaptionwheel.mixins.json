@@ -21,7 +21,9 @@
     "HurtCamMixin",
     "LightTextureMixin",
     "FogColorMixin",
-    "FogDistanceMixin"
+    "FogDistanceMixin",
+    "AbstractContainerScreenAccess",
+    "CachePanelClickMixin"
   ],
   "injectors": {
     "defaultRequire": 1

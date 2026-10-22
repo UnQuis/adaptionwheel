@@ -29,6 +29,8 @@ public class AdaptionNetworking {
                 (payload, context) -> context.enqueueWork(() -> DiveImpactPayload.apply(payload)));
         registrar.playToClient(AbilityCooldownPayload.TYPE, AbilityCooldownPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> AbilityCooldownPayload.apply(payload)));
+        registrar.playToClient(CacheSyncPayload.TYPE, CacheSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> CacheSyncPayload.apply(payload)));
         registrar.playToClient(ExistenceCinematicPayload.TYPE, ExistenceCinematicPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> ru.adaptionwheel.client.ExistenceCinematicFX.start(payload)));
         registrar.playToServer(TradeActionPayload.TYPE, TradeActionPayload.STREAM_CODEC,
@@ -49,5 +51,8 @@ public class AdaptionNetworking {
         registrar.playToServer(ToggleAdaptationPayload.TYPE, ToggleAdaptationPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         ToggleAdaptationPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
+        registrar.playToServer(CacheClickPayload.TYPE, CacheClickPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        CacheClickPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
     }
 }

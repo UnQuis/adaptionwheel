@@ -27,12 +27,7 @@ public final class AbilityHud {
 
     @SubscribeEvent
     public static void render(RenderGuiEvent.Post event) {
-        if (ActiveAbilities.isEmpty() || !AdaptionConfig.ABILITY_HUD_ENABLED.get()) {
-            return;
-        }
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.screen != null || minecraft.player == null || minecraft.options.hideGui
-                || minecraft.player.isSpectator() || !ClientAdaption.wearingWheel) {
+        if (!showsCard()) {
             return;
         }
         ActiveAbility ability = AbilityAvailability.selected();
@@ -41,54 +36,43 @@ public final class AbilityHud {
         }
 
         GuiGraphics graphics = event.getGuiGraphics();
-        int screenWidth = graphics.guiWidth();
-        int screenHeight = graphics.guiHeight();
-        int cardWidth = 104;
-        int cardHeight = 34;
-
-        int hotbarRight = screenWidth / 2 + 91;
-        int x = Math.min(screenWidth - cardWidth - 4, hotbarRight + 8);
-        int y = screenHeight - cardHeight - 4;
-        if (x < hotbarRight + 4 && x + cardWidth > screenWidth / 2 - 91) {
-            // A narrow GUI cannot fit a card beside the hotbar. Lift it above the hotbar rather
-            // than letting it cover the item the player is holding.
-            x = screenWidth - cardWidth - 4;
-            y = screenHeight - cardHeight - 26;
-        }
+        Minecraft minecraft = Minecraft.getInstance();
+        int x = HudCards.x(graphics.guiWidth(), HudCards.WIDTH);
+        int y = HudCards.y(graphics.guiHeight(), 0, HudCards.HEIGHT);
 
         int accent = ability.color();
-        WheelUi.card(graphics, x, y, cardWidth, cardHeight, 8, WheelUi.CARD, WheelUi.BORDER);
-        graphics.fill(x + 4, y + 8, x + 6, y + cardHeight - 8, accent);
-
-        WheelUi.fillRounded(graphics, x + 9, y + 7, 20, 20, 5,
-                WheelUi.tint(accent));
-        WheelUi.itemIcon(graphics, ability.iconStack(), x + 11, y + 9, 16);
-
-        String keyLabel = AbilityAvailability.keyLabel(ability);
-        int keyWidth = keyLabel.isBlank() ? 0 : 16;        int nameMax = cardWidth - 38 - keyWidth;
-        WheelUi.text(graphics, minecraft.font, WheelUi.MONO_8,
-                WheelUi.fit(minecraft.font, WheelUi.MONO_8,
-                        WheelUi.upper(ability.name().getString()), nameMax),
-                x + 34, y + 5, WheelUi.INK, false);
+        HudCards.frame(graphics, x, y, HudCards.WIDTH, HudCards.HEIGHT, accent,
+                WheelUi.CARD, WheelUi.BORDER);
+        HudCards.icon(graphics, x, y, ability.iconStack(), accent);
+        HudCards.title(graphics, minecraft.font, x, y, ability.name().getString(),
+                WheelUi.INK, HudCards.WIDTH - 38 - 20);
 
         // The bar refills as the server-side cooldown runs out. It is a mirror, not the authority:
         // a dropped packet shortens a bar, never the wait.
-        int barX = x + 34;
-        int barW = cardWidth - 44;
-        float recovered = 1f - ClientCooldowns.fraction(ability.id());
-        graphics.fill(barX, y + 22, barX + barW, y + 24, 0x24FFFFFF);
-        int filled = Math.round(barW * recovered);
-        if (filled > 0) {
-            graphics.fill(barX, y + 22, barX + filled, y + 23,
-                    WheelUi.withAlpha(accent, 0.55f));
-        }
+        HudCards.meter(graphics, x, y, HudCards.WIDTH, HudCards.HEIGHT,
+                1f - ClientCooldowns.fraction(ability.id()), accent);
 
-        if (!keyLabel.isBlank()) {
-            int keyX = x + cardWidth - 20;
-            WheelUi.fillRounded(graphics, keyX, y + 8, 14, 14, 4,
-                    WheelUi.withAlpha(accent, 0.14f));
-            WheelUi.centered(graphics, minecraft.font, WheelUi.MONO_8, keyLabel,
-                    keyX + 7, y + 11, accent, false);
+        HudCards.keyChip(graphics, minecraft.font, x, y, HudCards.WIDTH,
+                AbilityAvailability.keyLabel(ability), accent);
+    }
+
+    /**
+     * Whether the ability card occupies the slot closest to the hotbar. The Instabreak readout
+     * stacks above it when it does, which is why this is asked from outside rather than kept
+     * private: two independent readouts claiming the same corner is how they end up overlapping.
+     */
+    static boolean showsCard() {
+        if (ActiveAbilities.isEmpty() || !AdaptionConfig.ABILITY_HUD_ENABLED.get()) {
+            return false;
         }
+        // Nothing unlocked draws nothing, so it must also claim no slot: the Instabreak card sits
+        // one card higher when this one is present, and a card that never appears would leave a
+        // hole in the stack.
+        if (AbilityAvailability.selected() == null) {
+            return false;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft.screen == null && minecraft.player != null && !minecraft.options.hideGui
+                && !minecraft.player.isSpectator() && ClientAdaption.wearingWheel;
     }
 }

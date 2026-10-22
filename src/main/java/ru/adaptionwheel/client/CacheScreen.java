@@ -7,10 +7,12 @@ import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.gui.screens.recipebook.RecipeUpdateListener;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import org.jetbrains.annotations.Nullable;
+import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.menu.CacheMenu;
 import ru.adaptionwheel.server.CacheService;
 
@@ -25,11 +27,9 @@ import ru.adaptionwheel.server.CacheService;
  */
 public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements RecipeUpdateListener {
 
-    private static final int BODY = 0xFFC6C6C6;
-    private static final int LIGHT = 0xFFFFFFFF;
-    private static final int DARK = 0xFF555555;
-    private static final int WELL = 0xFF8B8B8B;
-    private static final int WELL_TOP = 0xFFA0A0A0;
+    private static final ResourceLocation CACHE_TEXTURE =
+            ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID,
+                    "textures/gui/container/cache.png");
 
     private final RecipeBookComponent recipeBookComponent = new RecipeBookComponent();
 
@@ -87,31 +87,16 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
                 left + 26, top + 8, left + 75, top + 78, 30, 0.0625F,
                 xMouse, yMouse, minecraft.player);
 
-        int cacheX = left + (sideLayout ? 176 : 0);
-        int cacheY = top + (sideLayout ? 0 : 166);
-        int cacheW = sideLayout ? imageWidth - 176 : imageWidth;
-        int cacheH = sideLayout ? imageHeight : imageHeight - 166;
-        drawPanel(graphics, cacheX, cacheY, cacheW, cacheH);
-
-        for (int index = 0; index < CacheService.SLOTS; index++) {
-            Slot slot = menu.slots.get(CacheMenu.CACHE_SLOT_START + index);
-            drawWell(graphics, left + slot.x - 1, top + slot.y - 1);
+        // The cache extension is the same art as the inventory it hangs off: its texture is built
+        // from inventory.png (frame, bevel and slot sprite), so there is no visible seam in style,
+        // only the divider the inventory's own bottom edge already draws.
+        if (sideLayout) {
+            graphics.blit(CACHE_TEXTURE, left + CacheService.SIDE_CACHE_X, top, 0, 0,
+                    CacheService.PANEL_WIDTH, CacheService.CACHE_TEXTURE_HEIGHT);
+        } else {
+            graphics.blit(CACHE_TEXTURE, left, top + CacheService.VANILLA_HEIGHT, 0, 0,
+                    CacheService.PANEL_WIDTH, CacheService.CACHE_TEXTURE_HEIGHT);
         }
-    }
-
-    private static void drawPanel(GuiGraphics graphics, int x, int y, int width, int height) {
-        graphics.fill(x, y, x + width, y + height, DARK);
-        graphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, BODY);
-        graphics.fill(x + 1, y + 1, x + width - 1, y + 3, LIGHT);
-        graphics.fill(x + 1, y + 1, x + 3, y + height - 1, LIGHT);
-        graphics.fill(x + width - 3, y + 3, x + width - 1, y + height - 1, DARK);
-        graphics.fill(x + 3, y + height - 3, x + width - 1, y + height - 1, DARK);
-    }
-
-    private static void drawWell(GuiGraphics graphics, int x, int y) {
-        graphics.fill(x, y, x + 18, y + 18, DARK);
-        graphics.fill(x + 1, y + 1, x + 17, y + 17, WELL);
-        graphics.fill(x + 1, y + 1, x + 17, y + 2, WELL_TOP);
     }
 
     /**
@@ -122,8 +107,8 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
         graphics.drawString(font, title, titleLabelX, titleLabelY, 4210752, false);
-        int labelX = sideLayout ? CacheService.SIDE_CACHE_X : 8;
-        int labelY = sideLayout ? 5 : CacheService.CACHE_LABEL_Y;
+        int labelX = sideLayout ? CacheService.SIDE_CACHE_X + 8 : 8;
+        int labelY = sideLayout ? 2 : CacheService.CACHE_LABEL_Y;
         graphics.drawString(font, Component.translatable("adaptionwheel.gui.cache"),
                 labelX, labelY, 4210752, false);
     }

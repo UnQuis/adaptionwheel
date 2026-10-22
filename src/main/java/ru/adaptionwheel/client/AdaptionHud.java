@@ -7,6 +7,8 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
@@ -29,12 +31,16 @@ public class AdaptionHud {
     public static final ResourceLocation WHEEL_TEXTURE =
             ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, "textures/entity/wheel.png");
 
-    private static final int HEADER_COLOR = 0xFFD700;
+    private static final int RED = 0xFFE5484D;
+    private static final int RED_LIGHT = 0xFFFF7B7B;
+    private static final int CARD_RADIUS = 7;
+    private static final int ROW_X = 9;
     private static final int ROW_WIDTH = 252;
     private static final int ROW_HEIGHT = 36;
-    private static final int BAR_WIDTH = 240;
-    private static final int BAR_HEIGHT = 8;
-    private static final int SPACING = 50;
+    /** Row pitch: the card plus the gap that separates two of them. */
+    private static final int SPACING = 46;
+    /** First row is placed one small gap below the header rule, not one full pitch. */
+    private static final int FIRST_ROW_Y = 36;
 
     /** How fast the bar's drawn width chases its real target. Higher = snappier, lower = silkier. */
     private static final float PROGRESS_SMOOTHING_RATE = 10f;
@@ -71,7 +77,7 @@ public class AdaptionHud {
         // return below. It is deliberately independent of showAnalysisHud: a player who hides the
         // analysis list still needs to know whether their fist is about to break the block in front
         // of them.
-        if (ClientAdaption.instabreakUnlocked) {
+        if (ClientAdaption.instabreakUnlocked && mc.screen == null) {
             drawInstabreakPanel(graphics, mc);
         }
 
@@ -100,12 +106,18 @@ public class AdaptionHud {
         // reads as a strobe and provokes photosensitive migraine -- see the flash-rate reasoning
         // in DimensionImpactFX, which this deliberately stays well clear of in the same way.
         float headerPulse = 0.85f + 0.15f * (float) Math.sin(now * Math.PI * 1.2);
-        int headerOpacity = Math.min(100, Math.round(opacity * 150 / 100f * headerPulse));
-        String header = ">>> ADAPTED  " + ClientAdaption.adaptedCount;
-        graphics.drawString(font, Component.literal(header), 0, 0,
-                withAlpha(HEADER_COLOR, headerOpacity), true);
-        graphics.drawString(font, Component.literal("ADAPTATION_ANALYSIS"), 0, font.lineHeight,
-                withAlpha(HEADER_COLOR, headerOpacity), true);
+        int headerAlpha = Math.round(opacity * headerPulse);
+        // The header is drawn in the menu's voice -- JetBrains Mono caps, a solid accent block,
+        // a hairline rule -- instead of vanilla bold text in gold, which sat on grass as an
+        // unreadable olive smear.
+        graphics.fill(0, 0, 3, 19, withAlpha(RED, headerAlpha));
+        WheelUi.text(graphics, font, WheelUi.MONO_8,
+                Component.translatable("adaptionwheel.hud.analysis").getString(),
+                8, 0, withAlpha(WheelUi.INK, headerAlpha), false);
+        WheelUi.text(graphics, font, WheelUi.MONO_8,
+                Component.translatable("adaptionwheel.hud.adapted", ClientAdaption.adaptedCount).getString(),
+                8, 10, withAlpha(RED_LIGHT, headerAlpha), false);
+        graphics.fill(0, 22, ROW_X + ROW_WIDTH, 23, withAlpha(RED_LIGHT, Math.round(headerAlpha * 0.18f)));
 
         List<Row> rows = new ArrayList<>();
         if (ClientAdaption.adversityActive) {
@@ -163,10 +175,11 @@ public class AdaptionHud {
         int maxDisplay = Math.max(5, (int) (mc.getWindow().getGuiScaledHeight() * 0.6f / (SPACING * scale)));
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
-            int y = (i + 1) * SPACING;
+            int y = FIRST_ROW_Y + i * SPACING;
             if (i >= maxDisplay || y + ROW_HEIGHT > mc.getWindow().getGuiScaledHeight() / scale) {
-                graphics.drawString(font, Component.literal("...and " + (rows.size() - i) + " more"),
-                        15, y, 0xFFAAAAAA, true);
+                WheelUi.text(graphics, font, WheelUi.MONO_8,
+                        Component.translatable("adaptionwheel.hud.more", rows.size() - i).getString(),
+                        15, y, withAlpha(WheelUi.MUTED, opacity), false);
                 break;
             }
             drawRow(graphics, font, row, y, opacity, dt, now);
@@ -199,9 +212,18 @@ public class AdaptionHud {
 
         int color = row.rainbow ? rainbowColor()
                 : (off ? 0xFF9A9A9A : (row.overrideColor != null ? row.overrideColor : Concepts.color(row.concept)));
-        int barW = Math.min(BAR_WIDTH, Math.max(0, Math.round(BAR_WIDTH * displayed)));
+        int accent = off ? WheelUi.MUTED : WheelUi.lighten(color, 0.15f);
+        int cardTop = y - 2;
 
-        graphics.fill(9, y - 2, 9 + ROW_WIDTH, y - 2 + ROW_HEIGHT, withAlpha(color, rowOpacity * 15 / 100));
+        // Red glass, not black: the row sits over the world, so a tinted panel reads as part of
+        // the mod's own palette while the world still shows through it. The switch's vocabulary --
+        // rounded track, round knob, hairline -- is what makes it look like the panel it belongs to.
+        int border = withAlpha(off ? 0xFF6D6961 : RED_LIGHT, Math.round(rowOpacity * 0.55f));
+        int body = withAlpha(off ? 0xFF26262A : 0xFF6E1C22, Math.round(rowOpacity * 0.62f));
+        WheelUi.outlineRounded(graphics, ROW_X, cardTop, ROW_WIDTH, ROW_HEIGHT, CARD_RADIUS,
+                border, body);
+        graphics.fill(ROW_X + 2, cardTop + 7, ROW_X + 4, cardTop + ROW_HEIGHT - 7,
+                withAlpha(accent, Math.round(rowOpacity * 0.95f)));
 
         String name = Concepts.chatName(row.concept).getString();
         String tag;
@@ -226,32 +248,64 @@ public class AdaptionHud {
                 ? row.blocksDone + "/" + row.blocksTotal + " " + row.unit()
                 : String.format("%.1f%%", row.progress * 100f);
         String suffix = row.suffix == null ? "" : " " + row.suffix;
-        graphics.drawString(font, name + tag + " : " + meter + suffix, 15, y, withAlpha(color, rowOpacity), true);
+        String valueText = meter + suffix;
 
-        graphics.fill(15, y + 24, 15 + BAR_WIDTH, y + 24 + BAR_HEIGHT, withAlpha(0x000000, rowOpacity * 60 / 100));
+        int valueWidth = font.width(WheelUi.mono(WheelUi.MONO_8, valueText));
+        int nameMax = ROW_WIDTH - 18 - valueWidth - 8;
+        WheelUi.text(graphics, font, WheelUi.MONO_8,
+                WheelUi.fit(font, WheelUi.MONO_8, WheelUi.upper(name + tag), nameMax),
+                ROW_X + 8, cardTop + 5, withAlpha(off ? WheelUi.MUTED : WheelUi.INK, rowOpacity), false);
+        WheelUi.text(graphics, font, WheelUi.MONO_8, valueText,
+                ROW_X + ROW_WIDTH - 8 - valueWidth, cardTop + 5,
+                withAlpha(accent, rowOpacity), false);
+
+        int barX = ROW_X + 8;
+        int barW = ROW_WIDTH - 16;
+        int barY = cardTop + 21;
+        int barH = 6;
+        int barW2 = Math.max(0, Math.min(barW, Math.round(barW * displayed)));
+        WheelUi.fillRounded(graphics, barX, barY, barW, barH, barH / 2,
+                withAlpha(0x000000, Math.round(rowOpacity * 0.45f)));
 
         if (row.rainbow) {
-            int segCount = Math.max(1, barW);
-            for (int x = 0; x < segCount; x++) {
+            for (int x = 0; x < barW2; x++) {
                 int segColor = rainbowColor((int) (x + System.currentTimeMillis() / 10));
-                graphics.fill(15 + x, y + 24, 15 + x + 1, y + 24 + BAR_HEIGHT,
+                graphics.fill(barX + x, barY + 1, barX + x + 1, barY + barH - 1,
                         withAlpha(segColor, rowOpacity * 90 / 100));
             }
         } else if (row.split) {
             // Two-tone, and only at a material handover: left is the stage being finished, right
             // is the one being moved into, both ways round -- see handedOverColours for why.
-            int half = BAR_WIDTH / 2;
-            graphics.fill(15, y + 24, 15 + half, y + 24 + BAR_HEIGHT,
+            int half = barW / 2;
+            WheelUi.fillRounded(graphics, barX, barY, half + barH, barH, barH / 2,
                     withAlpha(row.splitLeft, rowOpacity * 90 / 100));
-            graphics.fill(15 + half, y + 24, 15 + BAR_WIDTH, y + 24 + BAR_HEIGHT,
-                    withAlpha(row.splitRight, rowOpacity * 90 / 100));
-        } else {
-            graphics.fill(15, y + 24, 15 + barW, y + 24 + BAR_HEIGHT, withAlpha(color, rowOpacity * 90 / 100));
-            drawShimmer(graphics, 15, y + 24, barW, BAR_HEIGHT, now, rowOpacity, off);
+            WheelUi.fillRounded(graphics, barX + half - barH, barY, barW - half + barH, barH,
+                    barH / 2, withAlpha(row.splitRight, rowOpacity * 90 / 100));
+        } else if (barW2 > 0) {
+            WheelUi.fillRounded(graphics, barX, barY, barW2, barH, barH / 2,
+                    withAlpha(accent, rowOpacity * 90 / 100));
+            drawShimmer(graphics, barX, barY + 1, barW2, barH - 2, now, rowOpacity, off);
+        }
+
+        if (!row.rainbow) {
+            // The knob is the one thing this HUD borrows outright from the panel's switches.
+            // It marks the leading edge of what has been earned, which a flat bar cannot show --
+            // and it is left in place at 100%, where a bar simply stops changing.
+            int knobRadius = 3;
+            int knobX = Math.max(barX + knobRadius,
+                    Math.min(barX + barW - knobRadius, barX + barW2));
+            if (row.split) {
+                knobX = barX + barW - knobRadius;
+            }
+            int knobColor = off ? 0xFFB9B4AA : 0xFFF6F2E9;
+            WheelUi.fillCircle(graphics, knobX, barY + barH / 2 + 1, knobRadius + 1,
+                    withAlpha(0x000000, Math.round(rowOpacity * 0.45f)));
+            WheelUi.fillCircle(graphics, knobX, barY + barH / 2, knobRadius,
+                    withAlpha(knobColor, rowOpacity));
         }
 
         if (!row.rainbow && !off && row.progress >= 0.9f) {
-            drawCompletionPulse(graphics, 15, y + 24, BAR_WIDTH, BAR_HEIGHT, now, rowOpacity);
+            drawCompletionPulse(graphics, ROW_X, cardTop, ROW_WIDTH, ROW_HEIGHT, now, rowOpacity);
         }
 
         graphics.pose().popPose();
@@ -289,10 +343,10 @@ public class AdaptionHud {
     }
 
     /**
-     * A slow, smooth glow around a bar that is nearly finished (progress is the ground truth, not
-     * the smoothed display, so the glow's timing matches when the task actually completes).
-     * ~0.8 Hz on purpose -- a breathing glow, not a blink, for the same reason the header's pulse
-     * above stays slow.
+     * A soft, rounded breathing outline around a row that is nearly finished (progress is the
+     * ground truth, not the smoothed display, so the glow's timing matches when the task actually
+     * completes). ~0.8 Hz on purpose -- a breathing glow, not a blink, for the same reason the
+     * header's pulse stays slow.
      */
     private static void drawCompletionPulse(GuiGraphics graphics, int x, int y, int width, int height,
                                             float now, int opacity) {
@@ -301,11 +355,8 @@ public class AdaptionHud {
         if (alpha <= 0) {
             return;
         }
-        int glow = withAlpha(0xFFFFFF, alpha);
-        graphics.fill(x - 1, y - 1, x + width + 1, y, glow);
-        graphics.fill(x - 1, y + height, x + width + 1, y + height + 1, glow);
-        graphics.fill(x - 1, y - 1, x, y + height + 1, glow);
-        graphics.fill(x + width, y - 1, x + width + 1, y + height + 1, glow);
+        WheelUi.outlineRounded(graphics, x - 1, y - 1, width + 2, height + 2, CARD_RADIUS + 1,
+                withAlpha(0xFFFFFF, alpha), 0x00000000);
     }
 
     /** Drops animation state for any concept that is no longer showing, so a task finishing and a
@@ -386,42 +437,35 @@ public class AdaptionHud {
     }
 
     /**
-     * A permanent Instabreak on/off chip beside the hotbar.
+     * The permanent Instabreak card beside the hotbar.
      *
-     * <p>It used to sit under the adaptation header, which meant it vanished whenever the analysis
-     * list had nothing to show. It is a state readout, so it is drawn in screen space and anchored
-     * to the hotbar instead: to the right of the hotbar when the screen is wide enough, otherwise
-     * clamped to the screen edge, and just above the experience bar so it covers neither the
-     * hotbar nor the level number.
+     * <p>It used to be a flat coloured strip with the words "INSTABREAK OFF" in it, drawn at the
+     * same height as the ability card and on top of it. It is now the same card as the ability
+     * card, stacked one slot higher, so the two read as one column of status readouts instead of
+     * two unrelated overlays fighting for the same corner.
+     *
+     * <p>It survives the "nothing is being analysed" early return and ignores the analysis HUD
+     * toggle on purpose: a player who hid the analysis list still needs to know whether their fist
+     * is about to break the block in front of them.
      */
     private static void drawInstabreakPanel(GuiGraphics graphics, Minecraft mc) {
         boolean active = ClientAdaption.instabreakActive;
-        int color = active ? 0xFF57D68D : 0xFF9A9A9A;
-        Component label = Component.translatable(active
-                ? "adaptionwheel.instabreak.on"
-                : "adaptionwheel.instabreak.off");
-        Font font = mc.font;
-        int panelWidth = font.width(label) + 12;
-        int panelHeight = 14;
-        int screenWidth = mc.getWindow().getGuiScaledWidth();
-        int screenHeight = mc.getWindow().getGuiScaledHeight();
-        int hotbarRight = screenWidth / 2 + 91;
-        int x = hotbarRight + 4;
-        if (x + panelWidth > screenWidth - 2) {
-            x = Math.max(2, screenWidth - panelWidth - 2);
-        }
-        // The experience bar occupies screenHeight-29 .. screenHeight-24; sit above it so the
-        // permanent chip never covers the level bar. The hotbar itself starts at screenHeight-22.
-        int y = screenHeight - 46;
-        int opacity = AdaptionConfig.HUD_OPACITY.get();
-        graphics.fill(x, y, x + panelWidth, y + panelHeight,
-                withAlpha(0x101012, Math.round(opacity * 0.86f)));
-        graphics.fill(x, y, x + panelWidth, y + 1,
-                withAlpha(0xFFFFFF, Math.round(opacity * 0.12f)));
-        graphics.fill(x, y + panelHeight - 1, x + panelWidth, y + panelHeight,
-                withAlpha(0xFFFFFF, Math.round(opacity * 0.08f)));
-        graphics.fill(x, y, x + 2, y + panelHeight, withAlpha(color, opacity));
-        graphics.drawString(font, label, x + 7, y + 3, withAlpha(color, opacity), true);
+        int accent = active ? 0xFF57D68D : 0xFF9A9A9A;
+        int index = AbilityHud.showsCard() ? 1 : 0;
+        int x = HudCards.x(mc.getWindow().getGuiScaledWidth(), HudCards.WIDTH);
+        int y = HudCards.y(mc.getWindow().getGuiScaledHeight(), index, HudCards.HEIGHT);
+
+        HudCards.frame(graphics, x, y, HudCards.WIDTH, HudCards.HEIGHT, accent,
+                WheelUi.CARD, WheelUi.BORDER);
+        HudCards.icon(graphics, x, y, new ItemStack(Items.NETHERITE_PICKAXE), accent);
+        HudCards.title(graphics, mc.font, x, y,
+                Component.translatable("adaptionwheel.instabreak").getString(),
+                WheelUi.INK, HudCards.WIDTH - 38 - 20);
+        HudCards.switchRow(graphics, mc.font, x, y, HudCards.WIDTH, active,
+                Component.translatable("adaptionwheel.instabreak.state.on").getString(),
+                Component.translatable("adaptionwheel.instabreak.state.off").getString(), accent);
+        HudCards.keyChip(graphics, mc.font, x, y, HudCards.WIDTH,
+                AdaptionKeybinds.TOGGLE_INSTABREAK_KEY.getTranslatedKeyMessage().getString(), accent);
     }
 
     private static int withAlpha(int rgb, int alphaPercent) {
