@@ -213,7 +213,7 @@ All six exist on **both** branches (`1.21.1` and `26.3`) and are configured, not
 
 - **The cache is part of the inventory, and it follows you into every other container.** Pressing the
   inventory key while `Env_Inventory` is active opens `CacheScreen` — a full `InventoryMenu` replica
-  (result, 4 craft, 4 armour, 36 + hotbar, offhand, recipe book) with the cache texture drawn under it, so
+  (result, 4 craft, 4 armour, 36 + hotbar, offhand, recipe book) with the cache extension drawn under it, so
   the player sees 100 slots instead of 46. Inside a chest, a furnace or a crafting table, `CacheOverlay`
   draws the same extension under the *open* panel instead. **Real `Slot`s in those menus are not possible
   in one place** — every menu type builds its own slot list, so it would be a mixin per container — so the
@@ -228,14 +228,24 @@ All six exist on **both** branches (`1.21.1` and `26.3`) and are configured, not
   the panel and with neither it is not shown at all); `CachePanelClickMixin` makes `hasClickedOutside`
   answer false over the extension, or the first drag across it would **throw** the carried stack into the
   world; and the whole overlay is skipped in `CacheScreen`, which has real slots for the same cells.
-- **The cache texture is generated from vanilla's own pixels, and a test reads its header.** The frame rows
-  and the 18×18 slot sprite are copied verbatim from `textures/gui/container/inventory.png` (white top/left
-  bevel, `555555` bottom/right, transparent outer edge, `373737` slot border), so the extension is
-  pixel-identical to a vanilla slot instead of an approximation. A hand-drawn version had **four** slot rows
-  inside a panel sized for six plus a stray black band, which drew every slot past the fourth onto empty
-  body and was invisible to every check: the constants were self-consistent, only the image disagreed.
-  `CacheLayoutTests.theCacheTextureMatchesTheLayout` therefore reads the PNG header and compares it to
-  `PANEL_WIDTH`/`CACHE_TEXTURE_HEIGHT`. Redraw it by recomposing from vanilla, not by painting boxes.
+- **The cache extension is drawn, not blitted, and that is why it exists as `client/CachePanel`.** A
+  generated PNG was the first attempt and it shipped broken twice: a hand-drawn version had **four** slot
+  rows inside a panel sized for six plus a stray black band, and the "fixed" generated one then rendered
+  stretched because it was 176×128 while the blit assumed 256×256. Both were invisible to every check,
+  because the layout constants stayed self-consistent — only the image disagreed. `CachePanel` now paints
+  vanilla's own frame out of `fill()` calls (white 2px top/left bevel, `555555` right/bottom, `C6C6C6`
+  body) and takes its slots from the game's own `container/slot` sprite, so the panel and the menu's real
+  slots are computed from one set of constants. `drawJoined` is the variant used when it hangs under
+  another panel: vanilla ends a section with a `555555` line, so a bright bevel there would read as a
+  second window stacked on the first.
+  Two 1.21.1 traps are worth keeping, because both render something rather than failing:
+  **`GuiGraphics.blit(ResourceLocation, x, y, u, v, w, h)` normalises UVs against 256×256** regardless of
+  the actual image, so any other size must use the nine-argument overload with the real texture size (a
+  176-wide texture through the short overload samples 69% of its width and stretches it — six of nine
+  columns, 3½ of six rows, which is exactly how it looked); and **`minecraft:container/slot` is a GUI
+  sprite, not a texture path** — `blit` binds a file that does not exist and draws garbage, `blitSprite`
+  is the call that finds it. `CacheLayoutTests.theSlotSpritesStayInsideTheFrame` now pins the sprite grid
+  against the frame instead of reading a PNG header.
 - **Synergies now do something that scales.** Every one of the ten already had an effect, but all of them were
   flat, and the two whose requirements are terminal (GOLIATH, ASTRAL_MINE) had nothing left to scale with.
   `SynergyEffects.refresh` now also stores a per-player `strength` per synergy: `1 + 3 × progress`, where

@@ -7,12 +7,10 @@ import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.gui.screens.recipebook.RecipeUpdateListener;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import org.jetbrains.annotations.Nullable;
-import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.menu.CacheMenu;
 import ru.adaptionwheel.server.CacheService;
 
@@ -26,10 +24,6 @@ import ru.adaptionwheel.server.CacheService;
  * real thing; only the cache extension is drawn here.
  */
 public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements RecipeUpdateListener {
-
-    private static final ResourceLocation CACHE_TEXTURE =
-            ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID,
-                    "textures/gui/container/cache.png");
 
     private final RecipeBookComponent recipeBookComponent = new RecipeBookComponent();
 
@@ -87,15 +81,14 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
                 left + 26, top + 8, left + 75, top + 78, 30, 0.0625F,
                 xMouse, yMouse, minecraft.player);
 
-        // The cache extension is the same art as the inventory it hangs off: its texture is built
-        // from inventory.png (frame, bevel and slot sprite), so there is no visible seam in style,
-        // only the divider the inventory's own bottom edge already draws.
+        // The cache extension is the same art as the inventory it hangs off: it is drawn from the
+        // same pixels and slot sprite, so there is no visible seam in style, only the divider the
+        // inventory's own bottom edge already draws.
         if (sideLayout) {
-            graphics.blit(CACHE_TEXTURE, left + CacheService.SIDE_CACHE_X, top, 0, 0,
-                    CacheService.PANEL_WIDTH, CacheService.CACHE_TEXTURE_HEIGHT);
+            CachePanel.draw(graphics, left + CacheService.SIDE_CACHE_X,
+                    top + CacheService.SIDE_CACHE_Y);
         } else {
-            graphics.blit(CACHE_TEXTURE, left, top + CacheService.VANILLA_HEIGHT, 0, 0,
-                    CacheService.PANEL_WIDTH, CacheService.CACHE_TEXTURE_HEIGHT);
+            CachePanel.drawJoined(graphics, left, top + CacheService.VANILLA_HEIGHT);
         }
     }
 
@@ -108,7 +101,7 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
         graphics.drawString(font, title, titleLabelX, titleLabelY, 4210752, false);
         int labelX = sideLayout ? CacheService.SIDE_CACHE_X + 8 : 8;
-        int labelY = sideLayout ? 2 : CacheService.CACHE_LABEL_Y;
+        int labelY = sideLayout ? CacheService.SIDE_CACHE_Y + 4 : CacheService.CACHE_LABEL_Y;
         graphics.drawString(font, Component.translatable("adaptionwheel.gui.cache"),
                 labelX, labelY, 4210752, false);
     }

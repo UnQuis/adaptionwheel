@@ -7,7 +7,6 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -36,17 +35,15 @@ import ru.adaptionwheel.server.CacheService;
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class CacheOverlay {
 
-    private static final ResourceLocation CACHE_TEXTURE =
-            ResourceLocation.fromNamespaceAndPath(AdaptionWheel.MODID, "textures/gui/container/cache.png");
-    /** The sprite vanilla itself draws behind a slot. */
-    private static final ResourceLocation SLOT_SPRITE =
-            ResourceLocation.withDefaultNamespace("container/slot");
+    /** Vanilla's own label grey, so the cache heading matches every container's. */
     private static final int LABEL_COLOR = 4210752;
 
     /** The screen currently carrying the overlay, or null. Identity, not equality: screens rebuild. */
     private static AbstractContainerScreen<?> attached;
     private static int cacheLeft;
     private static int cacheTop;
+    /** True when the extension sits directly under the container and shares its seam. */
+    private static boolean cacheJoined;
 
     private CacheOverlay() {
     }
@@ -79,6 +76,7 @@ public final class CacheOverlay {
             access.adaptionwheel$setTopPos(top);
             cacheLeft = access.adaptionwheel$getLeftPos() + (imageWidth - CacheService.PANEL_WIDTH) / 2;
             cacheTop = top + imageHeight;
+            cacheJoined = true;
         } else {
             // A tall panel (a six-row chest, say) leaves no vertical room at all. The cache then
             // goes beside it rather than off the bottom of the screen, and if neither side fits it
@@ -106,8 +104,11 @@ public final class CacheOverlay {
         GuiGraphics graphics = event.getGuiGraphics();
         Minecraft minecraft = Minecraft.getInstance();
 
-        graphics.blit(CACHE_TEXTURE, cacheLeft, cacheTop, 0, 0,
-                CacheService.PANEL_WIDTH, CacheService.CACHE_TEXTURE_HEIGHT);
+        if (cacheJoined) {
+            CachePanel.drawJoined(graphics, cacheLeft, cacheTop);
+        } else {
+            CachePanel.draw(graphics, cacheLeft, cacheTop);
+        }
         graphics.drawString(minecraft.font, Component.translatable("adaptionwheel.gui.cache"),
                 cacheLeft + 8, cacheTop + 4, LABEL_COLOR, false);
 
@@ -115,7 +116,6 @@ public final class CacheOverlay {
         for (int index = 0; index < CacheService.SLOTS; index++) {
             int x = cellX(index);
             int y = cellY(index);
-            graphics.blit(SLOT_SPRITE, x - 1, y - 1, 0, 0, 18, 18);
             if (index == hovered) {
                 graphics.fill(x - 1, y - 1, x + 17, y + 17, 0x80FFFFFF);
             }
@@ -219,5 +219,6 @@ public final class CacheOverlay {
         attached = null;
         cacheLeft = 0;
         cacheTop = 0;
+        cacheJoined = false;
     }
 }

@@ -24,9 +24,9 @@ public final class CacheService {
     public static final int VANILLA_HEIGHT = 166;
 
     /**
-     * The cache extension is drawn from {@code textures/gui/container/cache.png}, which is built
-     * out of the vanilla inventory's own pixels (same frame, same slot sprite). These are that
-     * texture's internal offsets: a label strip, then the grid, then the panel's bottom bevel.
+     * The cache extension is drawn, not blitted, by {@code client/CachePanel} using the vanilla
+     * inventory's own colours and slot sprite. These are its internal offsets: a label strip, then
+     * the grid, then the panel's bottom bevel.
      */
     public static final int CACHE_TOP_PAD = 14;
     public static final int CACHE_BOTTOM_PAD = 6;

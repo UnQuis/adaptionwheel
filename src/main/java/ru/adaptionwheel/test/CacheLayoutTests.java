@@ -94,33 +94,29 @@ public class CacheLayoutTests {
     }
 
     /**
-     * The drawn panel and the layout constants have to agree, and nothing else can notice when they
-     * do not.
+     * The slot sprites must stay inside the frame's bevel.
      *
-     * <p>The committed texture once had four slot rows inside a panel sized for six, with a stray
-     * black band where the last two should have been: every slot after the fourth was drawn onto
-     * empty body, and the panel was the wrong height for the menu behind it. That is invisible to
-     * compilation and to every other test here, because the constants were self-consistent — only the
-     * image disagreed. So read the image's own header and compare.
+     * <p>The sprite is 18x18 and is drawn one pixel up and left of the item, while the frame's
+     * white bevel occupies the first two pixels - so a cell placed too high or too far left paints
+     * over the bevel, and a grid sized without the sprite's extra pixel clips its last row. Both are
+     * invisible to the menu (which only ever places items) and to the compiler.
      */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void theCacheTextureMatchesTheLayout(GameTestHelper helper) {
-        String path = "/assets/adaptionwheel/textures/gui/container/cache.png";
-        try (java.io.InputStream in = CacheLayoutTests.class.getResourceAsStream(path)) {
-            helper.assertTrue(in != null, "cache.png is missing from the mod, expected at " + path);
-            byte[] header = in.readNBytes(24);
-            int width = ((header[16] & 0xFF) << 24) | ((header[17] & 0xFF) << 16)
-                    | ((header[18] & 0xFF) << 8) | (header[19] & 0xFF);
-            int height = ((header[20] & 0xFF) << 24) | ((header[21] & 0xFF) << 16)
-                    | ((header[22] & 0xFF) << 8) | (header[23] & 0xFF);
-            helper.assertTrue(width == CacheService.PANEL_WIDTH
-                            && height == CacheService.CACHE_TEXTURE_HEIGHT,
-                    "cache.png is " + width + "x" + height + " but the layout draws "
-                            + CacheService.PANEL_WIDTH + "x" + CacheService.CACHE_TEXTURE_HEIGHT
-                            + "; the grid would be cut off or padded with empty body");
-        } catch (java.io.IOException e) {
-            helper.assertTrue(false, "could not read cache.png: " + e);
-        }
+    public static void theSlotSpritesStayInsideTheFrame(GameTestHelper helper) {
+        int firstX = CacheService.slotX(0) - 1;
+        int lastX = CacheService.slotX(CacheService.COLUMNS - 1) - 1 + 18;
+        helper.assertTrue(firstX >= 3, "the first sprite starts at " + firstX
+                + " and covers the frame's white bevel");
+        helper.assertTrue(lastX <= CacheService.PANEL_WIDTH - 2, "the last sprite ends at " + lastX
+                + ", past the frame's right edge");
+
+        int firstY = CacheService.CACHE_TOP_PAD - 1;
+        int lastY = CacheService.CACHE_TOP_PAD + CacheService.ROWS * CacheService.SLOT + 1;
+        helper.assertTrue(firstY >= 3, "the first sprite starts at " + firstY
+                + " and covers the frame's white bevel");
+        helper.assertTrue(lastY <= CacheService.CACHE_TEXTURE_HEIGHT - 2,
+                "the last sprite ends at " + lastY + ", past the frame's bottom edge of "
+                        + CacheService.CACHE_TEXTURE_HEIGHT);
         helper.succeed();
     }
 }
