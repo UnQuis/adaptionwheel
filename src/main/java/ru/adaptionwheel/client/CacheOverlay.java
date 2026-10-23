@@ -20,23 +20,29 @@ import ru.adaptionwheel.network.CacheClickPayload;
 import ru.adaptionwheel.server.CacheService;
 
 /**
- * The cache, drawn under whatever container is open.
+ * The cache, drawn beside whatever container is open.
  *
  * <p>The cache is player data, not a menu: a crafting table, a chest and a furnace each own their
  * slots and none of them knows the cache exists. Adding a real {@code Slot} to every menu type is
- * not possible in one place — each menu builds its own slot list — so the cache is drawn as an
- * extension of the open panel and its clicks are sent to the server, which owns the storage.
+ * not possible in one place — each menu builds its own slot list — so the cache is drawn as a second
+ * window next to the open panel and its clicks are sent to the server, which owns the storage.
  *
- * <p>That extension needs room, so the container is moved up: {@code topPos} is what positions the
- * background, the slots and the labels alike, and moving it is the one change that keeps all three
- * consistent. The player's own inventory is excluded — it is already the cache screen, with real
- * slots.
+ * <p>It is a <em>second window</em> rather than an extension under the panel, and that is the whole
+ * lesson of the first two attempts: making room by moving {@code topPos} means every screen that
+ * positions itself from it — background, slots, labels, the recipe book — has to agree, and one of
+ * them disagreeing is a broken screen. A panel beside the container moves nothing vanilla owns.
  */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class CacheOverlay {
 
+    private static final org.slf4j.Logger LOGGER =
+            com.mojang.logging.LogUtils.getLogger();
+
     /** Vanilla's own label grey, so the cache heading matches every container's. */
     private static final int LABEL_COLOR = 4210752;
+
+    /** Air between the container's panel and the cache's, so the two frames stay distinct. */
+    private static final int GAP = 4;
 
     /** The screen currently carrying the overlay, or null. Identity, not equality: screens rebuild. */
     private static AbstractContainerScreen<?> attached;
@@ -44,6 +50,8 @@ public final class CacheOverlay {
     private static int cacheTop;
     /** True when the extension sits directly under the container and shares its seam. */
     private static boolean cacheJoined;
+    /** Last placement written to the log, so a per-frame recompute does not spam it. */
+    private static String lastPlacement;
 
     private CacheOverlay() {
     }
@@ -66,39 +74,92 @@ public final class CacheOverlay {
             return;
         }
 
+        attached = screen;
+        place(screen);
+    }
+
+    /**
+     * Recomputes the cache's position from the panel's <em>current</em> box.
+     *
+     * <p>This runs on every frame rather than once on {@code Init.Post}, and that is not defensive
+     * coding: a container screen moves itself after it is initialised. The recipe book, when toggled,
+     * shifts {@code leftPos} by 77 pixels through {@code RecipeBookComponent.updateScreenPosition},
+     * and a layout captured at init time then points at where the panel used to be - the cache drifts
+     * off the panel and the container's own rows appear to spill out of it. Anything that repositions
+     * the screen for any reason gets the same treatment for free.
+     */
+    private static void place(AbstractContainerScreen<?> screen) {
         AbstractContainerScreenAccess access = (AbstractContainerScreenAccess) screen;
         int imageWidth = access.adaptionwheel$getImageWidth();
         int imageHeight = access.adaptionwheel$getImageHeight();
-        int total = imageHeight + CacheService.CACHE_TEXTURE_HEIGHT;
-        if (total <= screen.height) {
-            // There is room under the panel: lift the panel so the two together sit centred.
-            int top = Math.max(4, (screen.height - total) / 2);
-            access.adaptionwheel$setTopPos(top);
-            cacheLeft = access.adaptionwheel$getLeftPos() + (imageWidth - CacheService.PANEL_WIDTH) / 2;
-            cacheTop = top + imageHeight;
+        int left = access.adaptionwheel$getLeftPos();
+        int top = access.adaptionwheel$getTopPos();
+
+        // Beside the panel first, and the panel itself is not touched. Lifting the panel to make
+        // room below it means fighting every screen that positions itself from topPos - the
+        // background, the slots, the labels - and any one of them getting it wrong is a broken
+        // screen. A second window next to the first cannot move what the container owns.
+        //
+        // The left side is tried first because the right side is where vanilla puts the recipe
+        // book: with the book open the panel shifts right by 77 pixels and a cache placed on that
+        // side lands on top of it.
+        int sideTop = Math.max(4, Math.min(top, screen.height - CacheService.CACHE_TEXTURE_HEIGHT - 4));
+        int rightSide = left + imageWidth + GAP;
+        int leftSide = left - GAP - CacheService.PANEL_WIDTH;
+        cacheJoined = false;
+        if (leftSide >= 0) {
+            cacheLeft = leftSide;
+            cacheTop = sideTop;
+        } else if (rightSide + CacheService.PANEL_WIDTH <= screen.width) {
+            cacheLeft = rightSide;
+            cacheTop = sideTop;
+        } else if (screen.height - imageHeight >= CacheService.CACHE_TEXTURE_HEIGHT + 8) {
+            // No room beside it, so the panel is lifted and the extension joins it below.
+            int newTop = Math.max(4,
+                    (screen.height - imageHeight - CacheService.CACHE_TEXTURE_HEIGHT) / 2);
+            if (newTop != top) {
+                access.adaptionwheel$setTopPos(newTop);
+            }
+            // Aligned to the panel's right edge, not centred: a panel wider than 176 still reads as
+            // the same window, and the usual 176-wide panel lands exactly on its left edge.
+            cacheLeft = left + imageWidth - CacheService.PANEL_WIDTH;
+            cacheTop = newTop + imageHeight;
             cacheJoined = true;
         } else {
-            // A tall panel (a six-row chest, say) leaves no vertical room at all. The cache then
-            // goes beside it rather than off the bottom of the screen, and if neither side fits it
-            // is simply not shown -- a panel the player cannot reach is worse than no panel.
-            int left = access.adaptionwheel$getLeftPos();
-            int y = Math.max(4, (screen.height - CacheService.CACHE_TEXTURE_HEIGHT) / 2);
-            if (left + imageWidth + 6 + CacheService.PANEL_WIDTH <= screen.width) {
-                cacheLeft = left + imageWidth + 6;
-                cacheTop = y;
-            } else if (left - 6 - CacheService.PANEL_WIDTH >= 0) {
-                cacheLeft = left - 6 - CacheService.PANEL_WIDTH;
-                cacheTop = y;
-            } else {
-                return;
-            }
+            cacheLeft = Integer.MIN_VALUE;
+            cacheTop = Integer.MIN_VALUE;
         }
-        attached = screen;
+        logPlacement(screen, imageWidth, imageHeight, left, top);
+    }
+
+    private static void logPlacement(AbstractContainerScreen<?> screen, int imageWidth, int imageHeight,
+                                     int left, int top) {
+        String key = screen.getClass().getSimpleName() + " " + imageWidth + "x" + imageHeight
+                + " " + left + "," + top + " " + cacheLeft + "," + cacheTop + " " + cacheJoined;
+        if (key.equals(lastPlacement)) {
+            return;
+        }
+        lastPlacement = key;
+        LOGGER.info("[aw-cache] {} panel {}x{} at {},{} -> cache at {},{} joined={} screen {}x{}",
+                screen.getClass().getSimpleName(), imageWidth, imageHeight, left, top,
+                cacheLeft, cacheTop, cacheJoined, screen.width, screen.height);
+    }
+
+    /** Before the frame is drawn, so a lifted panel and its cache agree within the same frame. */
+    @SubscribeEvent
+    public static void onRenderPre(ScreenEvent.Render.Pre event) {
+        if (attached != null && event.getScreen() == attached) {
+            place(attached);
+        }
     }
 
     @SubscribeEvent
     public static void onRender(ScreenEvent.Render.Post event) {
         if (attached == null || event.getScreen() != attached) {
+            return;
+        }
+        place(attached);
+        if (cacheLeft == Integer.MIN_VALUE) {
             return;
         }
         GuiGraphics graphics = event.getGuiGraphics();
@@ -160,6 +221,7 @@ public final class CacheOverlay {
         if (attached == null || event.getScreen() != attached) {
             return;
         }
+        place(attached);
         int index = indexAt(event.getMouseX(), event.getMouseY());
         if (index < 0) {
             return;
@@ -183,6 +245,10 @@ public final class CacheOverlay {
         if (screen != attached) {
             return false;
         }
+        place(screen);
+        if (cacheLeft == Integer.MIN_VALUE) {
+            return false;
+        }
         return mouseX >= cacheLeft && mouseY >= cacheTop
                 && mouseX < cacheLeft + CacheService.PANEL_WIDTH
                 && mouseY < cacheTop + CacheService.CACHE_TEXTURE_HEIGHT;
@@ -199,7 +265,7 @@ public final class CacheOverlay {
     /** The cell under the cursor, or -1. The hit box is the slot sprite, which starts one pixel
      *  above and left of the item. */
     private static int indexAt(double mouseX, double mouseY) {
-        if (attached == null) {
+        if (attached == null || cacheLeft == Integer.MIN_VALUE) {
             return -1;
         }
         int relX = (int) Math.floor(mouseX) - cacheLeft - CacheService.slotX(0) + 1;
