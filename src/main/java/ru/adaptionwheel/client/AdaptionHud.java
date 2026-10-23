@@ -42,6 +42,16 @@ public class AdaptionHud {
     /** First row is placed one small gap below the header rule, not one full pitch. */
     private static final int FIRST_ROW_Y = 36;
 
+    /**
+     * How opaque a row's plate is: 20%, i.e. 80% transparency.
+     *
+     * <p>A plate that is mostly transparent is the point, not an oversight — it floats over the
+     * world and the world stays readable through it, while the concept-tinted border and the accent
+     * stripe are what actually delimit the card. The row's text and bar are drawn at full strength
+     * on top, so legibility does not depend on the plate's fill.
+     */
+    private static final float CARD_BODY_ALPHA = 0.20f;
+
     /** How fast the bar's drawn width chases its real target. Higher = snappier, lower = silkier. */
     private static final float PROGRESS_SMOOTHING_RATE = 10f;
     /** How long a freshly-appeared row takes to fade and slide into place. */
@@ -215,13 +225,23 @@ public class AdaptionHud {
         int accent = off ? WheelUi.MUTED : WheelUi.lighten(color, 0.15f);
         int cardTop = y - 2;
 
-        // Red glass, not black: the row sits over the world, so a tinted panel reads as part of
-        // the mod's own palette while the world still shows through it. The switch's vocabulary --
-        // rounded track, round knob, hairline -- is what makes it look like the panel it belongs to.
-        int border = withAlpha(off ? 0xFF6D6961 : RED_LIGHT, Math.round(rowOpacity * 0.55f));
-        int body = withAlpha(off ? 0xFF26262A : 0xFF6E1C22, Math.round(rowOpacity * 0.62f));
+        // Each plate wears its own concept's colour, not the mod's red: with five rows on screen the
+        // colour is the only thing that says which bar belongs to which adaptation at a glance, and
+        // a single red for all of them threw that away. The tint is the concept colour driven most
+        // of the way to black, so it stays a plate the white text can sit on rather than a colour
+        // swatch; the border keeps the full hue, which is what makes the card read as a colour
+        // without needing a solid fill.
+        int plate = off ? 0xFF1E1E22 : WheelUi.darken(color, 0.62f);
+        int borderColor = off ? 0xFF6D6961 : WheelUi.lighten(color, 0.22f);
+        int border = withAlpha(borderColor, Math.round(rowOpacity * 0.55f));
+        int body = withAlpha(plate, Math.round(rowOpacity * CARD_BODY_ALPHA));
+        // A 1px dark foot under the plate: at 80% transparency the fill alone cannot separate the
+        // card from a bright background, and the world otherwise bleeds through the bottom edge.
         WheelUi.outlineRounded(graphics, ROW_X, cardTop, ROW_WIDTH, ROW_HEIGHT, CARD_RADIUS,
                 border, body);
+        graphics.fill(ROW_X + CARD_RADIUS, cardTop + ROW_HEIGHT - 1,
+                ROW_X + ROW_WIDTH - CARD_RADIUS, cardTop + ROW_HEIGHT,
+                withAlpha(0x000000, Math.round(rowOpacity * 0.18f)));
         graphics.fill(ROW_X + 2, cardTop + 7, ROW_X + 4, cardTop + ROW_HEIGHT - 7,
                 withAlpha(accent, Math.round(rowOpacity * 0.95f)));
 
@@ -252,12 +272,14 @@ public class AdaptionHud {
 
         int valueWidth = font.width(WheelUi.mono(WheelUi.MONO_8, valueText));
         int nameMax = ROW_WIDTH - 18 - valueWidth - 8;
+        // Shadowed, because the plate is 80% transparent: over grass or a bright sky, unshadowed
+        // white text on a 20% tint is legible in a cave and disappears in daylight.
         WheelUi.text(graphics, font, WheelUi.MONO_8,
                 WheelUi.fit(font, WheelUi.MONO_8, WheelUi.upper(name + tag), nameMax),
-                ROW_X + 8, cardTop + 5, withAlpha(off ? WheelUi.MUTED : WheelUi.INK, rowOpacity), false);
+                ROW_X + 8, cardTop + 5, withAlpha(off ? WheelUi.MUTED : WheelUi.INK, rowOpacity), true);
         WheelUi.text(graphics, font, WheelUi.MONO_8, valueText,
                 ROW_X + ROW_WIDTH - 8 - valueWidth, cardTop + 5,
-                withAlpha(accent, rowOpacity), false);
+                withAlpha(accent, rowOpacity), true);
 
         int barX = ROW_X + 8;
         int barW = ROW_WIDTH - 16;
@@ -284,7 +306,7 @@ public class AdaptionHud {
         } else if (barW2 > 0) {
             WheelUi.fillRounded(graphics, barX, barY, barW2, barH, barH / 2,
                     withAlpha(accent, rowOpacity * 90 / 100));
-            drawShimmer(graphics, barX, barY + 1, barW2, barH - 2, now, rowOpacity, off);
+            drawBarLight(graphics, barX, barY, barW2, barH, accent, rowOpacity, now);
         }
 
         if (!row.rainbow) {
@@ -312,33 +334,38 @@ public class AdaptionHud {
     }
 
     /**
-     * A bright band sweeping left-to-right through the filled portion of a bar, clipped to it so
-     * it never spills onto the dark unfilled track. Reads as energy flowing into the bar rather
-     * than a block that merely fills up.
+     * The bar's own light: a lit top edge, a shaded bottom edge, and a slow breathing glow at the
+     * leading edge.
+     *
+     * <p>This replaces a bright band that swept along the filled portion. That was meant to read as
+     * energy but at HUD size it read as a scrolling marquee: a 10px white band moving at 28 px/s
+     * across a bar that is at most 236 px long, clipped to the fill, is a streak of paint rather
+     * than light, and several rows at once made it worse. A bar reads as a lit object from its
+     * edges, so the light now sits where a real rounded bar catches it — one row on top, one row of
+     * shade underneath — and the only thing that moves is the glow at the leading edge, which is
+     * where the eye already is because that is where the progress stopped.
      */
-    private static void drawShimmer(GuiGraphics graphics, int x, int y, int width, int height,
-                                    float now, int opacity, boolean off) {
-        if (off || width <= 1) {
+    private static void drawBarLight(GuiGraphics graphics, int x, int y, int width, int height,
+                                     int tint, int opacity, float now) {
+        if (width < 4) {
             return;
         }
-        int bandWidth = 10;
-        int travel = width + bandWidth * 2;
-        // Was 90px/s — fast enough that several simultaneous bars read as flicker rather than a
-        // single light sweeping through. At this speed a full sweep takes several seconds, closer
-        // to a slow glint than a strobe.
-        float speedPxPerSecond = 28f;
-        int pos = Math.floorMod((int) (now * speedPxPerSecond), travel) - bandWidth;
-        for (int i = 0; i < bandWidth; i++) {
-            int px = x + pos + i;
-            if (px < x || px >= x + width) {
-                continue;
-            }
-            float distFromCentre = Math.abs(i - bandWidth / 2f) / (bandWidth / 2f);
-            int alpha = Math.round(opacity * (1f - distFromCentre) * 0.5f);
-            if (alpha <= 0) {
-                continue;
-            }
-            graphics.fill(px, y, px + 1, y + height, withAlpha(0xFFFFFF, alpha));
+        int innerLeft = x + 2;
+        int innerRight = x + width - 2;
+        if (innerRight > innerLeft) {
+            graphics.fill(innerLeft, y, innerRight, y + 1,
+                    withAlpha(WheelUi.lighten(tint, 0.55f), Math.round(opacity * 0.30f)));
+            graphics.fill(innerLeft, y + height - 1, innerRight, y + height,
+                    withAlpha(0x000000, Math.round(opacity * 0.20f)));
+        }
+        // ~0.45 Hz: slower than anything that could read as a blink, see the flash-rate reasoning
+        // in DimensionImpactFX for why that matters.
+        float breathe = 0.5f + 0.5f * (float) Math.sin(now * Math.PI * 0.9);
+        int glowAlpha = Math.round(opacity * (0.08f + 0.12f * breathe));
+        if (glowAlpha > 0) {
+            // Wider than the knob it sits behind, or the glow is entirely hidden by it.
+            WheelUi.fillCircle(graphics, x + width, y + height / 2, 5,
+                    withAlpha(WheelUi.lighten(tint, 0.35f), glowAlpha));
         }
     }
 
