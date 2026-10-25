@@ -23,7 +23,8 @@ import java.util.function.Supplier;
  * @param color         ARGB accent, usually the ability's school colour
  * @param cooldownTicks cooldown length; zero means no cooldown bar
  * @param keyLabel      the key shown in the HUD card, e.g. {@code "R"}; empty hides the badge
- * @param unlockAny     concepts of which the player needs at least one; empty means always visible
+ * @param unlockAny     concepts of which the player needs at least one, checked on the server; the
+ *                      client never evaluates them, it draws from the synced ability list
  */
 public record ActiveAbility(
         String id,

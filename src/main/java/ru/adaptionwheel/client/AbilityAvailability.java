@@ -8,13 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Client-side gate for the ability registry.
+ * Client-side view of which abilities the player may use.
  *
- * <p>An ability may name one or more concepts in {@link ActiveAbility#unlockAny()}; having any of
- * them makes the ability available. The server validates every activation independently, so this
- * is a display filter rather than a security boundary. It exists because the menu used to render
- * every registered ability, which would have advertised Dive to a player who had not adapted to
- * falling yet — the HUD would then have promised a key that does nothing.
+ * <p>The answer comes from the server, in the sync payload, and is not re-derived here. It used to
+ * be computed from the client's copy of the adaptation sets, which lags the attachment by up to a
+ * second (and can name a concept whose switch is off), so the card advertised a key the server then
+ * refused — the ability appeared "even though the adaptations are not there".
  */
 public final class AbilityAvailability {
 
@@ -22,18 +21,7 @@ public final class AbilityAvailability {
     }
 
     public static boolean unlocked(@Nullable ActiveAbility ability) {
-        if (ability == null) {
-            return false;
-        }
-        if (ability.unlockAny().isEmpty()) {
-            return true;
-        }
-        for (String concept : ability.unlockAny()) {
-            if (ClientAdaption.active(concept) || ClientAdaption.levelOrZero(concept) > 0) {
-                return true;
-            }
-        }
-        return false;
+        return ability != null && ClientAdaption.hasAbility(ability.id());
     }
 
     public static List<ActiveAbility> unlocked() {

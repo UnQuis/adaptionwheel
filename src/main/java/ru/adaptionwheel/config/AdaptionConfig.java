@@ -421,10 +421,12 @@ public final class AdaptionConfig {
                 .defineInRange("impactDamagePerBlock", 2.0, 0.0, 100.0);
         IMPACT_STOMP_RADIUS = s.comment("Shockwave radius in blocks.")
                 .defineInRange("impactRadius", 3.5, 1.0, 32.0);
-        AQUATIC_SWIM_SPEED_BONUS = s.comment("Swim speed bonus added by Aquatic Mastery.",
-                        "This replaces Env_Liquid's smaller bonus instead of stacking with it;",
-                        "the final multiplier is 1 + this value (capped at 2.0).")
-                .defineInRange("aquaticSwimSpeedBonus", 0.55, 0.0, 1.0);
+        AQUATIC_SWIM_SPEED_BONUS = s.comment("Swim acceleration bonus added by Aquatic Mastery.",
+                        "This replaces Env_Liquid's smaller bonus instead of stacking with it.",
+                        "Keep this small: it multiplies vanilla's water acceleration on top of the",
+                        "water-efficiency and movement-speed bonuses, so 0.2 is already roughly a",
+                        "maxed wheel swimming as fast as it sprints on land.")
+                .defineInRange("aquaticSwimSpeedBonus", 0.20, 0.0, 0.35);
         ENABLE_MUTATION_SEA_EYE = s.comment("Sea Eye: unlocked by Env_Liquid + Env_Drowning + Env_Lava.",
                         "Removes the liquid fog the camera reports: clear sight underwater, in lava",
                         "and in any modded liquid whose fog comes from the same camera query.")

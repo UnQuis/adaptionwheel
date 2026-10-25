@@ -33,7 +33,8 @@ public record AdaptionSyncPayload(
         int fistProgressTotal,
         int combatFistDone,
         int combatFistTotal,
-        List<String> disabled
+        List<String> disabled,
+        List<String> abilities
 ) implements CustomPacketPayload {
 
     public static final Type<AdaptionSyncPayload> TYPE =
@@ -83,6 +84,10 @@ public record AdaptionSyncPayload(
                 for (String concept : p.disabled) {
                     buf.writeUtf(concept);
                 }
+                buf.writeVarInt(p.abilities.size());
+                for (String id : p.abilities) {
+                    buf.writeUtf(id);
+                }
             },
             buf -> {
                 boolean wearing = buf.readBoolean();
@@ -128,10 +133,15 @@ public record AdaptionSyncPayload(
                 for (int i = 0; i < disabledCount; i++) {
                     disabled.add(buf.readUtf());
                 }
+                List<String> abilities = new ArrayList<>();
+                int abilityCount = buf.readVarInt();
+                for (int i = 0; i < abilityCount; i++) {
+                    abilities.add(buf.readUtf());
+                }
                 return new AdaptionSyncPayload(wearing, adversity, count, advTimer, advCooldown,
                         rotation, tasks, levels, adapted, history, existenceProgress, existenceThreshold,
                         instabreakActive, instabreakUnlocked, fistProgressDone, fistProgressTotal,
-                        combatFistDone, combatFistTotal, disabled);
+                        combatFistDone, combatFistTotal, disabled, abilities);
             }
     );
 

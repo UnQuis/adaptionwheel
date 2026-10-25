@@ -39,6 +39,15 @@ public final class ClientAdaption {
 
     public static final Set<String> DISABLED = new HashSet<>();
 
+    /**
+     * Ability ids the server says this player may use right now.
+     *
+     * <p>Sent with the sync rather than derived here. The mirror can lag a grant, a switch or a
+     * wheel swap by up to a second, and a HUD card drawn from it advertised a key the server then
+     * refused — the ability appeared "even without the adaptations".
+     */
+    public static final Set<String> ABILITIES = new HashSet<>();
+
     public static int existenceThreshold;
 
     public static boolean instabreakActive;
@@ -94,6 +103,7 @@ public final class ClientAdaption {
         adversityTriggeredAtGameTime = Long.MIN_VALUE;
         ClientCooldowns.clear();
         ClientCache.clear();
+        ABILITIES.clear();
     }
 
     public static void onSync(AdaptionSyncPayload payload) {
@@ -118,6 +128,8 @@ public final class ClientAdaption {
         EXISTENCE_PROGRESS.putAll(payload.existenceProgress());
         DISABLED.clear();
         DISABLED.addAll(payload.disabled());
+        ABILITIES.clear();
+        ABILITIES.addAll(payload.abilities());
         existenceThreshold = payload.existenceThreshold();
         instabreakActive = payload.instabreakActive();
         instabreakUnlocked = payload.instabreakUnlocked();
@@ -154,6 +166,10 @@ public final class ClientAdaption {
 
     public static int levelOrZero(String concept) {
         return isEnabled(concept) ? LEVELS.getOrDefault(concept, 0) : 0;
+    }
+
+    public static boolean hasAbility(String id) {
+        return ABILITIES.contains(id);
     }
 
     public static boolean isEnabled(String concept) {

@@ -239,7 +239,11 @@ public final class AdaptionCommand {
                 .then(Commands.literal("flight")
                         .executes(ctx -> flight(ctx, self(ctx)))
                         .then(Commands.argument("player", EntityArgument.player())
-                                .executes(ctx -> flight(ctx, selfOrTarget(ctx, "player"))))));
+                                .executes(ctx -> flight(ctx, selfOrTarget(ctx, "player")))))
+                .then(Commands.literal("wheel")
+                        .executes(ctx -> wheel(ctx, self(ctx)))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(ctx -> wheel(ctx, selfOrTarget(ctx, "player"))))));
 
         event.getDispatcher().register(root);
     }
@@ -575,6 +579,67 @@ public final class AdaptionCommand {
         return 1;
     }
 
+    /**
+     * Everything about where a wheel's data actually lives, in one place.
+     *
+     * <p>Written because "my adaptations reset" has four plausible owners — the attachment, the item's
+     * {@code wheel_data} component, the merge on equip, and the login path — and comparing them by
+     * reading source is how you end up fixing the wrong one. This prints all four numbers.
+     */
+    private static int wheel(CommandContext<CommandSourceStack> ctx, ServerPlayer target) {
+        CommandSourceStack source = ctx.getSource();
+        PlayerAdaption data = AdaptionEvents.dataOf(target);
+        boolean wearing = AdaptionEvents.isWearingWheel(target);
+        source.sendSuccess(() -> Component.literal("— wheel data: " + target.getName().getString() + " —"), false);
+        source.sendSuccess(() -> Component.literal("worn=" + wearing
+                + " wasWearing=" + data.wasWearing
+                + " equippedStack=" + (data.equippedStack == null ? "null" : "tracked")), false);
+
+        WheelData onItem = AdaptionEvents.getWheelStack(target)
+                .map(s -> s.get(ModDataComponents.WHEEL_DATA))
+                .orElse(null);
+        source.sendSuccess(() -> Component.literal("attachment: adapted=" + data.adapted.size()
+                + " levels=" + data.levels.size()
+                + " count=" + data.getAdaptCount()
+                + " tasks=" + data.tasks.size()
+                + " disabled=" + data.disabled.size()
+                + " cache=" + data.cache.size()), false);
+        source.sendSuccess(() -> Component.literal("wheel item: " + (onItem == null ? "no wheel_data"
+                        : "adapted=" + onItem.adapted().size()
+                        + " levels=" + onItem.levels().size()
+                        + " count=" + onItem.adaptCount()
+                        + " tasks=" + onItem.tasks().size())), false);
+
+        if (onItem != null) {
+            int onlyOnItem = 0;
+            for (String concept : onItem.adapted()) {
+                if (!data.adapted.contains(concept)) {
+                    onlyOnItem++;
+                }
+            }
+            int onlyInAttachment = 0;
+            for (String concept : data.adapted) {
+                if (!onItem.adapted().contains(concept)) {
+                    onlyInAttachment++;
+                }
+            }
+            int itemOnly = onlyOnItem;
+            int attachmentOnly = onlyInAttachment;
+            source.sendSuccess(() -> Component.literal("only on the item=" + itemOnly
+                    + "   only in the attachment=" + attachmentOnly
+                    + "   (a login merges the item into the attachment, so only-on-item is a repair)"), false);
+        }
+
+        source.sendSuccess(() -> Component.literal("ability list to client: "
+                + (DiveAbility.unlocked(data) ? DiveAbility.ID : "(none)")), false);
+        source.sendSuccess(() -> Component.literal("dive gate: "
+                + Concepts.ENV_FALL + " adapted=" + data.isAdapted(Concepts.ENV_FALL)
+                + " enabled=" + data.isEnabled(Concepts.ENV_FALL)
+                + " | " + Concepts.MUTATION_FLIGHT + " adapted=" + data.isAdapted(Concepts.MUTATION_FLIGHT)
+                + " enabled=" + data.isEnabled(Concepts.MUTATION_FLIGHT)), false);
+        return 1;
+    }
+
     private static int flight(CommandContext<CommandSourceStack> ctx, ServerPlayer target) {
         CommandSourceStack source = ctx.getSource();
         PlayerAdaption data = AdaptionEvents.dataOf(target);
@@ -595,13 +660,15 @@ public final class AdaptionCommand {
         source.sendSuccess(() -> Component.literal("attachment adaptCount=" + data.getAdaptCount()
                 + "   wheel item wheel_data adaptCount=" + (itemCount < 0 ? "(no component)" : itemCount)), false);
         if (wearing && itemCount >= 0 && itemCount != data.getAdaptCount()) {
-            source.sendSuccess(() -> Component.literal(">>> THESE DIFFER. Equipping REPLACES the attachment with the "
-                    + "wheel item's data, so anything granted while the wheel was off is lost."), false);
+            source.sendSuccess(() -> Component.literal(">>> THESE DIFFER. Equipping merges the wheel item into the "
+                    + "attachment (levels take the higher value, sets are unioned), so the lower side is what the "
+                    + "next save will write back to the item."), false);
         }
         if (onItem != null && itemCount > 0
                 && !onItem.adapted().contains(concept) && data.isAdapted(concept)) {
             source.sendSuccess(() -> Component.literal(">>> " + Concepts.chatName(concept)
-                    + " is in the attachment but NOT on the wheel item: re-equipping will wipe it."), false);
+                    + " is in the attachment but NOT on the wheel item: the item's copy is the one that "
+                    + "travels, so this is repaired on the next save, not lost."), false);
         }
 
         double altitude = target.getY();

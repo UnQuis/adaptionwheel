@@ -784,6 +784,15 @@ public class AdaptionEvents {
         boolean wearing = wearingWheel(player);
         if (wearing) {
             data.wasWearing = true;
+            // A login is not an equip, but it has to behave like one for the data's sake. The
+            // attachment is the live copy and the wheel item is the travelling one, and loadInto
+            // only ever raises a level or adds to a set, so merging on every join can repair an
+            // attachment that came back poorer than its own wheel and can never walk anything
+            // backwards. Without it, logging in was visibly worse than the wheel in the slot
+            // whenever the attachment had missed a write.
+            loadFromItem(player, data);
+            data.equippedStack = getWheelStack(player).orElse(null);
+            applyStats(player, data);
         }
         // The ability transition is replayed on every join, but if the saved abilities already had
         // `mayfly` set, FlightAbility sees no transition and cannot repair a `flying` flag left over
@@ -861,13 +870,13 @@ public class AdaptionEvents {
         boolean wearing = wearingWheel(player);
 
         if (wearing && !data.wasWearing) {
-            data.tasks.clear();
-            data.bossCombatTicks.clear();
-            data.healingTimer = 0;
-            data.adversityTimer = 0;
-            data.adversityActive = false;
-            data.adversityCooldownTimer = 0;
+            // Deliberately only a merge. This branch used to clear the running analyses, the boss
+            // counters and the Adversity state first, on the theory that an equip starts a fresh
+            // wheel — but it also runs on the first tick after a login whenever Curios reported the
+            // slot a moment late, so joining a world silently cancelled every analysis that was
+            // running. Unequipping already owns that reset; an equip has nothing to clear.
             loadFromItem(player, data);
+            applyStats(player, data);
         }
         if (!wearing && data.wasWearing) {
 
@@ -2101,15 +2110,21 @@ public class AdaptionEvents {
         boolean aquatic = AdaptionConfig.ENABLE_MUTATION_AQUATIC.get()
                 && data.active(Concepts.MUTATION_AQUATIC);
 
-        // These two adaptations occupy the same tier. They used to be added together, so a player
-        // with both felt as if the water had two independent speed multipliers: +1.0 from Liquid
-        // and +2.5 from Aquatic Mastery, plus +0.6 and +1.0 water efficiency. Aquatic now replaces
-        // the Liquid bonus rather than stacking on it, and the efficiency ceiling is kept below
-        // 1.0 so the water does not become frictionless.
+        // These two adaptations occupy the same tier, and Aquatic Mastery replaces the Liquid
+        // bonus rather than stacking on it.
+        //
+        // The numbers are small on purpose, because all three of these knobs multiply through
+        // vanilla's water formula rather than adding to it: efficiency raises the swim accel AND
+        // the fraction of velocity the water keeps (LivingEntity.travel: f4 += (0.546 - f4) * eff,
+        // f5 += (getSpeed() - f5) * eff), SWIM_SPEED then multiplies that accel again, and
+        // getSpeed() already carries the wheel's +80% movement-speed progression at the cap. At
+        // the old values (efficiency 0.75, swim +1.0) the steady state worked out to ~8.7 blocks/s
+        // — 4x vanilla swimming and well past a land sprint — which is what "insanely fast
+        // underwater" was. These settle at ~3.2 (Liquid) and ~4.8 (Aquatic) at a maxed wheel.
         double swim = aquatic
-                ? Math.clamp(AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get(), 0.35, 1.0)
-                : liquid ? 0.35 : 0.0;
-        double efficiency = aquatic ? 0.75 : liquid ? 0.35 : 0.0;
+                ? Math.clamp(AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get(), 0.0, 0.35)
+                : 0.0;
+        double efficiency = aquatic ? 0.45 : liquid ? 0.22 : 0.0;
         applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), SWIM_MODIFIER,
                 efficiency, AttributeModifier.Operation.ADD_VALUE);
         applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), LIQUID_SPEED_MODIFIER,
@@ -2161,6 +2176,14 @@ public class AdaptionEvents {
     public static void syncAdaption(ServerPlayer player, PlayerAdaption data, boolean wearing) {
 
         Map<String, Integer> existenceProgress = visibleBossProgress(player, data);
+        // The ability list is decided here, not on the client. The client's mirror is a copy of the
+        // attachment that arrives once a second and can lag a grant, a switch or a wheel change, and
+        // a HUD card drawn from a stale copy promises a key that the server will refuse. One list
+        // per sync means the card and the gate cannot disagree.
+        List<String> abilities = new ArrayList<>();
+        if (DiveAbility.unlocked(data)) {
+            abilities.add(DiveAbility.ID);
+        }
         AdaptionSyncPayload payload = new AdaptionSyncPayload(
                 wearing,
                 data.adversityActive,
@@ -2180,7 +2203,8 @@ public class AdaptionEvents {
                 fistProgressTotal(data),
                 combatFistDone(data),
                 combatFistTotal(data),
-                new ArrayList<>(data.disabled)
+                new ArrayList<>(data.disabled),
+                abilities
         );
         AdaptionSyncPayload.sendTo(player, payload);
     }

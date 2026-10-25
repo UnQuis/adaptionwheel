@@ -70,6 +70,14 @@ public final class DiveAbility {
                 List.of(Concepts.ENV_FALL, Concepts.MUTATION_FLIGHT));
     }
 
+    /**
+     * Whether this player may dive at all. One definition, used by {@link #start} and by the synced
+     * ability list the HUD draws from, so the card and the server can never disagree about it.
+     */
+    public static boolean unlocked(PlayerAdaption data) {
+        return data.active(Concepts.ENV_FALL) || data.active(Concepts.MUTATION_FLIGHT);
+    }
+
     /** Starts a dive, returning false when a condition or the cooldown refuses it. */
     public static boolean start(ServerPlayer player) {
         if (!AdaptionConfig.DIVE_ENABLED.get()) {
@@ -84,9 +92,8 @@ public final class DiveAbility {
             return false;
         }
         PlayerAdaption data = AdaptionEvents.dataOf(player);
-        boolean fall = data.active(Concepts.ENV_FALL);
         boolean flight = data.active(Concepts.MUTATION_FLIGHT);
-        if (!flight && !fall) {
+        if (!unlocked(data)) {
             return false;
         }
         if (!flight && player.fallDistance < AdaptionConfig.DIVE_MIN_FALL.get()) {

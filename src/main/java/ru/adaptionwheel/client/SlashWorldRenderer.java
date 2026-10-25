@@ -4,11 +4,8 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.core.BlockPos;
-import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.material.FogType;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -20,19 +17,24 @@ import ru.adaptionwheel.entity.CursedSlashProjectile;
 import ru.adaptionwheel.entity.SpatialRiftProjectile;
 
 /**
- * Draws every live slash after the translucent block pass, which is the only place water can be
- * kept from painting over it.
+ * Draws every live slash between entities and the translucent block pass, which is the only place
+ * both occlusion and water behave.
  *
- * <p>Vanilla renders entities before {@code RenderType.translucent}; water is translucent, so a
- * slash drawn from its entity renderer is always underneath the water surface. Moving the draw to
- * {@link RenderLevelStageEvent.Stage#AFTER_TRANSLUCENT_BLOCKS} puts it on the far side of that
- * pass. The stage still has the main depth buffer, so opaque terrain occludes the blade exactly as
- * before; only the water (which is not in the depth buffer used here) stops covering it.
+ * <p>The stage has moved twice, and the two mistakes are worth keeping:
+ * <ul>
+ *   <li>Drawn from the entity renderer, water painted over it — the blade was invisible the moment
+ *   it crossed a surface, which is most of the time in the one place a player looks at their own
+ *   slashes.</li>
+ *   <li>Drawn after the translucent pass with the depth test switched off while the camera or the
+ *   blade was underwater, water stopped covering it — and so did the terrain, so a slash below the
+ *   surface was painted on top of the sea. That is what "slashes render above the water" was.</li>
+ * </ul>
  *
- * <p>When the camera or the blade is underwater the depth test is disabled for the draw. In fast
- * graphics water writes depth directly, so keeping depth on there would re-hide the very thing
- * this pass exists to reveal. The blade is a short-lived magical cut, not a solid object, and it
- * is allowed to read through the water it is cutting.
+ * <p>{@link RenderLevelStageEvent.Stage#AFTER_ENTITIES} sits before water is drawn and after
+ * opaque terrain, so the depth test stays on for free: terrain still occludes the blade, nothing
+ * water-related is in the depth buffer yet (which is also why fast graphics cannot interfere), and
+ * the translucent pass then tints the blade with the water it is cutting through instead of being
+ * erased by it.
  */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class SlashWorldRenderer {
@@ -47,7 +49,7 @@ public final class SlashWorldRenderer {
 
     @SubscribeEvent
     public static void onRenderLevel(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) {
             return;
         }
         ClientLevel level = Minecraft.getInstance().level;
@@ -60,13 +62,12 @@ public final class SlashWorldRenderer {
         float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(false);
         Matrix4f viewProjection = new Matrix4f(event.getProjectionMatrix())
                 .mul(event.getModelViewMatrix());
-        boolean cameraUnderwater = camera.getFluidInCamera() == FogType.WATER;
 
         for (Entity entity : level.entitiesForRendering()) {
             if (entity instanceof CursedSlashProjectile slash) {
                 float age = slash.tickCount + partialTick;
                 float fade = age < 24f ? 1f : Mth.clamp(1f - (age - 24f) / 12f, 0f, 1f);
-                drawSlash(event, cameraPos, cameraUnderwater, viewProjection,
+                drawSlash(cameraPos, viewProjection,
                         interpolated(slash, partialTick), slash.getDeltaMovement(), slash.getRoll(),
                         age, 6.0f, 0.22f, 0.13f, CURSED_BLADE, CURSED_GLOW, fade, slash.getId());
             } else if (entity instanceof SpatialRiftProjectile rift) {
@@ -74,7 +75,7 @@ public final class SlashWorldRenderer {
                 float lifeRatio = Mth.clamp(age / SpatialRiftProjectile.LIFETIME_TICKS, 0f, 1f);
                 float fade = lifeRatio > 0.82f
                         ? Mth.clamp((1f - lifeRatio) / 0.18f, 0f, 1f) : 1f;
-                drawSlash(event, cameraPos, cameraUnderwater, viewProjection,
+                drawSlash(cameraPos, viewProjection,
                         interpolated(rift, partialTick), rift.getDeltaMovement(), rift.getRoll(),
                         age, 9.0f, 0.33f, 0.20f, RIFT_BLADE, RIFT_GLOW, fade, rift.getId());
             }
@@ -88,17 +89,11 @@ public final class SlashWorldRenderer {
                 Mth.lerp(partialTick, entity.zOld, entity.getZ()));
     }
 
-    private static void drawSlash(RenderLevelStageEvent event, Vec3 cameraPos,
-                                  boolean cameraUnderwater, Matrix4f viewProjection,
+    private static void drawSlash(Vec3 cameraPos, Matrix4f viewProjection,
                                   Vec3 center, Vec3 motion, float roll, float age,
                                   float length, float glowHalf, float coreHalf,
                                   int[] blade, int[] glow, float fade, int seed) {
         Vec3 direction = motion.lengthSqr() > 1.0e-6 ? motion.normalize() : new Vec3(0, 0, 1);
-        boolean submerged = event.getLevelRenderer() != null
-                && Minecraft.getInstance().level != null
-                && Minecraft.getInstance().level.getFluidState(
-                        BlockPos.containing(center.x, center.y, center.z)).is(FluidTags.WATER);
-        boolean noDepth = cameraUnderwater || submerged;
 
         PoseStack pose = new PoseStack();
         // Echoes first: they are the blade's own motion smear, and drawing them behind the live
@@ -109,22 +104,22 @@ public final class SlashWorldRenderer {
             float echoFade = fade * (i == 1 ? 0.26f : 0.11f);
             drawOne(pose, cameraPos, echo, direction, roll + i * 0.045f, echoAge,
                     length * 0.92f, glowHalf * 0.78f, coreHalf * 0.62f,
-                    blade, glow, echoFade, viewProjection, noDepth, seed + i * 31);
+                    blade, glow, echoFade, viewProjection, seed + i * 31);
         }
 
         drawOne(pose, cameraPos, center, direction, roll, age,
                 length, glowHalf, coreHalf, blade, glow, fade,
-                viewProjection, noDepth, seed);
+                viewProjection, seed);
     }
 
     private static void drawOne(PoseStack pose, Vec3 cameraPos, Vec3 center, Vec3 direction,
                                 float roll, float age, float length, float glowHalf,
                                 float coreHalf, int[] blade, int[] glow, float fade,
-                                Matrix4f viewProjection, boolean noDepth, int seed) {
+                                Matrix4f viewProjection, int seed) {
         pose.pushPose();
         pose.translate(center.x - cameraPos.x, center.y - cameraPos.y, center.z - cameraPos.z);
         FlyingSlashRenderer.render(pose, direction, roll, age, length, glowHalf, coreHalf,
-                blade, glow, fade, viewProjection, !noDepth, seed);
+                blade, glow, fade, viewProjection, true, seed);
         pose.popPose();
     }
 }
