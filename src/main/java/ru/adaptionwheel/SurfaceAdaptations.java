@@ -117,13 +117,6 @@ public final class SurfaceAdaptations {
         return tier >= 0 && data.isEnabled(ru.adaptionwheel.category.FistTiers.concept(tier)) ? tier : -1;
     }
 
-    public static int fistLevel(Player player, int tier) {
-        if (tier < 0) {
-            return 0;
-        }
-        return conceptLevel(player, ru.adaptionwheel.category.FistTiers.concept(tier));
-    }
-
     public static boolean instabreakUnlocked(Player player) {
         if (!ru.adaptionwheel.config.AdaptionConfig.FIST_INSTABREAK_ENABLED.get()) {
             return false;

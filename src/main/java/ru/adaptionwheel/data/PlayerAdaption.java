@@ -78,6 +78,9 @@ public class PlayerAdaption {
 
     public transient int thermalHealingTimer;
 
+    /** Game time of the last Env_Void rescue; transient so a rejoin can rescue immediately. */
+    public transient long lastVoidRescueTick = Long.MIN_VALUE;
+
     public int shedCount;
 
     public transient final java.util.Set<String> recentlyShed = new java.util.HashSet<>();
@@ -200,33 +203,29 @@ public class PlayerAdaption {
         invalidateAdaptCount();
     }
 
-    public void copyFrom(PlayerAdaption other) {
-        levels.clear();
-        levels.putAll(other.levels);
-        progress.clear();
-        progress.putAll(other.progress);
-        adapted.clear();
-        adapted.addAll(other.adapted);
-        tasks.clear();
-        tasks.addAll(other.tasks);
-        history.clear();
-        history.addAll(other.history);
-        existenceAdapted.clear();
-        existenceAdapted.addAll(other.existenceAdapted);
-        killCounts.clear();
-        killCounts.putAll(other.killCounts);
-        bossCombatTicks.clear();
-        bossCombatTicks.putAll(other.bossCombatTicks);
-        disabled.clear();
-        disabled.addAll(other.disabled);
-        cache.clear();
-        cache.addAll(other.cache);
-        instabreak = other.instabreak;
-        healingTimer = other.healingTimer;
-        adversityCooldownTimer = other.adversityCooldownTimer;
-        adversityTimer = other.adversityTimer;
-        adversityActive = other.adversityActive;
-        wasWearing = other.wasWearing;
-        invalidateAdaptCount();
+    /**
+     * Resets the wheel-bound state for an unequip or a wheel swap, but keeps the four pieces of
+     * state that belong to the player rather than to the item.
+     *
+     * <p>{@link #reset()} is the right thing for death and for an explicit debug reset, and it was
+     * the wrong thing here: {@code cache}, {@code disabled}, {@code progress} and {@code instabreak}
+     * are not stored in {@code WheelData}, so clearing them on unequip destroyed a full 54-slot cache,
+     * every per-concept off switch, both fist counters and the Instabreak stance with nothing written
+     * anywhere. The item cannot give them back on the next equip because they were never on it.
+     *
+     * <p>A wheel swap is the same exposure: the player is still wearing a wheel, and the new one may
+     * grant neither {@code Env_Inventory} nor {@code Fist_Netherite}, but the cache and the counters
+     * are still the player's. Keeping them here means the reward survives a swap and the switch stays
+     * where the player put it.
+     */
+    public void resetForUnequip() {
+        Extras preserved = new Extras(new ArrayList<>(disabled), new ArrayList<>(cache),
+                new HashMap<>(progress), instabreak);
+        reset();
+        disabled.addAll(preserved.disabled());
+        cache.addAll(preserved.cache());
+        progress.putAll(preserved.progress());
+        instabreak = preserved.instabreak();
     }
+
 }

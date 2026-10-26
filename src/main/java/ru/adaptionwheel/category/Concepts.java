@@ -6,6 +6,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.effect.MobEffect;
 
+import java.util.Set;
+
 public final class Concepts {
 
     public static final String SELF_DAMAGE = "Self_Damage";
@@ -24,9 +26,17 @@ public final class Concepts {
     public static final String MUTATION_PREFIX = "Mutation_";
     public static final String TYPE_PREFIX = "Type_";
     public static final String DEBUFF_PREFIX = "Debuff_";
-    public static final String PROJ_PREFIX = "Proj_";
     public static final String DIMENSION_PREFIX = "Dimension_";
-    public static final String DAMAGE_CLASS_PREFIX = "DamageClass_";
+
+    /**
+     * Concept keys that used to be leveled but were replaced by a one-time Env_* full immunity.
+     *
+     * <p>Kept as a set rather than deleted silently: old wheels and attachments still contain these
+     * keys, and {@code LegacyConcepts} uses this one list to strip them from both load paths. They
+     * must not fall through to the {@code Type_} prefix fallback and be treated as leveled again.
+     */
+    public static final Set<String> RETIRED_TYPES = Set.of(
+            "Type_FALL", "Type_DROWN", "Type_STARVE", "Type_SUFFOCATE", "Type_VOID", "Type_CONTACT");
 
     public static final String MUTATION_THERMAL = "Mutation_Thermal";
     public static final String MUTATION_AQUATIC = "Mutation_Aquatic";
@@ -69,7 +79,6 @@ public final class Concepts {
     public static final int COLOR_CONTACT = 0xFF55FF55;
     public static final int COLOR_OFFENSE = 0xFFFF5555;
     public static final int COLOR_DROP = 0xFFB464FF;
-    public static final int COLOR_PROJECTILE = 0xFFFFAFC8;
     public static final int COLOR_DEBUFF = 0xFFFFFF00;
     public static final int COLOR_ENV = 0xFF00FFFF;
     public static final int COLOR_MOVEMENT = 0xFF90EE90;
@@ -77,7 +86,6 @@ public final class Concepts {
     public static final int COLOR_COMBAT = 0xFFFF6B6B;
     public static final int COLOR_PERCEPTION = 0xFFE0B0FF;
     public static final int COLOR_INJURE = 0xFFFF1493;
-    public static final int COLOR_DAMAGE_CLASS = 0xFFFFA500;
     public static final int COLOR_SPECIAL = 0xFF9370DB;
     public static final int COLOR_MUTATION = 0xFFFF8C00;
     public static final int COLOR_EXISTENCE = 0xFFFFFFFF;
@@ -165,7 +173,14 @@ public final class Concepts {
         return EXISTENCE_PREFIX + mobPath;
     }
 
+    public static boolean isRetired(String concept) {
+        return RETIRED_TYPES.contains(concept);
+    }
+
     public static boolean isLevelBased(String concept) {
+        if (isRetired(concept)) {
+            return false;
+        }
         ru.adaptionwheel.adapt.AdaptationDefinition def = ru.adaptionwheel.adapt.AdaptationRegistry.get(concept);
         if (def != null) {
             return def.leveled();
@@ -198,7 +213,6 @@ public final class Concepts {
         if (concept.startsWith(CONTACT_PREFIX)) return COLOR_CONTACT;
         if (concept.startsWith(OFFENSE_PREFIX)) return COLOR_OFFENSE;
         if (concept.startsWith(DROP_PREFIX)) return COLOR_DROP;
-        if (concept.startsWith(PROJ_PREFIX)) return COLOR_PROJECTILE;
         if (concept.startsWith(DEBUFF_PREFIX)) return COLOR_DEBUFF;
         if (concept.startsWith(ENV_PREFIX)) return COLOR_ENV;
         if (concept.startsWith(MOVE_PREFIX)) return COLOR_MOVEMENT;
@@ -216,7 +230,6 @@ public final class Concepts {
         if (concept.startsWith(PERCEP_PREFIX)) return COLOR_PERCEPTION;
         if (concept.startsWith(MUTATION_PREFIX)) return COLOR_MUTATION;
         if (concept.startsWith(DIMENSION_PREFIX)) return COLOR_SPECIAL;
-        if (concept.startsWith(DAMAGE_CLASS_PREFIX)) return COLOR_DAMAGE_CLASS;
         if (concept.equals(SELF_DAMAGE)) return COLOR_INJURE;
         if (concept.startsWith(EXISTENCE_PREFIX) || concept.equals(ADVERSITY)) return COLOR_EXISTENCE;
         return COLOR_GENERIC;
@@ -264,9 +277,6 @@ public final class Concepts {
         }
         if (concept.startsWith(EXISTENCE_PREFIX)) {
             return entityName(concept.substring("Existence_".length()), "");
-        }
-        if (concept.startsWith(DAMAGE_CLASS_PREFIX)) {
-            return Component.literal(concept.replace("DamageClass_", "").replace("DamageClass", "") + " Damage");
         }
         return displayName(concept);
     }
@@ -338,15 +348,6 @@ public final class Concepts {
             }
         }
         return COLOR_MINING;
-    }
-
-    private static int combatFistColor(String concept) {
-        for (int i = 0; i < CombatFistTiers.TIER_COUNT; i++) {
-            if (CombatFistTiers.concept(i).equals(concept)) {
-                return CombatFistTiers.color(i);
-            }
-        }
-        return COLOR_COMBAT;
     }
 
     private static Component debuffName(String effectPath) {

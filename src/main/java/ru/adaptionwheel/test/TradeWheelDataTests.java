@@ -62,11 +62,11 @@ public class TradeWheelDataTests {
         ItemStack stack = wheel(progressed());
 
         PlayerAdaption fed = AdaptionEvents.readFrom(stack);
-        fed.levels.put("Type_Starve", PlayerAdaption.MAX_LEVEL);
+        fed.levels.put("Type_WITHER", PlayerAdaption.MAX_LEVEL);
         AdaptionEvents.saveToStack(stack, fed);
 
         PlayerAdaption after = AdaptionEvents.readFrom(stack);
-        helper.assertTrue(after.level("Type_Starve") == PlayerAdaption.MAX_LEVEL,
+        helper.assertTrue(after.level("Type_WITHER") == PlayerAdaption.MAX_LEVEL,
                 "the adaptation just bought must be on the wheel");
         for (String concept : EXISTING) {
             helper.assertTrue(after.level(concept) == PlayerAdaption.MAX_LEVEL,

@@ -140,10 +140,6 @@ public class CacheMenu extends RecipeBookMenu<CraftingInput, CraftingRecipe> {
         }
     }
 
-    public int cacheSlotStart() {
-        return CACHE_SLOT_START;
-    }
-
     /**
      * Rebuilds only the cache slot wrappers at the compact or vertical positions. Slot positions
      * are final, so the screen cannot move them in place; replacing the wrappers is safe because

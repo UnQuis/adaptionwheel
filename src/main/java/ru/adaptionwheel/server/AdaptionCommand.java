@@ -517,7 +517,7 @@ public final class AdaptionCommand {
 
     private static final String[] DYNAMIC_PREFIXES = {
             "Type_", "Env_", "Debuff_", "Contact_", "Offense_", "Drop_NPC_", "Existence_",
-            "Mutation_", "Move_", "Percep_", "Mine_", "Combat_", "Phys_", "Fist_", "Dimension_"
+            "Mutation_", "Move_", "Percep_", "Mine_", "Combat_", "Fist_", "Dimension_"
     };
 
     private static int analyze(CommandContext<CommandSourceStack> ctx, ServerPlayer target, String concept) {

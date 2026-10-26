@@ -3,10 +3,8 @@ package ru.adaptionwheel.adapt;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -56,7 +54,17 @@ public final class AdaptationRegistry {
         }
 
         for (ru.adaptionwheel.category.AdaptionCategory category : ru.adaptionwheel.category.AdaptionCategory.values()) {
-            register(AdaptationDefinition.leveled(ru.adaptionwheel.category.Concepts.type(category), AdaptationDomain.DAMAGE));
+            String concept = ru.adaptionwheel.category.Concepts.type(category);
+            if (ru.adaptionwheel.category.Concepts.isRetired(concept)) {
+                continue;
+            }
+            // Fire is a one-time full immunity now. The old eight-level Type_FIRE was the leveled
+            // half of a pair whose other half (Env_Lava) cancelled the damage before it could train.
+            if (category == ru.adaptionwheel.category.AdaptionCategory.FIRE) {
+                register(AdaptationDefinition.oneTime(concept, AdaptationDomain.DAMAGE));
+            } else {
+                register(AdaptationDefinition.leveled(concept, AdaptationDomain.DAMAGE));
+            }
         }
 
         register(new AdaptationDefinition("Self_Damage", AdaptationDomain.SPECIAL, true, AdaptationDefinition.DEFAULT_MAX_LEVEL));
@@ -108,12 +116,11 @@ public final class AdaptationRegistry {
         if (concept == null) {
             return AdaptationDomain.SPECIAL;
         }
-        if (concept.startsWith("Type_") || concept.startsWith("Proj_") || concept.startsWith("DamageClass_")) {
+        if (concept.startsWith("Type_")) {
             return AdaptationDomain.DAMAGE;
         }
         if (concept.startsWith("Debuff_")) return AdaptationDomain.EFFECT;
         if (concept.startsWith("Move_")) return AdaptationDomain.MOVEMENT;
-        if (concept.startsWith("Phys_")) return AdaptationDomain.PHYSICS;
         if (concept.startsWith("Mine_")) return AdaptationDomain.MINING;
         if (concept.startsWith("Fist_")) return AdaptationDomain.MINING;
         if (concept.startsWith("Combat_")) return AdaptationDomain.COMBAT;
@@ -129,14 +136,4 @@ public final class AdaptationRegistry {
         return AdaptationDomain.SPECIAL;
     }
 
-    public static Collection<AdaptationDefinition> definitionsIn(AdaptationDomain domain) {
-        List<AdaptationDefinition> out = new ArrayList<>();
-        for (AdaptationDefinition def : DEFINITIONS.values()) {
-            if (def.domain() == domain) {
-                out.add(def);
-            }
-        }
-        out.sort(Comparator.comparing(d -> d.concept().toLowerCase(Locale.ROOT)));
-        return out;
-    }
 }

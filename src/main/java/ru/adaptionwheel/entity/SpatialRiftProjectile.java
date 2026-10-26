@@ -62,10 +62,6 @@ public class SpatialRiftProjectile extends Projectile {
         return entityData.get(ROLL);
     }
 
-    public float getBladeHalfWidth() {
-        return bladeHalfWidth;
-    }
-
     public List<Vec3> getTrailSnapshot() {
         return new ArrayList<>(trailPositions);
     }

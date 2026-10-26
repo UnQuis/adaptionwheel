@@ -24,8 +24,6 @@ public final class Synergies {
         }
     }
 
-    private static final String[] REQUIRE = {null, null};
-
     private Synergies() {
     }
 

@@ -1,5 +1,6 @@
 package ru.adaptionwheel.data;
 
+import ru.adaptionwheel.category.AdaptionCategory;
 import ru.adaptionwheel.category.CombatFistTiers;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.FistTiers;
@@ -30,6 +31,8 @@ public final class LegacyConcepts {
 
     public static void migrate(PlayerAdaption data) {
         migrate(data.levels, data.adapted, data.history);
+        data.disabled.removeAll(Concepts.RETIRED_TYPES);
+        data.progress.keySet().removeAll(Concepts.RETIRED_TYPES);
     }
 
     /**
@@ -54,6 +57,22 @@ public final class LegacyConcepts {
         Integer flat = levels.remove("Combat_FistDamage");
         if (flat != null) {
             mergeInto(levels, CombatFistTiers.concept(0), flat);
+        }
+
+        // Fire used to have eight levels and is now a one-time adaptation. Preserve an earned fire
+        // adaptation rather than dropping it; the old level is no longer meaningful.
+        Integer fire = levels.remove(Concepts.type(AdaptionCategory.FIRE));
+        if (fire != null && fire > 0) {
+            adapted.add(Concepts.type(AdaptionCategory.FIRE));
+        }
+
+        // The five hazards below (and CONTACT) are full-protection Env_* adaptations now, so their
+        // old leveled keys are not just inert -- they would reappear in the panel as concepts that
+        // promise a reduction and never apply it. Strip them from both load paths here.
+        for (String retired : Concepts.RETIRED_TYPES) {
+            levels.remove(retired);
+            adapted.remove(retired);
+            history.remove(retired);
         }
 
         renameDebuffs(levels, adapted, history);

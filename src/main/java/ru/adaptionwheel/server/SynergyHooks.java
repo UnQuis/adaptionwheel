@@ -34,7 +34,9 @@ public final class SynergyHooks {
             return;
         }
 
-        if (ru.adaptionwheel.SurfaceAdaptations.fistTier(player) < 0) {
+        // "Cooks what it breaks" is the bare-hand promise. The old fist-tier gate was true for
+        // every player with any fist stage, so a diamond pickaxe smelted the ore it mined.
+        if (!ru.adaptionwheel.category.FistTiers.usableWith(player.getMainHandItem(), event.getState())) {
             return;
         }
         SynergyEffects.smeltDrops(player, event.getDrops());

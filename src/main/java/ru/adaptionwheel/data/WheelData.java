@@ -39,7 +39,15 @@ public record WheelData(
             Map.of(), List.of(), List.of(), Map.of(), List.of(), List.of(), Map.of());
 
     public int adaptCount() {
-        return adapted.size() + (int) levels.values().stream().filter(l -> l > 0).count();
+        // Count concepts, not storage locations: a debuff can live in both adapted and levels in
+        // old data, and summing the two collections double-counted it.
+        return (int) java.util.stream.Stream.concat(
+                adapted.stream(),
+                levels.entrySet().stream()
+                        .filter(entry -> entry.getValue() > 0)
+                        .map(Map.Entry::getKey))
+                .distinct()
+                .count();
     }
 
     public static WheelData fromPlayer(PlayerAdaption data) {

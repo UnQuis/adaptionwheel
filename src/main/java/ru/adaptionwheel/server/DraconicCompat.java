@@ -54,17 +54,6 @@ public final class DraconicCompat {
         return null;
     }
 
-    public static boolean isGuardianDamage(DamageSource source) {
-        if (source == null) {
-            return false;
-        }
-        if (GUARDIAN_DAMAGE_IDS.contains(source.typeHolder().getRegisteredName())) {
-            return true;
-        }
-        return guardianLinkedPath(source.getDirectEntity()) != null
-                || guardianLinkedPath(source.getEntity()) != null;
-    }
-
     private DraconicCompat() {
     }
 }

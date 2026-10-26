@@ -219,7 +219,6 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> HUD_OFFSET_X;
     public static final ModConfigSpec.ConfigValue<Integer> HUD_OFFSET_Y;
     public static final ModConfigSpec.ConfigValue<Integer> HUD_OPACITY;
-    public static final ModConfigSpec.ConfigValue<Boolean> HUD_SHOW_HISTORY;
     public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_ABOVE_HEAD;
     public static final ModConfigSpec.ConfigValue<Double> WHEEL_SIZE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_WHEEL_PARTICLES;
@@ -662,7 +661,7 @@ public final class AdaptionConfig {
                 .comment("Below this % of max HP the wheel begins injury analysis.")
                 .defineInRange("hpThresholdPct", 50.0, 1.0, 100.0);
         THERMAL_REGEN_ENABLED = s
-                .comment("Thermal Mastery mutation: heat-scaled regeneration (requires maxed Type_FIRE + Env_Lava).")
+                .comment("Thermal Mastery mutation: heat-scaled regeneration (requires Type_FIRE + Env_Lava).")
                 .define("thermalRegenEnabled", true);
         THERMAL_REGEN_HP_PER_SECOND = s
                 .comment("HP per second while standing in lava (scaled down by the heat factor in weaker heat).")
@@ -744,7 +743,6 @@ public final class AdaptionConfig {
         HUD_OFFSET_X = c.defineInRange("hudOffsetX", -8, -500, 500);
         HUD_OFFSET_Y = c.defineInRange("hudOffsetY", 8, -500, 500);
         HUD_OPACITY = c.defineInRange("hudOpacity", 100, 5, 100);
-        HUD_SHOW_HISTORY = c.define("showAdaptationLog", true);
         WHEEL_ABOVE_HEAD = c.define("renderWheelAboveHead", true);
         WHEEL_SIZE = c.defineInRange("wheelModelScale", 0.45, 0.1, 2.0);
 
@@ -917,10 +915,6 @@ public final class AdaptionConfig {
     }
 
     private static boolean tierCostRepaired;
-
-    public static double fistTierSpeed(int tier) {
-        return ru.adaptionwheel.category.FistTiers.vanillaMiningSpeed(tier);
-    }
 
     public static int fistBlocksForNextLevel(int tier, int currentLevel) {
         double base = Math.max(1, FIST_FIRST_LEVEL_BLOCKS.get());

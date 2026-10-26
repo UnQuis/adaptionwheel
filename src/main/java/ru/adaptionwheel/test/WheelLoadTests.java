@@ -98,7 +98,7 @@ public class WheelLoadTests {
 
         PlayerAdaption data = mutable();
         data.levels.put("Type_Fire", 7);
-        data.adapted.add("Type_Starve");
+        data.adapted.add("Env_Void");
         data.progress.put("punch:0", 3);
 
         WheelData wd = WheelData.fromPlayer(populated());
@@ -107,7 +107,7 @@ public class WheelLoadTests {
         helper.assertTrue(data.levels.get("Type_Fire") == 7,
                 "a hand-over must not walk a concept backwards: the item had 5, the player had 7,"
                         + " got " + data.levels.get("Type_Fire"));
-        helper.assertTrue(data.adapted.contains("Type_Starve"),
+        helper.assertTrue(data.adapted.contains("Env_Void"),
                 "an adaptation granted while the wheel was off must survive the equip");
         helper.assertTrue(data.progress.getOrDefault("punch:0", 0) == 3,
                 "the fist's kill counter must survive the equip, it is persisted progress");

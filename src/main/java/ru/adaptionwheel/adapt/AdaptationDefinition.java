@@ -19,7 +19,4 @@ public record AdaptationDefinition(String concept, AdaptationDomain domain, bool
         return Concepts.displayName(concept);
     }
 
-    public String descriptionKey() {
-        return "adaptionwheel.desc." + concept;
-    }
 }

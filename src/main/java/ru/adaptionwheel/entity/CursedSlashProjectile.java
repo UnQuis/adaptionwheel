@@ -117,10 +117,6 @@ public class CursedSlashProjectile extends Projectile {
         return new ArrayList<>(trailPositions);
     }
 
-    public float getTraveled() {
-        return traveled;
-    }
-
     @Override
     protected void onHitBlock(BlockHitResult result) {
         super.onHitBlock(result);

@@ -457,7 +457,6 @@ public class AdaptionHud {
         if (concept.startsWith("Percep_")) return 15;
         if (concept.contains("Debuff")) return 20;
         if (concept.startsWith("Contact_")) return 30;
-        if (concept.startsWith("Proj_")) return 35;
         if (concept.startsWith("Offense_")) return 40;
         if (concept.startsWith("Drop_NPC_")) return 1000;
         return 50;

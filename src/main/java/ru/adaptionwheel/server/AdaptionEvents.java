@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -26,6 +27,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.state.BlockState;
@@ -178,12 +181,89 @@ public class AdaptionEvents {
             case FALL -> Concepts.ENV_FALL;
             case STARVE -> Concepts.ENV_STARVE;
             case DROWN -> Concepts.ENV_DROWN;
+            // FIRE is deliberately split below: this table is the *environmental* half only.
             case FIRE -> Concepts.ENV_LAVA;
             case SUFFOCATE -> Concepts.ENV_SUFFOCATE;
             case VOID -> Concepts.ENV_VOID;
             case CONTACT -> Concepts.ENV_THORNS;
             default -> null;
         };
+    }
+
+    /**
+     * True when the player's current adaptation makes this whole damage category harmless.
+     *
+     * <p>FIRE is the one category with two separate one-time adaptations, because lava and fire are
+     * learned and should be lived through separately: {@link Concepts#ENV_LAVA} comes only from
+     * actual immersion in lava, while {@code Type_FIRE} comes from every other fire hit. A fire arrow
+     * must not grant lava immunity, and standing in lava must not train the fire adaptation.
+     */
+    private static boolean hasFullImmunity(PlayerAdaption data, AdaptionCategory category, DamageSource source) {
+        if (category == AdaptionCategory.FIRE) {
+            return data.active(isLavaDamage(source)
+                    ? Concepts.ENV_LAVA
+                    : Concepts.type(AdaptionCategory.FIRE));
+        }
+        String immunity = envImmunityConcept(category);
+        return immunity != null && data.active(immunity);
+    }
+
+    /** The damage type vanilla uses for lava itself; fire ticks and fireballs are not lava. */
+    private static boolean isLavaDamage(DamageSource source) {
+        return source.typeHolder().is(DamageTypes.LAVA);
+    }
+
+    /**
+     * Chorus-like rescue for {@code Env_Void}.
+     *
+     * <p>Cancelling the void damage without moving the player was a one-way trip: the immunity is
+     * permanent, so the fall never ended and there was no way back except unequipping the wheel or a
+     * command. The rescue first tries a chorus-fruit-style random spot near the player, but unlike
+     * the fruit it reads the column's surface height instead of a small vertical offset -- a random
+     * offset around Y = -100 would still be in the void.
+     */
+    private static void rescueFromVoid(ServerPlayer player, PlayerAdaption data) {
+        long now = player.level().getGameTime();
+        if (data.lastVoidRescueTick != Long.MIN_VALUE && now - data.lastVoidRescueTick < 20) {
+            return;
+        }
+        ServerLevel level = player.serverLevel();
+        var random = player.getRandom();
+        for (int attempt = 0; attempt < 16; attempt++) {
+            double x = player.getX() + (random.nextDouble() - 0.5D) * 32.0D;
+            double z = player.getZ() + (random.nextDouble() - 0.5D) * 32.0D;
+            int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Mth.floor(x), Mth.floor(z));
+            if (y <= level.getMinBuildHeight() + 1) {
+                continue;
+            }
+            BlockPos pos = BlockPos.containing(x, y, z);
+            if (!level.isEmptyBlock(pos) || !level.isEmptyBlock(pos.above())) {
+                continue;
+            }
+            if (level.getBlockState(pos.below()).isAir() || !level.getFluidState(pos).isEmpty()) {
+                continue;
+            }
+            teleportRescue(player, level, x + 0.5D, y, z + 0.5D);
+            data.lastVoidRescueTick = now;
+            return;
+        }
+
+        // A void world has no surface to find. Fall back to the shared spawn, which is the one
+        // position the game guarantees to be usable (the End's obsidian platform included).
+        BlockPos spawn = level.getSharedSpawnPos();
+        int y = Math.max(level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, spawn.getX(), spawn.getZ()),
+                level.getMinBuildHeight() + 1);
+        teleportRescue(player, level, spawn.getX() + 0.5D, y, spawn.getZ() + 0.5D);
+        data.lastVoidRescueTick = now;
+    }
+
+    private static void teleportRescue(ServerPlayer player, ServerLevel level, double x, double y, double z) {
+        player.teleportTo(level, x, y, z, player.getYRot(), player.getXRot());
+        player.setDeltaMovement(Vec3.ZERO);
+        player.fallDistance = 0.0F;
+        player.setAirSupply(player.getMaxAirSupply());
+        level.playSound(null, player.blockPosition(), SoundEvents.CHORUS_FRUIT_TELEPORT,
+                SoundSource.PLAYERS, 1.0F, 1.0F);
     }
 
     private static void saveToItem(Player player, PlayerAdaption data) {
@@ -229,7 +309,10 @@ public class AdaptionEvents {
             if (linked == null) {
                 linked = DraconicCompat.guardianLinkedPath(source.getEntity());
             }
-            return linked != null && data.existenceAdapted.contains(linked) ? linked : null;
+            // The off switch reaches the DE path too; it used to be checked for the vanilla boss
+            // path only, so a disabled Chaos Guardian adaptation still granted full immunity.
+            return linked != null && data.isEnabled(Concepts.existence(linked))
+                    && data.existenceAdapted.contains(linked) ? linked : null;
         }
         return null;
     }
@@ -248,8 +331,10 @@ public class AdaptionEvents {
         DamageSource source = event.getSource();
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        String immunity = envImmunityConcept(category);
-        if (immunity != null && data.active(immunity)) {
+        if (hasFullImmunity(data, category, source)) {
+            if (category == AdaptionCategory.VOID) {
+                rescueFromVoid(player, data);
+            }
             event.setCanceled(true); return;
         }
 
@@ -299,39 +384,34 @@ public class AdaptionEvents {
 
         Entity direct = source.getDirectEntity();
 
-        if (data.adversityActive || data.adversityCooldownTimer > 0) return;
+        // Only Adversity itself switches the defences off. Its cooldown is a gate on starting
+        // another Adversity (tryAdversitySurvival already checks it), not a second vulnerability
+        // window: keeping the old check here meant 30 seconds of no reduction, healing, i-frames
+        // or analysis immediately after surviving one.
+        if (data.adversityActive) return;
 
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        if (category == AdaptionCategory.FALL && data.active(Concepts.ENV_FALL)) {
+        if (hasFullImmunity(data, category, source)) {
+            if (category == AdaptionCategory.VOID) {
+                rescueFromVoid(player, data);
+            }
             event.setNewDamage(0); return;
         }
-        if (category == AdaptionCategory.STARVE && data.active(Concepts.ENV_STARVE)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.DROWN && data.active(Concepts.ENV_DROWN)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.FIRE && data.active(Concepts.ENV_LAVA)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.CONTACT && data.active(Concepts.ENV_THORNS)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.SUFFOCATE && data.active(Concepts.ENV_SUFFOCATE)) {
-            event.setNewDamage(0); return;
-        }
-        if (category == AdaptionCategory.VOID && data.active(Concepts.ENV_VOID)) {
-            event.setNewDamage(0); return;
-        }
+
+        boolean lavaDamage = category == AdaptionCategory.FIRE && isLavaDamage(source);
 
         List<String> concepts = new ArrayList<>();
 
+        // These categories are covered by a one-time Env_* immunity and no longer have a leveled
+        // Type_* counterpart. CONTACT joined them: Env_Thorns is its full-protection variant, and
+        // Contact_<mob> still trains separately below.
         boolean envCategory = category == AdaptionCategory.FALL || category == AdaptionCategory.STARVE
                 || category == AdaptionCategory.DROWN
                 || category == AdaptionCategory.SUFFOCATE
-                || category == AdaptionCategory.VOID;
-        if (!envCategory) {
+                || category == AdaptionCategory.VOID
+                || category == AdaptionCategory.CONTACT;
+        if (!envCategory && !lavaDamage) {
             concepts.add(Concepts.type(category));
         }
 
@@ -394,7 +474,7 @@ public class AdaptionEvents {
         }
 
         if (AdaptionConfig.ENABLE_DEFENSE.get()) {
-            if (!envCategory) {
+            if (!envCategory && !lavaDamage) {
                 startOrAccelerate(player, data, Concepts.type(category),
                         (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
             }
@@ -416,9 +496,8 @@ public class AdaptionEvents {
                         : AdaptionConfig.ENV_ANALYSIS_SECONDS.get();
                 startTask(player, data, Concepts.ENV_FALL, (int) (fallTime * 20));
             }
-            if (category == AdaptionCategory.FIRE && source.is(net.minecraft.tags.DamageTypeTags.IS_FIRE)) {
-                startTask(player, data, Concepts.ENV_LAVA, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
-            }
+            // Lava is learned only by immersion, in the tick loop. A fire hit must not grant it:
+            // that was the race that made Type_FIRE unreachable and Thermal impossible.
             if (category == AdaptionCategory.CONTACT) {
                 startTask(player, data, Concepts.ENV_THORNS, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
@@ -498,7 +577,8 @@ public class AdaptionEvents {
         PlayerAdaption data = data(player);
         boolean existenceEnabled = AdaptionConfig.ENABLE_EXISTENCE.get();
 
-        if (existenceEnabled && data.existenceAdapted.contains(DraconicCompat.GUARDIAN_ID)) {
+        if (existenceEnabled && data.isEnabled(Concepts.existence(DraconicCompat.GUARDIAN_ID))
+                && data.existenceAdapted.contains(DraconicCompat.GUARDIAN_ID)) {
             return;
         }
         if (!AdaptionConfig.ENABLE_CHAOS_GUARDIAN.get()) {
@@ -515,7 +595,7 @@ public class AdaptionEvents {
         startOrAccelerate(player, data, Concepts.type(AdaptionCategory.EXPLOSION), defenseTicks, true);
         startOrAccelerate(player, data, Concepts.contact(DraconicCompat.GUARDIAN_ID), defenseTicks, true);
 
-        if (data.adversityActive || data.adversityCooldownTimer > 0) {
+        if (data.adversityActive) {
             target.setHealth(Math.max(current - raw, 0f));
             return;
         }
@@ -892,7 +972,10 @@ public class AdaptionEvents {
                     unequipped.set(ModDataComponents.WHEEL_DATA, WheelData.EMPTY);
                 }
             }
-            data.reset();
+            // The cache, the per-concept switches, both fist counters and the Instabreak stance
+            // are player-bound and are not stored in WheelData, so the full reset here used to
+            // destroy them with no copy on the item. Keep them across the unequip.
+            data.resetForUnequip();
             revokeWearableState(player);
             MartialArts.forget(player.getUUID());
             PENDING_RESPAWN_HEALTH.remove(player.getUUID());
@@ -905,7 +988,9 @@ public class AdaptionEvents {
             ItemStack equipped = getWheelStack(player).orElse(null);
             if (equipped != null && data.equippedStack != null && equipped != data.equippedStack) {
                 saveToStack(data.equippedStack, data);
-                data.reset();
+                // A swap is still a wheel transition, not a player wipe: the cache and the switch
+                // states belong to the player and survive it.
+                data.resetForUnequip();
                 // The new wheel may grant neither flight nor the synergies the old one did, so the
                 // state that lives outside the attachment has to be taken back here too. Whatever
                 // the new wheel does grant is re-applied by the tick loop on its next pass.
@@ -1008,7 +1093,7 @@ public class AdaptionEvents {
         applySurfaceEffects(player, data);
 
         if (!data.active(Concepts.MUTATION_THERMAL)
-                && data.level(Concepts.type(AdaptionCategory.FIRE)) >= PlayerAdaption.MAX_LEVEL
+                && data.active(Concepts.type(AdaptionCategory.FIRE))
                 && data.active(Concepts.ENV_LAVA)) {
             grantComboMutation(player, data, Concepts.MUTATION_THERMAL);
         } else if (data.active(Concepts.MUTATION_THERMAL)) {
@@ -1627,7 +1712,10 @@ public class AdaptionEvents {
         if (data.isEnabled(Concepts.ENV_DROWN) && data.active(Concepts.ENV_DROWN)) {
             player.setAirSupply(player.getMaxAirSupply());
         }
-        if (data.isEnabled(Concepts.ENV_LAVA) && data.active(Concepts.ENV_LAVA)) {
+        // Only while actually in lava. Extinguishing every fire tick made Env_Lava a second,
+        // silent immunity to fire arrows and burning, which is exactly what the fire/lava split
+        // is meant to prevent.
+        if (data.active(Concepts.ENV_LAVA) && player.isInLava()) {
             player.clearFire();
         }
         if (data.isEnabled(Concepts.ENV_STARVE) && data.active(Concepts.ENV_STARVE)
@@ -1809,6 +1897,7 @@ public class AdaptionEvents {
         }
 
         PlayerAdaption data = data(serverPlayer);
+        data.disabled.clear();
         data.tasks.clear();
         data.bossCombatTicks.clear();
         data.adversityActive = false;
@@ -1843,20 +1932,23 @@ public class AdaptionEvents {
                 continue;
             }
             String concept = Concepts.debuff(key.toString());
+            // Debuffs are one-time. Putting them in levels too made adaptCount count the same
+            // adaptation twice and kept WheelData.adaptCount() disagreeing with getAdaptCount().
             data.adapted.add(concept);
-            data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
             data.addHistory(concept);
         }
 
         for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
             ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-            if (key == null) {
+            if (key == null || !LivingEntity.class.isAssignableFrom(type.getBaseClass())) {
                 continue;
             }
             String path = key.toString();
             data.levels.put(Concepts.contact(path), PlayerAdaption.MAX_LEVEL);
             data.levels.put(Concepts.offense(path), PlayerAdaption.MAX_LEVEL);
-            data.levels.put(Concepts.drop(path), PlayerAdaption.MAX_LEVEL);
+            if (type != EntityType.PLAYER) {
+                data.levels.put(Concepts.drop(path), PlayerAdaption.MAX_LEVEL);
+            }
             data.addHistory(Concepts.contact(path));
 
             if (type.is(Tags.EntityTypes.BOSSES)

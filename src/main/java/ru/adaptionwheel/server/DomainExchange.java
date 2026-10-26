@@ -68,7 +68,7 @@ public final class DomainExchange {
         register(Items.SLIME_BALL, 1, "Env_Slime");
         register(Items.COBWEB, 1, "Env_Cobweb");
         register(Items.PACKED_ICE, 1, "Env_Ice");
-        register(Items.BONE, 1, "Env_Suffocate", "Type_SUFFOCATE");
+        register(Items.BONE, 1, "Env_Suffocate");
 
         register(Items.HONEY_BOTTLE, 1, "Move_Honey");
         register(Items.SNOWBALL, 1, "Move_PowderSnow");

@@ -179,32 +179,27 @@ public final class SynergyEffects {
         if (!CHAINED.add(attacker.getUUID())) {
             return;
         }
+        // The guard is held for the rest of this server tick on purpose; the scheduled task clears
+        // it next tick. The old `scheduled` flag was always true, so its finally block was dead.
         attacker.server.execute(() -> CHAINED.remove(attacker.getUUID()));
-        boolean scheduled = true;
-        try {
-            AABB box = attacker.getBoundingBox().inflate(6.0);
-            List<LivingEntity> near = attacker.level().getEntitiesOfClass(LivingEntity.class, box,
-                    e -> e != attacker && e != first && e.isAlive() && !e.isAlliedTo(attacker));
-            int chained = 0;
-            int limit = Math.min(5, Math.max(1, (int) Math.round(power)));
-            for (LivingEntity other : near) {
-                if (chained >= limit) {
-                    break;
-                }
-                other.hurt(attacker.damageSources().indirectMagic(attacker, first),
-                        Math.max(1.0F, (float) (first.getHealth() * 0.08 * power)));
-                chained++;
+        AABB box = attacker.getBoundingBox().inflate(6.0);
+        List<LivingEntity> near = attacker.level().getEntitiesOfClass(LivingEntity.class, box,
+                e -> e != attacker && e != first && e.isAlive() && !e.isAlliedTo(attacker));
+        int chained = 0;
+        int limit = Math.min(5, Math.max(1, (int) Math.round(power)));
+        for (LivingEntity other : near) {
+            if (chained >= limit) {
+                break;
             }
-            if (chained > 0) {
-                attacker.level().playSound(null, attacker.blockPosition(),
-                        SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 0.4f, 2.0f);
-                ((ServerLevel) attacker.level()).sendParticles(ParticleTypes.ELECTRIC_SPARK,
-                        first.getX(), first.getY(0.5), first.getZ(), 8, 0.3, 0.3, 0.3, 0.05);
-            }
-        } finally {
-            if (!scheduled) {
-                CHAINED.remove(attacker.getUUID());
-            }
+            other.hurt(attacker.damageSources().indirectMagic(attacker, first),
+                    Math.max(1.0F, (float) (first.getHealth() * 0.08 * power)));
+            chained++;
+        }
+        if (chained > 0) {
+            attacker.level().playSound(null, attacker.blockPosition(),
+                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 0.4f, 2.0f);
+            ((ServerLevel) attacker.level()).sendParticles(ParticleTypes.ELECTRIC_SPARK,
+                    first.getX(), first.getY(0.5), first.getZ(), 8, 0.3, 0.3, 0.3, 0.05);
         }
     }
 
@@ -288,10 +283,8 @@ public final class SynergyEffects {
             "minecraft:raw_iron", new ItemStack(Items.IRON_INGOT),
             "minecraft:raw_gold", new ItemStack(Items.GOLD_INGOT),
             "minecraft:raw_copper", new ItemStack(Items.COPPER_INGOT),
-            "minecraft:nether_gold_ore", new ItemStack(Items.GOLD_NUGGET),
-            "minecraft:ancient_debris", new ItemStack(Items.NETHERITE_SCRAP),
-            "minecraft:crimson_ore", new ItemStack(Items.IRON_INGOT),
-            "minecraft:warped_ore", new ItemStack(Items.IRON_INGOT)
+            "minecraft:nether_gold_ore", new ItemStack(Items.GOLD_INGOT),
+            "minecraft:ancient_debris", new ItemStack(Items.NETHERITE_SCRAP)
     );
 
     private static ItemStack smeltedResult(ItemStack stack) {

@@ -362,10 +362,6 @@ public abstract class TradeMenu extends AbstractContainerMenu {
         return input.getItem(OFFER_SLOT);
     }
 
-    public boolean hasOffering() {
-        return !offering().isEmpty();
-    }
-
     public boolean hasWheel() {
         return isWheel(input.getItem(WHEEL_SLOT));
     }
