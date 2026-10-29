@@ -34,6 +34,13 @@ public final class CacheInventoryHook {
         if (minecraft.player == null || minecraft.gameMode == null) {
             return;
         }
+        // Curios' own button leaves its screen by opening the vanilla inventory and sending
+        // CPacketOpenVanilla in the same click. Redirecting that opening here would ask for the
+        // cache menu too, and the two server-side menu opens would race; the vanilla inventory is
+        // the answer that matches the packet the button already sent.
+        if (CuriosCompat.isCurioScreen(minecraft.screen)) {
+            return;
+        }
         // Creative's inventory is a different screen with item tabs; replacing it would remove
         // those. Creative players can still open the cache with V.
         if (minecraft.gameMode.hasInfiniteItems()) {

@@ -76,56 +76,53 @@ public class CombatFistTests {
     }
 
     /**
-     * The two-tone bar is a marker for crossing a material boundary, not a second colour scheme.
+     * The handover marker is a gradient on exactly one level, and on opposite levels for the two
+     * fists because their rows count differently.
      *
-     * <p>The request was "half one colour, half another, but ONLY when the player passes 8 -&gt; 1
-     * stage -- this must NOT work always, only on that kind of level". So the half of the rule that is
-     * easy to get wrong is the {@code false} half, and this checks all of it exhaustively rather than
-     * by example.
-     *
-     * <p>It also covers <b>both</b> ends of the boundary, because they are the same event from
-     * opposite sides. Gating on the arrival side alone left the row reading
-     * {@code Lv.MAX &gt; Stone Lv.1} in one flat colour on the very tick it announces a new material,
-     * which is what a player actually sees and complained about.
+     * <p>The request was "when the player closes the eighth level of the wooden fist, one half
+     * should be brown and the other grey, because he is moving to stone". The breaking fist's row
+     * shows the <em>reach</em> tier, so that instant is its next material at level 0; the punching
+     * fist's row shows the highest <em>trained</em> tier, so the same instant is wood at level 8.
+     * Both must split, and nothing in between may.
      */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void barSplitsOnlyAtTheHandover(GameTestHelper helper) {
+        int max = PlayerAdaption.MAX_LEVEL;
 
-        // Levels 2..7 of every stage, in every combination of neighbours, must never split.
-        for (int level = 2; level < PlayerAdaption.MAX_LEVEL; level++) {
+        // The breaking fist crosses at level 0: the row has already moved to the new material.
+        helper.assertTrue(FistTiers.showsHandover(0, true, false),
+                "the breaking fist must split on the level 0 row of the material it just reached");
+        helper.assertTrue(!FistTiers.showsHandover(0, false, false),
+                "level 0 with nothing maxed before it is a fresh ladder, not a handover");
+
+        // The punching fist crosses at level 8, while the next material is still untouched.
+        helper.assertTrue(FistTiers.showsHandover(max, false, true),
+                "the punching fist must split on the last level of the material it is leaving");
+        helper.assertTrue(!FistTiers.showsHandover(max, true, false),
+                "a finished ladder has no next material to hand over to and must not split");
+
+        // Every level strictly inside a stage is not a boundary, whatever its neighbours are.
+        for (int level = 1; level < max; level++) {
             for (boolean previousMaxed : new boolean[] {false, true}) {
                 for (boolean nextUntrained : new boolean[] {false, true}) {
                     helper.assertTrue(!FistTiers.showsHandover(level, previousMaxed, nextUntrained),
                             "level " + level + " split the bar (previousMaxed=" + previousMaxed
-                                    + ", nextUntrained=" + nextUntrained + "); only the two ends of"
-                                    + " the 8 -> 1 boundary may split");
+                                    + ", nextUntrained=" + nextUntrained + "); only the levels on"
+                                    + " either side of a material boundary may split");
                 }
             }
         }
 
-        // Arrival: level 1 of a stage whose predecessor is maxed.
-        helper.assertTrue(FistTiers.showsHandover(1, true, false),
-                "level 1 right after maxing the previous stage is the arrival side and must split");
-        helper.assertTrue(!FistTiers.showsHandover(1, false, true),
-                "level 1 of the very first stage is not a handover, there is nothing before it");
-
-        // Departure: level 8 of a stage whose successor is untouched.
-        helper.assertTrue(FistTiers.showsHandover(PlayerAdaption.MAX_LEVEL, false, true),
-                "level 8 with the next stage untouched is the departure side and must split, or the"
-                        + " row announces a new material in one flat colour");
-        helper.assertTrue(!FistTiers.showsHandover(PlayerAdaption.MAX_LEVEL, true, false),
-                "a finished ladder has no next stage to hand over to and must not split");
-
-        // Both fists agree, and exactly one stage in a full row is ever mid-handover.
+        // Both fists agree, and a full row has exactly one split per boundary between materials.
         int splits = 0;
         for (int tier = 1; tier < CombatFistTiers.TIER_COUNT; tier++) {
-            helper.assertTrue(CombatFistTiers.showsHandover(1, true, false)
-                            == FistTiers.showsHandover(1, true, false),
+            helper.assertTrue(CombatFistTiers.showsHandover(0, true, false)
+                            == FistTiers.showsHandover(0, true, false),
                     "the two fists must agree about the handover");
-            splits += CombatFistTiers.showsHandover(1, true, false) ? 1 : 0;
+            splits += FistTiers.showsHandover(0, true, false) ? 1 : 0;
         }
         helper.assertTrue(splits == CombatFistTiers.TIER_COUNT - 1,
-                "expected one arrival per stage after the first, got " + splits);
+                "expected one handover per material boundary, got " + splits);
         helper.succeed();
     }
 

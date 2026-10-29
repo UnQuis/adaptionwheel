@@ -93,27 +93,30 @@ public final class FistTiers {
      * {@code Font}. It is deliberately narrow, and it covers <b>both sides of the boundary</b>,
      * because both sides are the same event seen from opposite ends:
      *
+     * <p>The handover is <b>the moment the previous material's eighth level closes</b>, and the two
+     * fists sit on opposite sides of that moment, so both sides are a handover:
+     *
      * <ul>
-     *   <li>level 1 of a stage whose predecessor is maxed -- you have just arrived;
-     *   <li>level 8 of a stage whose successor is untouched -- you are about to leave.
+     *   <li>the breaking fist flips to the next material at <b>level 0</b> the tick the previous
+     *       one maxes (its row is the reach tier, not the trained tier);
+     *   <li>the punching fist stays on the finished material at <b>level 8</b> until the first kill
+     *       of the next one (its row is the highest trained tier).
      * </ul>
      *
-     * <p>Gating on the first alone left the row reading {@code Lv.MAX > Stone Lv.1} in one flat
-     * colour on the very tick it announces a new material, which is the moment the split is for.
-     * Every level between 2 and 7 still returns false, and that is the half of the rule that
-     * matters: a bar that is always two-tone is just a second colour scheme and marks nothing.
+     * <p>Anything else returns false: levels 1..7 of a stage, a fresh first stage, and a finished
+     * ladder. A bar that is always two-tone is just a second colour scheme and marks nothing.
      *
      * <p>Both fists use this. They share the stage count (pinned by {@code CombatFistTests}), and a
      * rule duplicated across the two would be one that could eventually disagree about which of
      * them is five stages.
      *
-     * @param level          the current stage's level, 1-based
-     * @param previousMaxed  whether the previous stage is at the cap
-     * @param nextUntrained  whether the next stage has no levels yet
-     * @return true only where a stage hands over to the next
+     * @param level         the current stage's level, 0-based in the breaking fist's row
+     * @param previousMaxed whether the previous stage is at the cap
+     * @param nextUntrained whether the next stage has no levels yet
+     * @return true only on the level that crosses a material boundary
      */
     public static boolean showsHandover(int level, boolean previousMaxed, boolean nextUntrained) {
-        return (level == 1 && previousMaxed)
+        return (level == 0 && previousMaxed)
                 || (level >= ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL && nextUntrained);
     }
 

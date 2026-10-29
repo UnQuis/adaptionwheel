@@ -12,6 +12,7 @@
     "PowderSnowBlockMixin",
     "BerryBushMixin",
     "BubbleColumnMixin",
+    "LavaSwimMixin",
     "ShieldDisableMixin",
     "AttackCooldownMixin",
     "LivingEntityTickerAccessor",

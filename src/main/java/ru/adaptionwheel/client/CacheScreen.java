@@ -2,7 +2,8 @@ package ru.adaptionwheel.client;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.ImageButton;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.components.WidgetSprites;
+import net.minecraft.client.gui.screens.inventory.EffectRenderingInventoryScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.gui.screens.recipebook.RecipeUpdateListener;
@@ -22,11 +23,22 @@ import ru.adaptionwheel.server.CacheService;
  * so this is not a second, parallel inventory — it is the inventory plus fifty more slots. The
  * vanilla texture, player preview, armour/offhand slots, crafting grid and recipe book are all the
  * real thing; only the cache extension is drawn here.
+ *
+ * <p>It extends {@link EffectRenderingInventoryScreen} for one reason: the status-effect column is
+ * part of what the inventory <em>is</em>, and it lives in that class rather than in
+ * {@code AbstractContainerScreen}. Without it the player gives up their effects list the moment
+ * they adapt to a full inventory, which is a silent loss of information they had before.
+ *
+ * <p>The curio button is added by hand. Curios injects its own only into the vanilla
+ * {@code InventoryScreen}, so replacing that screen removes the only route into the curio slots
+ * unless the replacement puts it back — see {@link CuriosCompat}.
  */
-public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements RecipeUpdateListener {
+public class CacheScreen extends EffectRenderingInventoryScreen<CacheMenu> implements RecipeUpdateListener {
 
     private final RecipeBookComponent recipeBookComponent = new RecipeBookComponent();
 
+    @Nullable
+    private ImageButton curiosButton;
     private boolean sideLayout;
     private boolean widthTooNarrow;
     private boolean buttonClicked;
@@ -60,9 +72,26 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
                     recipeBookComponent.toggleVisibility();
                     leftPos = recipeBookComponent.updateScreenPosition(width, imageWidth);
                     button.setPosition(leftPos + 104, topPos + 61);
+                    positionCuriosButton();
                     buttonClicked = true;
                 }));
+        // Curios only adds its button to the vanilla inventory screen, and this screen is what
+        // replaced it — so the route into the curio slots is rebuilt here, in the same corner the
+        // player configured for Curios itself.
+        if (CuriosCompat.buttonAvailable()) {
+            curiosButton = addRenderableWidget(new ImageButton(0, 0, 10, 10,
+                    new WidgetSprites(CuriosCompat.BUTTON_SPRITE, CuriosCompat.BUTTON_SPRITE_HIGHLIGHTED),
+                    button -> CuriosCompat.openCurios()));
+            positionCuriosButton();
+        }
         addWidget(recipeBookComponent);
+    }
+
+    /** Keeps the curio button glued to the panel when the recipe book shifts it sideways. */
+    private void positionCuriosButton() {
+        if (curiosButton != null) {
+            curiosButton.setPosition(leftPos + CuriosCompat.buttonX(), topPos + CuriosCompat.buttonY());
+        }
     }
 
     @Override

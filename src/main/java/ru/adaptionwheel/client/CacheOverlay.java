@@ -103,14 +103,21 @@ public final class CacheOverlay {
         // The left side is tried first because the right side is where vanilla puts the recipe
         // book: with the book open the panel shifts right by 77 pixels and a cache placed on that
         // side lands on top of it.
+        //
+        // A Curios screen is the one panel that already owns the space to its left: its slots sit
+        // at [leftPos - panelWidth, leftPos]. The cache steps over that whole panel rather than
+        // covering the slots the player opened the screen for.
+        int curioPanel = CuriosCompat.curioPanelWidth(screen);
         int sideTop = Math.max(4, Math.min(top, screen.height - CacheService.CACHE_TEXTURE_HEIGHT - 4));
         int rightSide = left + imageWidth + GAP;
-        int leftSide = left - GAP - CacheService.PANEL_WIDTH;
+        int leftSide = left - curioPanel - GAP - CacheService.PANEL_WIDTH;
         cacheJoined = false;
         if (leftSide >= 0) {
             cacheLeft = leftSide;
             cacheTop = sideTop;
-        } else if (rightSide + CacheService.PANEL_WIDTH <= screen.width) {
+        } else if (curioPanel == 0 && rightSide + CacheService.PANEL_WIDTH <= screen.width) {
+            // On a Curios screen the right side is taken by the status-effect column, so a cache
+            // there would cover the effects exactly as it used to cover the slots.
             cacheLeft = rightSide;
             cacheTop = sideTop;
         } else if (screen.height - imageHeight >= CacheService.CACHE_TEXTURE_HEIGHT + 8) {

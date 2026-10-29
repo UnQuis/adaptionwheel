@@ -168,12 +168,12 @@ public class AdaptionHud {
         {
             int trained = ClientAdaption.combatFistTier();
             if (trained >= 0 && ClientAdaption.combatFistProgressTotal > 0) {
-                int tierCount = ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT;
-                int tier = Math.min(trained, tierCount - 1);
+                int tier = Math.min(trained, ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT - 1);
                 String concept = ru.adaptionwheel.category.CombatFistTiers.concept(tier);
                 rows.add(buildFistTierRow(concept, combatFistProgress(),
                         ClientAdaption.combatFistProgressDone, ClientAdaption.combatFistProgressTotal,
-                        null, ClientAdaption.level(concept), tier, tierCount,
+                        null, ClientAdaption.level(concept), tier,
+                        ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT,
                         ru.adaptionwheel.category.CombatFistTiers::concept,
                         ru.adaptionwheel.category.CombatFistTiers::color));
             }
@@ -296,13 +296,14 @@ public class AdaptionHud {
                         withAlpha(segColor, rowOpacity * 90 / 100));
             }
         } else if (row.split) {
-            // Two-tone, and only at a material handover: left is the stage being finished, right
-            // is the one being moved into, both ways round -- see handedOverColours for why.
-            int half = barW / 2;
-            WheelUi.fillRounded(graphics, barX, barY, half + barH, barH, barH / 2,
-                    withAlpha(row.splitLeft, rowOpacity * 90 / 100));
-            WheelUi.fillRounded(graphics, barX + half - barH, barY, barW - half + barH, barH,
-                    barH / 2, withAlpha(row.splitRight, rowOpacity * 90 / 100));
+            // A real gradient from the material being left to the one being entered, drawn across
+            // the whole track. It has to be the whole track: the split exists only on the arrival
+            // level, where progress is near zero, so a gradient clipped to the fill would be
+            // invisible exactly when it is supposed to be seen. The filled part stays at full
+            // strength and the rest is veiled; the knob then walks along the gradient as the new
+            // stage is trained, which is what turns the bar into a picture of the handover.
+            drawMaterialGradient(graphics, barX, barY, barW, barH, barW2,
+                    row.splitLeft, row.splitRight, rowOpacity);
         } else if (barW2 > 0) {
             WheelUi.fillRounded(graphics, barX, barY, barW2, barH, barH / 2,
                     withAlpha(accent, rowOpacity * 90 / 100));
@@ -316,9 +317,6 @@ public class AdaptionHud {
             int knobRadius = 3;
             int knobX = Math.max(barX + knobRadius,
                     Math.min(barX + barW - knobRadius, barX + barW2));
-            if (row.split) {
-                knobX = barX + barW - knobRadius;
-            }
             int knobColor = off ? 0xFFB9B4AA : 0xFFF6F2E9;
             WheelUi.fillCircle(graphics, knobX, barY + barH / 2 + 1, knobRadius + 1,
                     withAlpha(0x000000, Math.round(rowOpacity * 0.45f)));
@@ -566,10 +564,16 @@ public class AdaptionHud {
     }
 
     /**
-     * The colours of a material handover, or {@code null} when this level is not one.
+     * The two colours of a material handover, or {@code null} when this level is not one.
      *
      * <p>Returns {@code null} rather than a sentinel pair of zeroes: a tier's real colour could
      * itself be black, which made "no split" and "split into black" indistinguishable before.
+     *
+     * <p>The two fists cross the boundary on opposite levels and both must split there. The
+     * breaking fist's row is the <em>reach</em> tier, so it is already showing the next material at
+     * level 0; the punching fist's row is the highest <em>trained</em> tier, so it stays on the old
+     * material at level 8 until the first kill of the new one. Reading the level alone therefore
+     * says which end of the handover the row is on.
      *
      * @return {left, right} colours, or {@code null} when no split applies
      */
@@ -582,8 +586,66 @@ public class AdaptionHud {
         if (!ru.adaptionwheel.category.FistTiers.showsHandover(level, previousMaxed, nextUntrained)) {
             return null;
         }
-        boolean arriving = level == 1 && previousMaxed;
-        return new int[] {colour.apply(arriving ? tier - 1 : tier), colour.apply(arriving ? tier : tier + 1)};
+        if (level == 0) {
+            // Arrived: what was just finished on the left, what is being entered on the right.
+            return new int[] {colour.apply(tier - 1), colour.apply(tier)};
+        }
+        // Leaving: the finished material on the left, the one the next kill opens on the right.
+        return new int[] {colour.apply(tier), colour.apply(tier + 1)};
+    }
+
+    /**
+     * A true horizontal gradient across the bar, one pixel column at a time.
+     *
+     * <p>The two-tone version this replaces drew two rounded rectangles butted together, which is
+     * not a gradient: it had a seam in the middle, doubled rounded ends, and no way to show which
+     * material the progress was moving towards. This walks the colour linearly from the old
+     * material to the new one, clips each column to the pill's silhouette, and keeps the filled
+     * part at full strength while the rest is veiled -- so at the arrival level, where progress is
+     * near zero, the gradient is still visible across the whole track and the knob then travels
+     * along it as the new stage is trained.
+     */
+    private static void drawMaterialGradient(GuiGraphics graphics, int x, int y, int width, int height,
+                                             int filledWidth, int from, int to, int rowOpacity) {
+        int radius = height / 2;
+        for (int column = 0; column < width; column++) {
+            float t = width <= 1 ? 0f : column / (float) (width - 1);
+            int alphaPercent = column < filledWidth ? 90 : 55;
+            int inset = roundedColumnInset(column, width, height, radius);
+            graphics.fill(x + column, y + inset, x + column + 1, y + height - inset,
+                    withAlpha(mixColor(from, to, t), Math.round(rowOpacity * alphaPercent / 100f)));
+        }
+    }
+
+    /**
+     * The vertical inset of a pill at one column, so a per-column gradient still ends in a rounded
+     * cap instead of a square corner. This is the same circle that {@link WheelUi#fillRounded}
+     * uses, only measured across the width instead of down the height.
+     */
+    private static int roundedColumnInset(int column, int width, int height, int radius) {
+        int r = Math.max(0, Math.min(radius, Math.min(width / 2, height / 2)));
+        if (r == 0) {
+            return 0;
+        }
+        int fromEdge = Math.min(column, width - 1 - column);
+        if (fromEdge >= r) {
+            return 0;
+        }
+        double dx = r - fromEdge - 0.5;
+        return (int) Math.round(r - Math.sqrt(Math.max(0.0, (double) r * r - dx * dx)));
+    }
+
+    /** Linear RGB interpolation, used only by the material handover gradient. */
+    private static int mixColor(int from, int to, float t) {
+        int fr = (from >> 16) & 0xFF;
+        int fg = (from >> 8) & 0xFF;
+        int fb = from & 0xFF;
+        int tr = (to >> 16) & 0xFF;
+        int tg = (to >> 8) & 0xFF;
+        int tb = to & 0xFF;
+        return (Math.round(fr + (tr - fr) * t) << 16)
+                | (Math.round(fg + (tg - fg) * t) << 8)
+                | Math.round(fb + (tb - fb) * t);
     }
 
     private static float combatFistProgress() {

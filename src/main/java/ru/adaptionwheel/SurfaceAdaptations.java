@@ -37,6 +37,16 @@ public final class SurfaceAdaptations {
         return has(player, Concepts.ENV_LIQUID);
     }
 
+    /**
+     * Whether lava should behave like water for this player.
+     *
+     * <p>This is the {@code Env_Lava} adaptation, and only that one: liquid adaptation is about
+     * water and Aquatic Mastery, and neither of them was ever the ability to swim in lava.
+     */
+    public static boolean swimsInLava(Player player) {
+        return has(player, Concepts.ENV_LAVA);
+    }
+
     public static Float neutralizedSpeedFactor(Player player, net.minecraft.world.level.block.Block block) {
         if (block == Blocks.SOUL_SAND) {
             return has(player, Concepts.MOVE_SOUL_SAND) ? Float.valueOf(1.0F) : null;

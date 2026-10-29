@@ -1090,7 +1090,6 @@ public class AdaptionEvents {
         }
 
         applyEnvEffects(player, data);
-        applySurfaceEffects(player, data);
 
         if (!data.active(Concepts.MUTATION_THERMAL)
                 && data.active(Concepts.type(AdaptionCategory.FIRE))
@@ -1692,20 +1691,6 @@ public class AdaptionEvents {
             }
         }
         return false;
-    }
-
-    private static void applySurfaceEffects(ServerPlayer player, PlayerAdaption data) {
-        if (!data.active(Concepts.ENV_LAVA) || !player.isInLava()) return;
-        double waterEff = player.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY)
-                * (player.onGround() ? 1.0 : 0.5);
-        double f4 = player.isSprinting() ? 0.9 : 0.8;
-        double waterDecay = f4 + (0.54600006F - f4) * waterEff;
-        double decayRatio = waterDecay / 0.5;
-        Vec3 v = player.getDeltaMovement();
-        player.setDeltaMovement(
-                v.x * decayRatio,
-                v.y + player.getGravity() * 3.0 / 16.0,
-                v.z * decayRatio);
     }
 
     private static void applyEnvEffects(ServerPlayer player, PlayerAdaption data) {

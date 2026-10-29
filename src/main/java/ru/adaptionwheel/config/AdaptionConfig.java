@@ -68,6 +68,13 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Double> EXISTENCE_PROXIMITY_BLOCKS;
     public static final ModConfigSpec.ConfigValue<Double> FALL_ANALYSIS_SECONDS;
 
+    /**
+     * Horizontal fraction of water pace while swimming in lava with {@code Env_Lava}.
+     * Vertical control is left exactly at water strength: lava used to have no usable rise at
+     * all, so "slower than water" must apply to the part that was already fine.
+     */
+    public static final ModConfigSpec.ConfigValue<Double> LAVA_SWIM_SPEED_SCALE;
+
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DEFENSE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_OFFENSE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_ENVIRONMENT;
@@ -280,6 +287,19 @@ public final class AdaptionConfig {
         FALL_ANALYSIS_SECONDS = s
                 .comment("Seconds of fall exposure before the fall adaptation finishes.")
                 .defineInRange("fallAnalysisTime", 3.0, 0.1, 300.0);
+
+        s.pop();
+
+        s.comment("--- Environment Adaptations ---").push("environment");
+
+        LAVA_SWIM_SPEED_SCALE = s
+                .comment("Env_Lava makes lava behave like water, only slower.",
+                        "This is the horizontal share of water pace while swimming: 0.8 means",
+                        "four fifths of the speed and the same responsiveness. Vertical control",
+                        "(holding jump to rise, sneaking to sink) is deliberately NOT scaled --",
+                        "lava previously had almost no usable rise at all, so there is nothing",
+                        "to slow down there. 1.0 would make lava exactly as fast as water.")
+                .defineInRange("lavaSwimSpeedScale", 0.8D, 0.2D, 1.0D);
 
         s.pop();
 
