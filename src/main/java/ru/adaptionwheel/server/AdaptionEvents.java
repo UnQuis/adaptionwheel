@@ -18,6 +18,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -1925,7 +1926,7 @@ public class AdaptionEvents {
 
         for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
             ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-            if (key == null || !LivingEntity.class.isAssignableFrom(type.getBaseClass())) {
+            if (key == null || !isLivingType(type, serverPlayer.serverLevel())) {
                 continue;
             }
             String path = key.toString();
@@ -1959,6 +1960,39 @@ public class AdaptionEvents {
         serverPlayer.sendSystemMessage(Component.translatable("adaptionwheel.msg.all_adaption_maxed")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         sync(serverPlayer, data, true);
+    }
+
+    /**
+     * Whether this entity type produces a {@link LivingEntity}.
+     *
+     * <p>This deliberately does not ask {@code EntityType#getBaseClass()}. In 1.21.1 that method is
+     * {@code EntityTypeTest}'s default implementation and returns {@code Entity.class} for every
+     * registered type, modded ones included, so the check the entity pass used to make --
+     * {@code LivingEntity.class.isAssignableFrom(type.getBaseClass())} -- was false for all of
+     * them. The pass therefore granted nothing at all, which is exactly how All Adaptation ended up
+     * looking like it only knew the registry concepts: no {@code Contact_}, {@code Offense_NPC_} or
+     * {@code Drop_NPC_} rows for any mob, vanilla or modded, and no warning anywhere.
+     *
+     * <p>The spawn category answers the question without constructing anything, because every
+     * category other than {@link MobCategory#MISC} is a mob. MISC is the mixed bag -- the player,
+     * every projectile, item and vehicle, and also living things such as the armour stand -- so it
+     * is probed by creating one. That probe is what keeps the answer right for a modded mob that
+     * registered itself as MISC instead of picking a real category.
+     */
+    public static boolean isLivingType(EntityType<?> type, Level level) {
+        if (type == EntityType.PLAYER) {
+            return true;
+        }
+        if (type.getCategory() != MobCategory.MISC) {
+            return true;
+        }
+        try {
+            return type.create(level) instanceof LivingEntity;
+        } catch (RuntimeException e) {
+            // A modded entity whose constructor throws must not take the whole grant down with it:
+            // skipping one type is better than granting none.
+            return false;
+        }
     }
 
     private static final Map<UUID, Long> LAST_VOICE_TICK = new HashMap<>();

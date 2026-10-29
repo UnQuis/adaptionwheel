@@ -282,6 +282,20 @@ All three are on **both** branches and configured, not hard-coded.
   keys — are still walked explicitly, over the live registries. The registry is descriptive and
   adding a definition still changes nothing about storage or sync; this just means the item reads it
   rather than duplicating it.
+- **The per-mob half of that grant was dead too, and the cause was a method that looks like exactly
+  the right one.** The entity pass filtered with
+  `LivingEntity.class.isAssignableFrom(type.getBaseClass())`, and in 1.21.1 `EntityType#getBaseClass()`
+  is `EntityTypeTest`'s default implementation that returns `Entity.class` for **every** registered
+  type — vanilla and modded alike (checked in the recompiled bytecode; NeoForge's patch does not touch
+  it). The predicate was therefore false for all of them, the loop granted no `Contact_`,
+  `Offense_NPC_` or `Drop_NPC_` row at all, and the item looked like it only knew the ~60 registered
+  concepts. `AdaptionEvents.isLivingType` answers with the spawn category instead — every category
+  except `MISC` is a mob — and probes `MISC` with an actual `type.create(level)`, which is what keeps
+  living `MISC` types (the armour stand, and a modded mob that picked `MISC`) working;
+  `EntityType.PLAYER` is special-cased because it cannot be created. A full grant is **327** concepts
+  with vanilla only and grows by three per modded mob, so "400+" is not reachable on 1.21.1's 82
+  living types — 327 *is* everything that exists there. Nothing logged the silent version: the item
+  reported success both times.
 - **The same silence hid a second half of that bug: debuff keys had two live spellings.** The
   runtime minted `Debuff_<path>` from `ResourceLocation.getPath()`, which **drops the namespace**,
   while flight's gate and the altar named `Debuff_minecraft:levitation`. So the item granted levitation
@@ -331,11 +345,13 @@ All three are on **both** branches and configured, not hard-coded.
   `AdaptionConfig::isDouble`, never a raw lambda** — the predicate's argument arrives as `Object`, so
   `o -> o >= 1.0` does not compile (`bad operand types for binary operator`), which is a rare case of
   the build catching a config mistake rather than hiding it.
-- **`AllAdaptationTests` (6 tests)** pins all of it, because every guarantee here is silent otherwise:
+- **`AllAdaptationTests` (9 tests)** pins all of it, because every guarantee here is silent otherwise:
   every registered concept is granted, the five that were missing are named one by one, a bare and a
-  full debuff id mint the same key, the item's levitation key is the one flight asks for, and the
+  full debuff id mint the same key, the item's levitation key is the one flight asks for, the
   migration renames rather than dropping (including that the merging rules compose — copper 3 + iron 2
-  must give iron 5, not iron 2). 104 gametests pass.
+  must give iron 5, not iron 2), the living-type classifier is compared against actually creating
+  every registered type (with the mod's own Disciple standing in for "modded" and the armour stand for
+  the `MISC` probe), and a full grant must land above 300 concepts. 164 gametests pass.
 - **`inventory_files/`** at the repo root holds read-only copies of the 54-slot cache's five files
   (`CacheMenu`, `CacheMenuProvider`, `CacheScreen`, `CacheService`, `OpenCachePayload`) for review.
   The live sources are the ones under `src/main/java/ru/adaptionwheel/`; these are a copy and will

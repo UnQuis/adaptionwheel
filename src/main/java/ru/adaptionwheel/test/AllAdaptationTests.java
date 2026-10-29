@@ -1,8 +1,13 @@
 package ru.adaptionwheel.test;
 
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import ru.adaptionwheel.AdaptionWheel;
@@ -12,6 +17,7 @@ import ru.adaptionwheel.category.CombatFistTiers;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.data.LegacyConcepts;
 import ru.adaptionwheel.data.PlayerAdaption;
+import ru.adaptionwheel.server.AdaptionEvents;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -160,6 +166,150 @@ public class AllAdaptationTests {
                 "history still holds the old spelling: " + data.history);
         helper.assertTrue(!data.history.contains("Debuff_levitation"),
                 "history kept the old spelling alongside the new one");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void isLivingTypeAgreesWithActuallyCreatingTheEntity(GameTestHelper helper) {
+
+        // The entity pass used to ask EntityType#getBaseClass(), which in 1.21.1 is EntityTypeTest's
+        // default and answers Entity.class for every registered type -- so the check was false for
+        // every mob, vanilla and modded alike, and the pass granted nothing. Nothing logged it.
+        // This compares the predicate against the question it is standing in for, entity by entity.
+        List<String> mismatches = new ArrayList<>();
+        int living = 0;
+
+        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
+            ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+            if (key == null) {
+                continue;
+            }
+            boolean expected;
+            if (type == EntityType.PLAYER) {
+                // EntityType.PLAYER cannot be created, so the probe below would answer null; it is
+                // nonetheless a living type and the contact family covers it.
+                expected = true;
+            } else {
+                try {
+                    expected = type.create(helper.getLevel()) instanceof LivingEntity;
+                } catch (RuntimeException e) {
+                    // A modded type whose constructor throws cannot be classified either way; the
+                    // predicate must not throw for it, but there is nothing to compare against.
+                    continue;
+                }
+            }
+            if (expected) {
+                living++;
+            }
+            if (AdaptionEvents.isLivingType(type, helper.getLevel()) != expected) {
+                mismatches.add(key + " should be " + expected);
+            }
+        }
+
+        helper.assertTrue(mismatches.isEmpty(),
+                "these types are classified wrongly, so the item grants the wrong concept families: "
+                        + mismatches);
+        helper.assertTrue(living > 70,
+                "only " + living + " living types were found; vanilla 1.21.1 registers about 80, so"
+                        + " the registry walk itself is suspect");
+        helper.assertTrue(AdaptionEvents.isLivingType(EntityType.ARMOR_STAND, helper.getLevel()),
+                "the armour stand is living but registered as MISC, which is exactly the case the"
+                        + " category shortcut cannot answer");
+        helper.assertTrue(!AdaptionEvents.isLivingType(EntityType.ITEM, helper.getLevel()),
+                "an item entity is MISC and not living, so the probe must reject it");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theEntityPassCoversModdedMobsAsWellAsVanillaOnes(GameTestHelper helper) {
+
+        // Mirrors the entity pass in grantAllAdaptations. The mod's own Disciple is the modded type
+        // in reach here, and it has to come out with all three families: a grant that only knew
+        // vanilla ids is precisely the reported "модовых нет".
+        PlayerAdaption data = new PlayerAdaption();
+        int living = 0;
+
+        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
+            ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+            if (key == null || !AdaptionEvents.isLivingType(type, helper.getLevel())) {
+                continue;
+            }
+            living++;
+            String path = key.toString();
+            data.levels.put(Concepts.contact(path), PlayerAdaption.MAX_LEVEL);
+            data.levels.put(Concepts.offense(path), PlayerAdaption.MAX_LEVEL);
+            if (type != EntityType.PLAYER) {
+                data.levels.put(Concepts.drop(path), PlayerAdaption.MAX_LEVEL);
+            }
+        }
+
+        String disciple = "adaptionwheel:disciple";
+        helper.assertTrue(BuiltInRegistries.ENTITY_TYPE.containsKey(
+                        ResourceLocation.fromNamespaceAndPath("adaptionwheel", "disciple")),
+                "the mod's own mob is not registered, so this test would not prove anything about"
+                        + " modded types");
+
+        for (String path : new String[]{"minecraft:zombie", disciple}) {
+            helper.assertTrue(data.level(Concepts.contact(path)) == PlayerAdaption.MAX_LEVEL,
+                    path + " has no contact adaptation: " + data.levels.keySet().stream()
+                            .filter(k -> k.contains(path)).toList());
+            helper.assertTrue(data.level(Concepts.offense(path)) == PlayerAdaption.MAX_LEVEL,
+                    path + " has no offence adaptation");
+            helper.assertTrue(data.level(Concepts.drop(path)) == PlayerAdaption.MAX_LEVEL,
+                    path + " has no drop adaptation");
+        }
+
+        helper.assertTrue(data.level(Concepts.contact("minecraft:player")) == PlayerAdaption.MAX_LEVEL,
+                "the player is a living type and the contact family covers it");
+        helper.assertTrue(!data.levels.containsKey(Concepts.drop("minecraft:player")),
+                "the player drops nothing to adapt to, so Drop_NPC_minecraft:player must not exist");
+        helper.assertTrue(!data.levels.containsKey(Concepts.contact("minecraft:item")),
+                "an item entity is not a mob and must not get a contact adaptation");
+
+        helper.assertTrue(living > 70, "only " + living + " living types were classified");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theWholeGrantIsHundredsOfConceptsNotSeventy(GameTestHelper helper) {
+
+        // The reported symptom was a wheel with the ~70 registered concepts and none of the
+        // per-mob families. Counting the three passes together is the only end-to-end statement
+        // that the item now grants "everything": registry + harmful effects + (living types x 3 - 1).
+        PlayerAdaption data = new PlayerAdaption();
+        for (AdaptationDefinition def : AdaptationRegistry.allDefinitions()) {
+            if (def.leveled()) {
+                data.levels.put(def.concept(), def.maxLevel());
+            } else {
+                data.adapted.add(def.concept());
+            }
+        }
+        for (MobEffect effect : BuiltInRegistries.MOB_EFFECT) {
+            if (effect.isBeneficial()) {
+                continue;
+            }
+            ResourceLocation key = BuiltInRegistries.MOB_EFFECT.getKey(effect);
+            if (key != null) {
+                data.adapted.add(Concepts.debuff(key.toString()));
+            }
+        }
+        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
+            ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+            if (key == null || !AdaptionEvents.isLivingType(type, helper.getLevel())) {
+                continue;
+            }
+            String path = key.toString();
+            data.levels.put(Concepts.contact(path), PlayerAdaption.MAX_LEVEL);
+            data.levels.put(Concepts.offense(path), PlayerAdaption.MAX_LEVEL);
+            if (type != EntityType.PLAYER) {
+                data.levels.put(Concepts.drop(path), PlayerAdaption.MAX_LEVEL);
+            }
+        }
+
+        int count = data.getAdaptCount();
+        helper.assertTrue(count > 300,
+                "a full grant produced only " + count + " adaptations; the per-mob families are"
+                        + " missing again");
         helper.succeed();
     }
 
