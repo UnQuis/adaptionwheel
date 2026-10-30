@@ -21,6 +21,7 @@ import ru.adaptionwheel.server.AdaptionEvents;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Pins the guarantees behind "eat the All Adaptation item and you are adapted to everything".
@@ -267,6 +268,19 @@ public class AllAdaptationTests {
                 "an item entity is not a mob and must not get a contact adaptation");
 
         helper.assertTrue(living > 70, "only " + living + " living types were classified");
+
+        // The item reads the shared live list now, so that list has to agree with the per-type loop
+        // this test just walked -- otherwise the two "everything"s drift and only the item's side
+        // is wrong.
+        AdaptionEvents.AdaptableConcepts everything = AdaptionEvents.adaptableConcepts(helper.getLevel());
+        List<String> drifted = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : data.levels.entrySet()) {
+            if (!entry.getValue().equals(everything.leveled().get(entry.getKey()))) {
+                drifted.add(entry.getKey());
+            }
+        }
+        helper.assertTrue(drifted.isEmpty(),
+                "the live list disagrees with the per-type loop: " + drifted);
         helper.succeed();
     }
 
@@ -274,42 +288,52 @@ public class AllAdaptationTests {
     public static void theWholeGrantIsHundredsOfConceptsNotSeventy(GameTestHelper helper) {
 
         // The reported symptom was a wheel with the ~70 registered concepts and none of the
-        // per-mob families. Counting the three passes together is the only end-to-end statement
-        // that the item now grants "everything": registry + harmful effects + (living types x 3 - 1).
-        PlayerAdaption data = new PlayerAdaption();
-        for (AdaptationDefinition def : AdaptationRegistry.allDefinitions()) {
-            if (def.leveled()) {
-                data.levels.put(def.concept(), def.maxLevel());
-            } else {
-                data.adapted.add(def.concept());
-            }
-        }
-        for (MobEffect effect : BuiltInRegistries.MOB_EFFECT) {
-            if (effect.isBeneficial()) {
-                continue;
-            }
-            ResourceLocation key = BuiltInRegistries.MOB_EFFECT.getKey(effect);
-            if (key != null) {
-                data.adapted.add(Concepts.debuff(key.toString()));
-            }
-        }
-        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
-            ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-            if (key == null || !AdaptionEvents.isLivingType(type, helper.getLevel())) {
-                continue;
-            }
-            String path = key.toString();
-            data.levels.put(Concepts.contact(path), PlayerAdaption.MAX_LEVEL);
-            data.levels.put(Concepts.offense(path), PlayerAdaption.MAX_LEVEL);
-            if (type != EntityType.PLAYER) {
-                data.levels.put(Concepts.drop(path), PlayerAdaption.MAX_LEVEL);
-            }
-        }
+        // per-mob families. The item and the Dimension Destroy gate now read the same live list, so
+        // this is also the denominator of that gate.
+        AdaptionEvents.AdaptableConcepts everything = AdaptionEvents.adaptableConcepts(helper.getLevel());
 
-        int count = data.getAdaptCount();
-        helper.assertTrue(count > 300,
-                "a full grant produced only " + count + " adaptations; the per-mob families are"
-                        + " missing again");
+        helper.assertTrue(everything.total() > 300,
+                "a full grant is only " + everything.total() + " adaptations; the per-mob families"
+                        + " are missing again");
+        helper.assertTrue(everything.oneTime().contains("Dimension_Destroy"),
+                "Dimension Destroy must be part of 'everything', or eating the item would not grant"
+                        + " it");
+        helper.assertTrue(everything.existence().contains("minecraft:ender_dragon"),
+                "the ender dragon is a boss and its existence concept belongs to the universe: "
+                        + everything.existence());
+
+        PlayerAdaption data = new PlayerAdaption();
+        data.levels.putAll(everything.leveled());
+        data.adapted.addAll(everything.oneTime());
+        data.existenceAdapted.addAll(everything.existence());
+        helper.assertTrue(data.getAdaptCount() == everything.total(),
+                "applying the universe gives " + data.getAdaptCount() + " adaptations but the"
+                        + " universe says " + everything.total() + "; every concept must count once");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void dimensionDestroyNeedsAShareOfEverythingNotAFixedCount(GameTestHelper helper) {
+
+        // The old gate was "adapt count > 450" against a vanilla ceiling of about 330, so it could
+        // never fire by playing. The gate now compares a share of the live universe.
+        helper.assertTrue(AdaptionEvents.reachesDimensionDestroy(331, 331, 100),
+                "100 percent must unlock on the last adaptation");
+        helper.assertTrue(!AdaptionEvents.reachesDimensionDestroy(330, 331, 100),
+                "one short of 100 percent must not unlock");
+        helper.assertTrue(!AdaptionEvents.reachesDimensionDestroy(264, 331, 80),
+                "264 of 331 is below 80 percent");
+        helper.assertTrue(AdaptionEvents.reachesDimensionDestroy(265, 331, 80),
+                "265 of 331 is 80.06 percent and must unlock");
+        helper.assertTrue(!AdaptionEvents.reachesDimensionDestroy(0, 0, 80),
+                "an empty universe must not read as complete");
+
+        int total = AdaptionEvents.adaptableConcepts(helper.getLevel()).total();
+        int eighty = (int) Math.ceil(total * 0.8);
+        helper.assertTrue(AdaptionEvents.reachesDimensionDestroy(eighty, total, 80),
+                "the default gate must be reachable in this world: " + eighty + "/" + total);
+        helper.assertTrue(!AdaptionEvents.reachesDimensionDestroy(eighty - 1, total, 80),
+                "one below the 80 percent mark must not unlock: " + (eighty - 1) + "/" + total);
         helper.succeed();
     }
 

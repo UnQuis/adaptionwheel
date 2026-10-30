@@ -42,6 +42,7 @@ import net.minecraft.sounds.SoundSource;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.AnvilUpdateEvent;
+import net.neoforged.neoforge.event.TagsUpdatedEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
@@ -49,9 +50,12 @@ import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingKnockBackEvent;
 import net.neoforged.neoforge.event.entity.living.MobEffectEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.SurfaceAdaptations;
+import ru.adaptionwheel.adapt.AdaptationDefinition;
+import ru.adaptionwheel.adapt.AdaptationRegistry;
 import ru.adaptionwheel.category.AdaptionCategory;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
@@ -1134,7 +1138,9 @@ public class AdaptionEvents {
 
         if (AdaptionConfig.DIMENSION_DESTROY_ENABLED.get()
                 && !data.active(Concepts.DIMENSION_DESTROY)
-                && data.getAdaptCount() > AdaptionConfig.DIMENSION_DESTROY_REQUIRED.get()) {
+                && reachesDimensionDestroy(data.getAdaptCount(),
+                        adaptableConcepts(player.serverLevel()).total(),
+                        AdaptionConfig.DIMENSION_DESTROY_PERCENT.get())) {
             grantComboMutation(player, data, Concepts.DIMENSION_DESTROY);
         }
 
@@ -1890,64 +1896,26 @@ public class AdaptionEvents {
         data.adversityTimer = 0;
         data.adversityCooldownTimer = 0;
 
-        // Everything in the registry, rather than a list written out again here.
+        // One description of "everything", built from the live registries rather than a copy
+        // written out here.
         //
-        // A hand-written copy of the core concepts is the whole bug: it silently went stale the moment
-        // Env_Inventory, Mutation_SeaEye, Mutation_Flight and the five Combat_Fist* stages were added,
-        // and "eats the All Adaptation item and still is not adapted to it" is exactly what a stale
-        // copy looks like from the outside. The registry is the single source of truth for which
-        // concepts exist and whether they have levels, so iterating it makes the item grant everything
-        // by construction and a future concept needs no edit here at all.
-        for (ru.adaptionwheel.adapt.AdaptationDefinition def
-                : ru.adaptionwheel.adapt.AdaptationRegistry.allDefinitions()) {
-            String concept = def.concept();
-            if (def.leveled()) {
-                data.levels.put(concept, def.maxLevel());
-            } else {
-                data.adapted.add(concept);
-            }
-            data.addHistory(concept);
+        // A hand-written copy of the core concepts is the whole bug: it silently went stale the
+        // moment Env_Inventory, Mutation_SeaEye, Mutation_Flight and the five Combat_Fist* stages
+        // were added, and "eats the All Adaptation item and still is not adapted to it" is exactly
+        // what a stale copy looks like from the outside. The same list is the denominator of the
+        // Dimension Destroy gate, so the two can never disagree about what "all" means.
+        AdaptableConcepts everything = adaptableConcepts(serverPlayer.serverLevel());
+        for (Map.Entry<String, Integer> entry : everything.leveled().entrySet()) {
+            data.levels.put(entry.getKey(), entry.getValue());
+            data.addHistory(entry.getKey());
         }
-
-        for (MobEffect effect : BuiltInRegistries.MOB_EFFECT) {
-            if (effect.isBeneficial()) {
-                continue;
-            }
-            ResourceLocation key = BuiltInRegistries.MOB_EFFECT.getKey(effect);
-            if (key == null) {
-                continue;
-            }
-            String concept = Concepts.debuff(key.toString());
-            // Debuffs are one-time. Putting them in levels too made adaptCount count the same
-            // adaptation twice and kept WheelData.adaptCount() disagreeing with getAdaptCount().
+        for (String concept : everything.oneTime()) {
             data.adapted.add(concept);
             data.addHistory(concept);
         }
-
-        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
-            ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-            if (key == null || !isLivingType(type, serverPlayer.serverLevel())) {
-                continue;
-            }
-            String path = key.toString();
-            data.levels.put(Concepts.contact(path), PlayerAdaption.MAX_LEVEL);
-            data.levels.put(Concepts.offense(path), PlayerAdaption.MAX_LEVEL);
-            if (type != EntityType.PLAYER) {
-                data.levels.put(Concepts.drop(path), PlayerAdaption.MAX_LEVEL);
-            }
-            data.addHistory(Concepts.contact(path));
-
-            if (type.is(Tags.EntityTypes.BOSSES)
-                    || DraconicCompat.GUARDIAN_ID.equals(path)
-                    || path.contains("wither")
-                    || path.contains("ender_dragon")
-                    || path.contains("warden")) {
-                String existenceConcept = Concepts.existence(path);
-                data.adapted.add(existenceConcept);
-                data.existenceAdapted.add(path);
-                data.addHistory(existenceConcept);
-            }
-        }
+        // Existence is two things at once: the one-time Existence_ concept, which is in `oneTime`
+        // above, and the boss path the reflection gate reads.
+        data.existenceAdapted.addAll(everything.existence());
 
         data.targetRotation += (float) (Math.PI * 30);
         data.invalidateAdaptCount();
@@ -1993,6 +1961,133 @@ public class AdaptionEvents {
             // skipping one type is better than granting none.
             return false;
         }
+    }
+
+    /**
+     * Everything the All Adaptation item grants, and therefore also the denominator of the
+     * Dimension Destroy gate.
+     *
+     * <p>{@code leveled} holds one level per concept that stores a level, {@code oneTime} the
+     * concepts that are simply present, and {@code existence} the boss paths that the existence
+     * reflection gate reads (the matching {@code Existence_} concept is in {@code oneTime}).
+     */
+    public record AdaptableConcepts(Map<String, Integer> leveled, Set<String> oneTime,
+                                    Set<String> existence) {
+
+        public int total() {
+            return leveled.size() + oneTime.size();
+        }
+    }
+
+    private static volatile AdaptableConcepts cachedAdaptableConcepts;
+
+    /**
+     * The live "everything" list, built once per server and rebuilt when tags change.
+     *
+     * <p>Rebuilding it is not free: the {@link MobCategory#MISC} probe creates an entity. That is
+     * fine for a one-off grant, but the Dimension Destroy check runs every tick, so the result is
+     * cached. The cache is dropped on {@link TagsUpdatedEvent}, because the boss tag decides which
+     * {@code Existence_} concepts exist.
+     */
+    public static AdaptableConcepts adaptableConcepts(Level level) {
+        AdaptableConcepts cached = cachedAdaptableConcepts;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (AdaptionEvents.class) {
+            if (cachedAdaptableConcepts == null) {
+                cachedAdaptableConcepts = buildAdaptableConcepts(level);
+            }
+            return cachedAdaptableConcepts;
+        }
+    }
+
+    private static AdaptableConcepts buildAdaptableConcepts(Level level) {
+        Map<String, Integer> leveled = new HashMap<>();
+        Set<String> oneTime = new HashSet<>();
+        Set<String> existence = new HashSet<>();
+
+        for (AdaptationDefinition definition : AdaptationRegistry.allDefinitions()) {
+            if (definition.leveled()) {
+                leveled.put(definition.concept(), definition.maxLevel());
+            } else {
+                oneTime.add(definition.concept());
+            }
+        }
+
+        for (MobEffect effect : BuiltInRegistries.MOB_EFFECT) {
+            ResourceLocation key = BuiltInRegistries.MOB_EFFECT.getKey(effect);
+            if (key == null || effect.isBeneficial()) {
+                continue;
+            }
+            // Debuffs are one-time. Putting them in levels too made adaptCount count the same
+            // adaptation twice and kept WheelData.adaptCount() disagreeing with getAdaptCount().
+            oneTime.add(Concepts.debuff(key.toString()));
+        }
+
+        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
+            ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+            if (key == null || !isLivingType(type, level)) {
+                continue;
+            }
+            String path = key.toString();
+            leveled.put(Concepts.contact(path), PlayerAdaption.MAX_LEVEL);
+            leveled.put(Concepts.offense(path), PlayerAdaption.MAX_LEVEL);
+            if (type != EntityType.PLAYER) {
+                leveled.put(Concepts.drop(path), PlayerAdaption.MAX_LEVEL);
+            }
+            if (isBossType(type, path)) {
+                oneTime.add(Concepts.existence(path));
+                existence.add(path);
+            }
+        }
+
+        return new AdaptableConcepts(leveled, oneTime, existence);
+    }
+
+    /**
+     * The boss set All Adaptation treats as having an existence adaptation.
+     *
+     * <p>Kept in one place so growing the boss list is one edit; the path heuristics cover the
+     * vanilla bosses on the versions where the boss tag is thin, and Draconic Evolution's guardian
+     * is not in any tag at all.
+     */
+    public static boolean isBossType(EntityType<?> type, String path) {
+        return type.is(Tags.EntityTypes.BOSSES)
+                || DraconicCompat.GUARDIAN_ID.equals(path)
+                || path.contains("wither")
+                || path.contains("ender_dragon")
+                || path.contains("warden");
+    }
+
+    /**
+     * The Dimension Destroy gate: a share of everything the All Adaptation item can grant.
+     *
+     * <p>A fixed count was the bug. The old default was 450 and vanilla 1.21.1 has 331 concepts in
+     * total, so the requirement sat above the ceiling and the feature could never unlock by playing
+     * — while looking like an ordinary endgame threshold in the config. A percentage follows the
+     * content: the same fraction of vanilla, and still "almost everything" in a modpack.
+     *
+     * @param adaptCount    the player's distinct adaptations
+     * @param totalConcepts {@link AdaptableConcepts#total()}
+     * @param percent       1..100
+     */
+    public static boolean reachesDimensionDestroy(int adaptCount, int totalConcepts, int percent) {
+        if (totalConcepts <= 0) {
+            // An empty registry must not read as "nothing left to do".
+            return false;
+        }
+        return (long) adaptCount * 100L >= (long) totalConcepts * percent;
+    }
+
+    @SubscribeEvent
+    public static void onServerStoppedResetAdaptableCache(ServerStoppedEvent event) {
+        cachedAdaptableConcepts = null;
+    }
+
+    @SubscribeEvent
+    public static void onTagsUpdatedResetAdaptableCache(TagsUpdatedEvent event) {
+        cachedAdaptableConcepts = null;
     }
 
     private static final Map<UUID, Long> LAST_VOICE_TICK = new HashMap<>();

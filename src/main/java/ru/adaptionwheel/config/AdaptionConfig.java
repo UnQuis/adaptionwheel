@@ -184,7 +184,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_MAX_DISTANCE;
 
     public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_DESTROY_ENABLED;
-    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_DESTROY_REQUIRED;
+    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_DESTROY_PERCENT;
 
     public static final ModConfigSpec.ConfigValue<Integer> CONTACT_IMMUNITY_LEVEL;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> CONTACT_PROTECTION_LEVELS;
@@ -567,9 +567,16 @@ public final class AdaptionConfig {
                         "threshold, Sword of Extermination swings tear three spatial rifts that sever",
                         "up to five lives each outright. Players are never targeted.")
                 .define("enabled", true);
-        DIMENSION_DESTROY_REQUIRED = s.comment("Adaptations on the wheel required to unlock Dimension Destroy.",
-                        "The original gates it behind Transcendence; this mod uses the same idea.")
-                .defineInRange("adaptationsRequired", 450, 1, 1000);
+        DIMENSION_DESTROY_PERCENT = s.comment(
+                        "Share of all adaptations, in percent, required to unlock Dimension Destroy.",
+                        "Counted against everything the All Adaptation item can grant: the registry,",
+                        "every harmful status effect, and Contact_/Offense_NPC_/Drop_NPC_/Existence_",
+                        "for every living entity, modded ones included -- so the requirement scales",
+                        "with the world's content. 80 means four fifths of everything that exists.",
+                        "A fixed count was the old shape and vanilla 1.21.1 has 331 concepts in total,",
+                        "so its default of 450 sat above the ceiling: the feature could not unlock.",
+                        "100 requires literally everything; 1 unlocks on the first adaptation.")
+                .defineInRange("requiredPercent", 80, 1, 100);
         s.pop();
 
         s.pop();
