@@ -58,7 +58,7 @@ public class WheelLoadTests {
         helper.assertTrue(thrown == null,
                 "equipping a wheel threw, which killed the world: " + thrown);
 
-        helper.assertTrue(data.levels.getOrDefault("Type_Fire", 0) == 5,
+        helper.assertTrue(data.levels.getOrDefault("Type_Magic", 0) == 5,
                 "the wheel's levels must reach the player, got " + data.levels);
         helper.assertTrue(data.adapted.contains("Env_Lava"),
                 "one-time adaptations must reach the player, got " + data.adapted);
@@ -97,16 +97,16 @@ public class WheelLoadTests {
     public static void loadingTakesTheHigherLevelAndKeepsUnrelatedGrants(GameTestHelper helper) {
 
         PlayerAdaption data = mutable();
-        data.levels.put("Type_Fire", 7);
+        data.levels.put("Type_Magic", 7);
         data.adapted.add("Env_Void");
         data.progress.put("punch:0", 3);
 
         WheelData wd = WheelData.fromPlayer(populated());
         wd.loadInto(data);
 
-        helper.assertTrue(data.levels.get("Type_Fire") == 7,
+        helper.assertTrue(data.levels.get("Type_Magic") == 7,
                 "a hand-over must not walk a concept backwards: the item had 5, the player had 7,"
-                        + " got " + data.levels.get("Type_Fire"));
+                        + " got " + data.levels.get("Type_Magic"));
         helper.assertTrue(data.adapted.contains("Env_Void"),
                 "an adaptation granted while the wheel was off must survive the equip");
         helper.assertTrue(data.progress.getOrDefault("punch:0", 0) == 3,
@@ -195,7 +195,7 @@ public class WheelLoadTests {
 
     private static PlayerAdaption populated() {
         PlayerAdaption data = mutable();
-        data.levels.put("Type_Fire", 5);
+        data.levels.put("Type_Magic", 5);
         data.adapted.add("Env_Lava");
         data.existenceAdapted.add("Existence_minecraft:wither");
         data.killCounts.put("Drop_NPC_minecraft:zombie", 12);

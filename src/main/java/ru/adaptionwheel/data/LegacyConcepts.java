@@ -1,6 +1,5 @@
 package ru.adaptionwheel.data;
 
-import ru.adaptionwheel.category.AdaptionCategory;
 import ru.adaptionwheel.category.CombatFistTiers;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.FistTiers;
@@ -8,7 +7,6 @@ import ru.adaptionwheel.category.FistTiers;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -26,11 +24,19 @@ import java.util.Set;
  */
 public final class LegacyConcepts {
 
+    /** The old spelling of {@link Concepts#ENV_FIRE}; it promised a level ladder fire no longer has. */
+    private static final String LEGACY_FIRE = "Type_FIRE";
+
     private LegacyConcepts() {
     }
 
     public static void migrate(PlayerAdaption data) {
         migrate(data.levels, data.adapted, data.history);
+        // The panel switch is part of the adaptation's state: a player who switched fire off must
+        // not have it switched back on by the rename.
+        if (data.disabled.remove(LEGACY_FIRE)) {
+            data.disabled.add(Concepts.ENV_FIRE);
+        }
         data.disabled.removeAll(Concepts.RETIRED_TYPES);
         data.progress.keySet().removeAll(Concepts.RETIRED_TYPES);
     }
@@ -59,12 +65,19 @@ public final class LegacyConcepts {
             mergeInto(levels, CombatFistTiers.concept(0), flat);
         }
 
-        // Fire used to have eight levels and is now a one-time adaptation. Preserve an earned fire
-        // adaptation rather than dropping it; the old level is no longer meaningful.
-        Integer fire = levels.remove(Concepts.type(AdaptionCategory.FIRE));
+        // Fire used to be Type_FIRE. It has been a one-time adaptation since the fire/lava split,
+        // but older saves still carry the leveled spelling (and pre-split levels). Both halves are
+        // renamed, not dropped: a level above zero earned the adaptation, and an adapted/history
+        // key is the same fact under the new name. The Type_ prefix fallback would otherwise treat
+        // the old key as an eight-level ladder again on the very next load.
+        Integer fire = levels.remove(LEGACY_FIRE);
         if (fire != null && fire > 0) {
-            adapted.add(Concepts.type(AdaptionCategory.FIRE));
+            adapted.add(Concepts.ENV_FIRE);
         }
+        if (adapted.remove(LEGACY_FIRE)) {
+            adapted.add(Concepts.ENV_FIRE);
+        }
+        renameInPlace(history, LEGACY_FIRE, Concepts.ENV_FIRE);
 
         // The five hazards below (and CONTACT) are full-protection Env_* adaptations now, so their
         // old leveled keys are not just inert -- they would reappear in the panel as concepts that
@@ -81,6 +94,23 @@ public final class LegacyConcepts {
     private static void mergeInto(Map<String, Integer> levels, String concept, int extra) {
         int merged = Math.min(PlayerAdaption.MAX_LEVEL, levels.getOrDefault(concept, 0) + extra);
         levels.put(concept, merged);
+    }
+
+    /**
+     * Renames one key inside a collection, preserving its position and never duplicating the
+     * target. {@code adapted} is a Set and {@code history} a List, and {@code clear} plus
+     * {@code addAll} is the rewrite both support.
+     */
+    private static void renameInPlace(Collection<String> concepts, String from, String to) {
+        if (!concepts.contains(from)) {
+            return;
+        }
+        Set<String> rebuilt = new LinkedHashSet<>();
+        for (String concept : concepts) {
+            rebuilt.add(concept.equals(from) ? to : concept);
+        }
+        concepts.clear();
+        concepts.addAll(rebuilt);
     }
 
     /**

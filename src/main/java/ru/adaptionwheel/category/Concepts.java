@@ -50,6 +50,11 @@ public final class Concepts {
     public static final String DIMENSION_DESTROY = "Dimension_Destroy";
 
     public static final String ENV_FALL = "Env_FallDamage";
+    /**
+     * Ordinary fire and burning. One-time, because fire is an environment rather than a damage
+     * ladder: the old {@code Type_FIRE} promised eight levels and was replaced by this key.
+     */
+    public static final String ENV_FIRE = "Env_Fire";
     public static final String ENV_LAVA = "Env_Lava";
     public static final String ENV_DROWN = "Env_Drowning";
     public static final String ENV_THORNS = "Env_Thorns";
@@ -94,8 +99,19 @@ public final class Concepts {
     private Concepts() {
     }
 
+    /**
+     * The concept that adapts a damage category.
+     *
+     * <p>Fire is the one category whose key is not {@code Type_*}: it is a one-time
+     * {@link #ENV_FIRE} environment adaptation, and the old {@code Type_FIRE} level ladder no
+     * longer exists. Keeping the mapping here means every trainer and every immunity check asks
+     * the same question instead of one of them silently using a retired key.
+     */
     public static String type(AdaptionCategory category) {
-        return "Type_" + category.name();
+        if (category == AdaptionCategory.FIRE) {
+            return ENV_FIRE;
+        }
+        return TYPE_PREFIX + category.name();
     }
 
     public static String contact(String mobPath) {

@@ -187,8 +187,9 @@ public class AdaptionEvents {
             case FALL -> Concepts.ENV_FALL;
             case STARVE -> Concepts.ENV_STARVE;
             case DROWN -> Concepts.ENV_DROWN;
-            // FIRE is deliberately split below: this table is the *environmental* half only.
-            case FIRE -> Concepts.ENV_LAVA;
+            // Fire is an environment adaptation now, not a damage ladder. Lava is the
+            // source-specific override in hasFullImmunity, not a second category concept.
+            case FIRE -> Concepts.ENV_FIRE;
             case SUFFOCATE -> Concepts.ENV_SUFFOCATE;
             case VOID -> Concepts.ENV_VOID;
             case CONTACT -> Concepts.ENV_THORNS;
@@ -199,22 +200,23 @@ public class AdaptionEvents {
     /**
      * True when a one-time adaptation makes this whole damage category harmless.
      *
-     * <p>Only the one-time {@code Env_*} concepts answer here. Leveled {@code Type_*} concepts are
-     * the other half of the same idea and are handled by {@link #isMaxedImmunity}: {@code active()}
-     * asks the {@code adapted} set, while a leveled concept lives in {@code levels}, so the old
-     * {@code data.active(Type_FIRE)} arm was false by construction -- fire never became harmless no
-     * matter the level. That is the accessor trap the data classes warn about, and it is why a maxed
-     * fire adaptation still took 60 % damage.
+     * <p>Only the one-time {@code Env_*} concepts answer here. Fire belongs to that family too:
+     * {@link Concepts#ENV_FIRE} is a one-time adaptation stored in {@code adapted}, not a leveled
+     * key in {@code levels}, so {@code active()} is exactly the right accessor for it. (The damage
+     * type is still called {@code FIRE}; the concept is not {@code Type_FIRE}.) Leveled
+     * {@code Type_*} concepts are the other half of the same idea and are handled by
+     * {@link #isMaxedImmunity}.
      *
-     * <p>FIRE is the one category with two separate adaptations, because lava and fire are
-     * learned and should be lived through separately: {@link Concepts#ENV_LAVA} comes only from
-     * actual immersion in lava, while {@code Type_FIRE} comes from every other fire hit. A fire arrow
-     * must not grant lava immunity, and standing in lava must not train the fire adaptation. Lava is
-     * therefore the only fire damage this method answers for; ordinary fire is a maxed Type_FIRE.
+     * <p>FIRE is the one category with two adaptations, because lava and fire are learned and
+     * should be lived through separately: {@link Concepts#ENV_LAVA} comes only from actual
+     * immersion in lava, while {@link Concepts#ENV_FIRE} comes from every other fire hit. A fire
+     * arrow must not grant lava immunity, and standing in lava must not train the fire adaptation.
+     *
+     * <p>Public so the fire/lava split can be pinned by a gametest without a mock player.
      */
-    private static boolean hasFullImmunity(PlayerAdaption data, AdaptionCategory category, DamageSource source) {
-        if (category == AdaptionCategory.FIRE) {
-            return isLavaDamage(source) && data.active(Concepts.ENV_LAVA);
+    public static boolean hasFullImmunity(PlayerAdaption data, AdaptionCategory category, DamageSource source) {
+        if (category == AdaptionCategory.FIRE && isLavaDamage(source)) {
+            return data.active(Concepts.ENV_LAVA);
         }
         String immunity = envImmunityConcept(category);
         return immunity != null && data.active(immunity);
@@ -233,12 +235,12 @@ public class AdaptionEvents {
      * <ul>
      *   <li>{@link DamageTypeTags#BYPASSES_INVULNERABILITY} -- that is the {@code /kill} command, not
      *       a phenomenon to adapt to; an adaptation must not make an operator's kill fail.</li>
-     *   <li>Lava -- it belongs to the one-time {@code Env_Lava} adaptation, never to
-     *       {@code Type_FIRE}; the fire/lava split is what keeps a fire arrow from granting lava
-     *       immunity.</li>
-     *   <li>The environmental categories -- fall, drowning, starvation, suffocation, void and
-     *       thorns are one-time {@code Env_*} concepts with no leveled family, so there is no level
-     *       eight to ask about.</li>
+     *   <li>Lava -- it belongs to the one-time {@code Env_Lava} adaptation; the fire/lava split is
+     *       what keeps a fire arrow from granting lava immunity.</li>
+     *   <li>The one-time families -- fire, fall, drowning, starvation, suffocation, void and
+     *       thorns are {@code Env_*} concepts with no level ladder, so there is no level eight to
+     *       ask about. Fire is included here on purpose: {@code Env_Fire} is answered by
+     *       {@link #hasFullImmunity}, not by a level in {@code levels}.</li>
      * </ul>
      *
      * <p>Contact is checked before the category, because a mob's melee swing is matched as
@@ -263,13 +265,8 @@ public class AdaptionEvents {
             }
         }
         switch (category) {
-            case FALL, STARVE, DROWN, SUFFOCATE, VOID, CONTACT -> {
+            case FALL, STARVE, DROWN, SUFFOCATE, VOID, CONTACT, FIRE -> {
                 return false;
-            }
-            case FIRE -> {
-                if (isLavaDamage(source)) {
-                    return false;
-                }
             }
             default -> {
             }
@@ -583,7 +580,7 @@ public class AdaptionEvents {
                 startTask(player, data, Concepts.ENV_FALL, (int) (fallTime * 20));
             }
             // Lava is learned only by immersion, in the tick loop. A fire hit must not grant it:
-            // that was the race that made Type_FIRE unreachable and Thermal impossible.
+            // the fire/lava split is what keeps a fire arrow from making lava harmless.
             if (category == AdaptionCategory.CONTACT) {
                 startTask(player, data, Concepts.ENV_THORNS, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
@@ -1514,7 +1511,9 @@ public class AdaptionEvents {
         } else if (DraconicCompat.GUARDIAN_ID.equals(bossPath)) {
             data.levels.put(Concepts.type(AdaptionCategory.EXPLOSION), PlayerAdaption.MAX_LEVEL);
             data.levels.put(Concepts.type(AdaptionCategory.PROJECTILE), PlayerAdaption.MAX_LEVEL);
-            data.levels.put(Concepts.type(AdaptionCategory.FIRE), PlayerAdaption.MAX_LEVEL);
+            // Fire is one-time now, so it lives in `adapted`, not `levels`. Writing a level here
+            // would leave the guardian reward short of the fire immunity it promises.
+            data.adapted.add(Concepts.ENV_FIRE);
         } else {
             data.levels.put(Concepts.type(AdaptionCategory.MOB), PlayerAdaption.MAX_LEVEL);
         }

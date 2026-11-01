@@ -38,12 +38,19 @@ public class MartialArtsAndSynergyTests {
         return data;
     }
 
+    private static PlayerAdaption withLevelAndOneTime(String leveled, int level, String oneTime) {
+        PlayerAdaption data = withLevel(leveled, level);
+        data.adapted.add(oneTime);
+        data.invalidateAdaptCount();
+        return data;
+    }
+
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void anUntrainedFistDealsNoBonus(GameTestHelper helper) {
 
         helper.assertTrue(MartialArts.bonus(empty()) == 0f,
                 "a wheel with no fist level adds nothing to a punch");
-        helper.assertTrue(MartialArts.bonus(withLevel(Concepts.type(AdaptionCategory.FIRE), 8)) == 0f,
+        helper.assertTrue(MartialArts.bonus(withLevel(Concepts.type(AdaptionCategory.MAGIC), 8)) == 0f,
                 "an unrelated adaptation does not make the fist train itself");
         helper.succeed();
     }
@@ -167,14 +174,17 @@ public class MartialArtsAndSynergyTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void aSynergyGrowsWithTheLevelsBehindIt(GameTestHelper helper) {
 
-        String fire = Concepts.type(AdaptionCategory.FIRE);
-        double barely = SynergyEffects.strengthOf(withLevel(fire, 1), Synergies.ASHWALKER);
-        double halfway = SynergyEffects.strengthOf(withLevel(fire, 4), Synergies.ASHWALKER);
-        double maxed = SynergyEffects.strengthOf(withLevel(fire, PlayerAdaption.MAX_LEVEL),
-                Synergies.ASHWALKER);
+        String freeze = Concepts.type(AdaptionCategory.FREEZE);
+        double barely = SynergyEffects.strengthOf(
+                withLevelAndOneTime(freeze, 1, Concepts.ENV_ICE), Synergies.GLACIERBLOOD);
+        double halfway = SynergyEffects.strengthOf(
+                withLevelAndOneTime(freeze, 4, Concepts.ENV_ICE), Synergies.GLACIERBLOOD);
+        double maxed = SynergyEffects.strengthOf(
+                withLevelAndOneTime(freeze, PlayerAdaption.MAX_LEVEL, Concepts.ENV_ICE),
+                Synergies.GLACIERBLOOD);
 
         helper.assertTrue(barely < halfway && halfway < maxed,
-                "Ashwalker must scale with its fire level: " + barely + ", " + halfway + ", " + maxed);
+                "Glacierblood must scale with its freeze level: " + barely + ", " + halfway + ", " + maxed);
         helper.assertTrue(Math.abs(maxed - 4.0) < 1e-9,
                 "a maxed requirement is worth the full 1.0 + 3.0 * 1.0 = 4.0, not " + maxed);
         helper.assertTrue(Math.abs(halfway - 2.5) < 1e-9,
@@ -183,20 +193,25 @@ public class MartialArtsAndSynergyTests {
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void aMaxedRequirementDoesNotDoubleCount(GameTestHelper helper) {
+    public static void aMaxedRequirementGatesWithoutAddingStrength(GameTestHelper helper) {
 
         String fist = FistTiers.concept(2);
-        String thermal = Concepts.MUTATION_THERMAL;
-        PlayerAdaption withoutFist = withLevels(thermal, PlayerAdaption.MAX_LEVEL, fist, 0);
-        PlayerAdaption withFist = withLevels(thermal, PlayerAdaption.MAX_LEVEL, fist,
-                PlayerAdaption.MAX_LEVEL);
+        PlayerAdaption data = empty();
+        data.levels.put(fist, PlayerAdaption.MAX_LEVEL);
+        data.adapted.add(Concepts.MUTATION_THERMAL);
+        data.invalidateAdaptCount();
 
-        helper.assertTrue(Synergies.satisfied(withFist, Synergies.GOLIATH),
+        helper.assertTrue(Synergies.satisfied(data, Synergies.GOLIATH),
                 "a maxed fist plus Thermal Mastery lights Goliath");
-        helper.assertTrue(SynergyEffects.strengthOf(withFist, Synergies.GOLIATH)
-                        == SynergyEffects.strengthOf(withoutFist, Synergies.GOLIATH),
-                "a MAXED requirement gates the synergy without adding strength of its own, so raising "
-                        + fist + " must not also make Goliath hit harder");
+
+        // MAXED requirements are deliberately skipped by strengthOf: they gate the synergy, they
+        // do not contribute a level. Goliath then has nothing left to average, so its strength is
+        // the documented whole-wheel fallback -- not a free 4.0 for having maxed the fist.
+        double expected = 1.0 + 3.0 * Math.min(1.0, data.getAdaptCount() / 60.0);
+        double actual = SynergyEffects.strengthOf(data, Synergies.GOLIATH);
+        helper.assertTrue(Math.abs(actual - expected) < 1e-9,
+                "a maxed requirement must not add strength of its own: expected the wheel-breadth "
+                        + "fallback " + expected + ", got " + actual);
         helper.succeed();
     }
 
@@ -219,16 +234,16 @@ public class MartialArtsAndSynergyTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void oneTimeMutationsAddNoStrengthOfTheirOwn(GameTestHelper helper) {
 
-        String fire = Concepts.type(AdaptionCategory.FIRE);
-        PlayerAdaption fireOnly = withLevel(fire, PlayerAdaption.MAX_LEVEL);
-        PlayerAdaption fireAndThermal = withLevel(fire, PlayerAdaption.MAX_LEVEL);
-        fireAndThermal.adapted.add(Concepts.MUTATION_THERMAL);
-        fireAndThermal.invalidateAdaptCount();
+        String freeze = Concepts.type(AdaptionCategory.FREEZE);
+        PlayerAdaption freezeOnly = withLevelAndOneTime(freeze, 4, Concepts.ENV_ICE);
+        PlayerAdaption freezeAndThermal = withLevelAndOneTime(freeze, 4, Concepts.ENV_ICE);
+        freezeAndThermal.adapted.add(Concepts.MUTATION_THERMAL);
+        freezeAndThermal.invalidateAdaptCount();
 
-        helper.assertTrue(Synergies.satisfied(fireAndThermal, Synergies.ASHWALKER),
-                "fire plus Thermal Mastery lights Ashwalker");
-        helper.assertTrue(SynergyEffects.strengthOf(fireAndThermal, Synergies.ASHWALKER)
-                        == SynergyEffects.strengthOf(fireOnly, Synergies.ASHWALKER),
+        helper.assertTrue(Synergies.satisfied(freezeAndThermal, Synergies.GLACIERBLOOD),
+                "freeze plus Env_Ice lights Glacierblood");
+        helper.assertTrue(SynergyEffects.strengthOf(freezeAndThermal, Synergies.GLACIERBLOOD)
+                        == SynergyEffects.strengthOf(freezeOnly, Synergies.GLACIERBLOOD),
                 "a one-time mutation has no level to average in, so it must not raise the strength");
         helper.succeed();
     }
@@ -237,31 +252,29 @@ public class MartialArtsAndSynergyTests {
      * The switch has to reach synergy matching on both sides. The client asks the same
      * {@code satisfied(...)} with its mirrored DISABLED set, so a concept that is switched off must
      * neither light a chip nor keep the server effect running -- otherwise the panel hides the
-     * synergy while the player still burns what they hit.
+     * synergy while the player still freezes what they hit.
      */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void aSwitchedOffRequirementStopsSatisfyingItsSynergy(GameTestHelper helper) {
 
-        String fire = Concepts.type(AdaptionCategory.FIRE);
-        PlayerAdaption data = withLevel(fire, PlayerAdaption.MAX_LEVEL);
-        data.adapted.add(Concepts.MUTATION_THERMAL);
-        data.invalidateAdaptCount();
+        String freeze = Concepts.type(AdaptionCategory.FREEZE);
+        PlayerAdaption data = withLevelAndOneTime(freeze, PlayerAdaption.MAX_LEVEL, Concepts.ENV_ICE);
 
-        double lit = SynergyEffects.strengthOf(data, Synergies.ASHWALKER);
-        helper.assertTrue(Synergies.satisfied(data, Synergies.ASHWALKER),
-                "fire plus Thermal Mastery lights Ashwalker while both are switched on");
+        double lit = SynergyEffects.strengthOf(data, Synergies.GLACIERBLOOD);
+        helper.assertTrue(Synergies.satisfied(data, Synergies.GLACIERBLOOD),
+                "freeze plus Env_Ice lights Glacierblood while both are switched on");
 
-        data.toggleEnabled(Concepts.MUTATION_THERMAL);
-        helper.assertTrue(!Synergies.satisfied(data, Synergies.ASHWALKER),
-                "switching either requirement off must put the synergy out");
-        helper.assertTrue(!Synergies.activeIds(data).contains(Synergies.ASHWALKER.id()),
+        data.toggleEnabled(Concepts.ENV_ICE);
+        helper.assertTrue(!Synergies.satisfied(data, Synergies.GLACIERBLOOD),
+                "switching the one-time half off must put the synergy out");
+        helper.assertTrue(!Synergies.activeIds(data).contains(Synergies.GLACIERBLOOD.id()),
                 "the active set the server effects read has to agree with satisfied()");
 
-        data.toggleEnabled(Concepts.MUTATION_THERMAL);
-        data.toggleEnabled(fire);
-        helper.assertTrue(!Synergies.satisfied(data, Synergies.ASHWALKER),
+        data.toggleEnabled(Concepts.ENV_ICE);
+        data.toggleEnabled(freeze);
+        helper.assertTrue(!Synergies.satisfied(data, Synergies.GLACIERBLOOD),
                 "and switching off the leveled half must put it out too");
-        helper.assertTrue(SynergyEffects.strengthOf(data, Synergies.ASHWALKER) < lit,
+        helper.assertTrue(SynergyEffects.strengthOf(data, Synergies.GLACIERBLOOD) < lit,
                 "a switched-off leveled requirement must also stop strengthening the synergy");
         helper.succeed();
     }

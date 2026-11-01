@@ -43,6 +43,7 @@ public final class AdaptationRegistry {
         }
 
         for (String id : new String[]{
+                ru.adaptionwheel.category.Concepts.ENV_FIRE,
                 "Env_Lava", "Env_Drowning", "Env_Thorns", "Env_Darkness",
                 "Env_Suffocate", "Env_Void", "Env_Starve", "Env_Liquid",
                 ru.adaptionwheel.category.Concepts.ENV_INVENTORY}) {
@@ -54,17 +55,18 @@ public final class AdaptationRegistry {
         }
 
         for (ru.adaptionwheel.category.AdaptionCategory category : ru.adaptionwheel.category.AdaptionCategory.values()) {
+            // Fire is the one-time Env_Fire adaptation and is registered with the environment
+            // family above. Its old Type_FIRE key was the leveled half of a pair whose other half
+            // (Env_Lava) cancelled lava before it could train; the game has not had a fire ladder
+            // since that split, so the category loop must not reintroduce one.
+            if (category == ru.adaptionwheel.category.AdaptionCategory.FIRE) {
+                continue;
+            }
             String concept = ru.adaptionwheel.category.Concepts.type(category);
             if (ru.adaptionwheel.category.Concepts.isRetired(concept)) {
                 continue;
             }
-            // Fire is a one-time full immunity now. The old eight-level Type_FIRE was the leveled
-            // half of a pair whose other half (Env_Lava) cancelled the damage before it could train.
-            if (category == ru.adaptionwheel.category.AdaptionCategory.FIRE) {
-                register(AdaptationDefinition.oneTime(concept, AdaptationDomain.DAMAGE));
-            } else {
-                register(AdaptationDefinition.leveled(concept, AdaptationDomain.DAMAGE));
-            }
+            register(AdaptationDefinition.leveled(concept, AdaptationDomain.DAMAGE));
         }
 
         register(new AdaptationDefinition("Self_Damage", AdaptationDomain.SPECIAL, true, AdaptationDefinition.DEFAULT_MAX_LEVEL));

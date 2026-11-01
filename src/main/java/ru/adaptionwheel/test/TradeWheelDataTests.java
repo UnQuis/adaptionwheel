@@ -17,7 +17,7 @@ import java.util.List;
 public class TradeWheelDataTests {
 
     private static final List<String> EXISTING = List.of(
-            "Type_Fire", "Env_Lava", "Contact_minecraft:zombie", "Offense_NPC_minecraft:skeleton");
+            "Type_Magic", "Env_Lava", "Contact_minecraft:zombie", "Offense_NPC_minecraft:skeleton");
 
     private static PlayerAdaption progressed() {
         PlayerAdaption data = new PlayerAdaption();
@@ -44,8 +44,8 @@ public class TradeWheelDataTests {
         PlayerAdaption elsewhere = new PlayerAdaption();
 
         PlayerAdaption read = AdaptionEvents.readFrom(stack);
-        helper.assertTrue(read.level("Type_Fire") == PlayerAdaption.MAX_LEVEL,
-                "a fed wheel must report its own Type_Fire, got " + read.level("Type_Fire"));
+        helper.assertTrue(read.level("Type_Magic") == PlayerAdaption.MAX_LEVEL,
+                "a fed wheel must report its own Type_Magic, got " + read.level("Type_Magic"));
         helper.assertTrue(read.level("Contact_minecraft:zombie") == PlayerAdaption.MAX_LEVEL,
                 "and its own Contact_minecraft:zombie");
         helper.assertTrue(read.isAdapted("Env_Void"), "and its own one-time adaptations");
@@ -86,7 +86,7 @@ public class TradeWheelDataTests {
     public static void anEmptySlotIsAnEmptyState(GameTestHelper helper) {
         PlayerAdaption read = AdaptionEvents.readFrom(ItemStack.EMPTY);
         helper.assertTrue(read.getAdaptCount() == 0, "nothing fed, nothing adapted");
-        helper.assertTrue(read.level("Type_Fire") == 0, "and no levels invented out of thin air");
+        helper.assertTrue(read.level("Type_Magic") == 0, "and no levels invented out of thin air");
 
         PlayerAdaption bare = AdaptionEvents.readFrom(new ItemStack(ModItems.MAHORAGA_WHEEL.get()));
         helper.assertTrue(bare.getAdaptCount() == 0, "a fresh wheel starts empty, not corrupt");
@@ -96,7 +96,7 @@ public class TradeWheelDataTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void equippingKeepsWhatThePlayerAlreadyHad(GameTestHelper helper) {
         PlayerAdaption attachment = new PlayerAdaption();
-        attachment.levels.put("Type_Fire", PlayerAdaption.MAX_LEVEL);
+        attachment.levels.put("Type_Magic", PlayerAdaption.MAX_LEVEL);
         attachment.adapted.add("Mutation_Flight");
         attachment.adapted.add("Debuff_minecraft:levitation");
         attachment.killCounts.put("Drop_NPC_minecraft:chicken", 12);
@@ -108,7 +108,7 @@ public class TradeWheelDataTests {
         onWheel.invalidateAdaptCount();
         ru.adaptionwheel.data.WheelData.fromPlayer(onWheel).loadInto(attachment);
 
-        helper.assertTrue(attachment.level("Type_Fire") == PlayerAdaption.MAX_LEVEL,
+        helper.assertTrue(attachment.level("Type_Magic") == PlayerAdaption.MAX_LEVEL,
                 "a grant made while the wheel was off must survive equipping it; loadInto used to clear"
                         + " every collection first, which silently threw those adaptations away");
         helper.assertTrue(attachment.isAdapted("Mutation_Flight"),
@@ -127,22 +127,22 @@ public class TradeWheelDataTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void loadingNeverLowersAConceptOrDuplicatesATask(GameTestHelper helper) {
         PlayerAdaption attachment = new PlayerAdaption();
-        attachment.levels.put("Type_Fire", 7);
+        attachment.levels.put("Type_Magic", 7);
         attachment.killCounts.put("Drop_NPC_minecraft:zombie", 30);
         attachment.tasks.add(new ru.adaptionwheel.data.AdaptionTask("Env_Lava", 40, 100));
         attachment.invalidateAdaptCount();
 
         PlayerAdaption weaker = new PlayerAdaption();
-        weaker.levels.put("Type_Fire", 2);
+        weaker.levels.put("Type_Magic", 2);
         weaker.killCounts.put("Drop_NPC_minecraft:zombie", 5);
         weaker.tasks.add(new ru.adaptionwheel.data.AdaptionTask("Env_Lava", 10, 100));
         weaker.tasks.add(new ru.adaptionwheel.data.AdaptionTask("Env_Void", 10, 100));
         weaker.invalidateAdaptCount();
         ru.adaptionwheel.data.WheelData.fromPlayer(weaker).loadInto(attachment);
 
-        helper.assertTrue(attachment.level("Type_Fire") == 7,
+        helper.assertTrue(attachment.level("Type_Magic") == 7,
                 "a merge takes the higher level, so handing a wheel over cannot walk a concept backwards,"
-                        + " got " + attachment.level("Type_Fire"));
+                        + " got " + attachment.level("Type_Magic"));
         helper.assertTrue(attachment.kills("Drop_NPC_minecraft:zombie") == 30,
                 "kill counts must not fall either, or a Drop_NPC_ adaptation would regress");
         int envLava = 0;

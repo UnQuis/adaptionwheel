@@ -658,7 +658,7 @@ public final class AdaptionConfig {
                         "still changes something perceptible.",
                         "The one-time Env_* adaptations (fall, drowning, starvation, suffocation, void,",
                         "thorns) are already full immunity and are unaffected by this switch.",
-                        "Lava is deliberately NOT covered by Type_FIRE: it belongs to the one-time",
+                        "Lava is deliberately NOT covered by Env_Fire: it belongs to the one-time",
                         "Env_Lava adaptation, and the fire/lava split is load-bearing.",
                         "Damage that bypasses invulnerability (the /kill command) is never nullified.",
                         "Set to false to keep the reduction table as the final state.")
@@ -709,7 +709,7 @@ public final class AdaptionConfig {
                 .comment("Below this % of max HP the wheel begins injury analysis.")
                 .defineInRange("hpThresholdPct", 50.0, 1.0, 100.0);
         THERMAL_REGEN_ENABLED = s
-                .comment("Thermal Mastery mutation: heat-scaled regeneration (requires Type_FIRE + Env_Lava).")
+                .comment("Thermal Mastery mutation: heat-scaled regeneration (requires Env_Fire + Env_Lava).")
                 .define("thermalRegenEnabled", true);
         THERMAL_REGEN_HP_PER_SECOND = s
                 .comment("HP per second while standing in lava (scaled down by the heat factor in weaker heat).")

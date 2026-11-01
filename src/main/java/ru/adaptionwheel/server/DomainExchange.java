@@ -78,7 +78,7 @@ public final class DomainExchange {
         register(Items.GHAST_TEAR, 1, "Debuff_wither");
 
         register(Items.NETHER_WART, 1, "Type_WITHER");
-        register(Items.BLAZE_POWDER, 2, "Type_FIRE");
+        register(Items.BLAZE_POWDER, 2, Concepts.ENV_FIRE);
         register(Items.SNOW_BLOCK, 2, "Type_FREEZE");
 
         register(Items.NETHER_STAR, 4, "Type_*");

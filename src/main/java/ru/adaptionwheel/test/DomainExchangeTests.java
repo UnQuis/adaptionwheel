@@ -105,7 +105,7 @@ public class DomainExchangeTests {
 
         helper.assertTrue(DomainExchange.priceFor(Concepts.ENV_LIQUID) == 1,
                 "a one-time adaptation is the cheapest thing there is");
-        helper.assertTrue(DomainExchange.priceFor("Type_FIRE") == 1,
+        helper.assertTrue(DomainExchange.priceFor(Concepts.ENV_FIRE) == 1,
                 "fire is a one-time adaptation now, not an eight-level one");
         helper.assertTrue(DomainExchange.priceFor("Type_WITHER") == 2,
                 "a leveled adaptation costs more than a one-time");
@@ -136,7 +136,7 @@ public class DomainExchangeTests {
                 "the catch-all, which offers every registered damage type, must cost more than a feather"
                         + " that offers one");
 
-        DomainExchange.register(Items.REDSTONE, 0, "Type_FIRE");
+        DomainExchange.register(Items.REDSTONE, 0, Concepts.ENV_FIRE);
         try {
             helper.assertTrue(DomainExchange.recipeFor(Items.REDSTONE).itemsPerTrade() == 1,
                     "a zero rate must clamp to one, not make the trade free");
@@ -165,12 +165,12 @@ public class DomainExchangeTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theStoneNeverSellsAdversity(GameTestHelper helper) {
 
-        DomainExchange.register(Items.REDSTONE, 1, "ADBERSITY", "Type_FIRE");
+        DomainExchange.register(Items.REDSTONE, 1, "ADBERSITY", Concepts.ENV_FIRE);
         try {
             List<String> pool = DomainExchange.candidates(empty(), DomainExchange.recipeFor(Items.REDSTONE));
             helper.assertTrue(!pool.contains(Concepts.ADVERSITY),
                     "the stone must never be a way to acquire adversity");
-            helper.assertTrue(pool.contains("Type_FIRE"),
+            helper.assertTrue(pool.contains(Concepts.ENV_FIRE),
                     "the rest of that recipe must still sell, or the guard removed too much");
         } finally {
             DomainExchange.unregister(Items.REDSTONE);

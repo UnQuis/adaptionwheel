@@ -97,7 +97,7 @@ public class SynergyTests {
 
         PlayerAdaption unrelated = empty();
         unrelated.levels.put(Concepts.ENV_VOID, 1);
-        unrelated.levels.put(Concepts.type(AdaptionCategory.FIRE), PlayerAdaption.MAX_LEVEL);
+        unrelated.levels.put(Concepts.type(AdaptionCategory.MAGIC), PlayerAdaption.MAX_LEVEL);
         helper.assertTrue(!Synergies.satisfied(unrelated, Synergies.UNMAKER),
                 "an unrelated concept must not satisfy an Existence requirement");
         helper.succeed();
@@ -106,8 +106,8 @@ public class SynergyTests {
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void aMaxedRequirementIsNotSatisfiedByAPartialLevel(GameTestHelper helper) {
         PlayerAdaption data = empty();
-        data.levels.put(Concepts.type(AdaptionCategory.FIRE), PlayerAdaption.MAX_LEVEL);
-        data.levels.put(Concepts.MUTATION_THERMAL, PlayerAdaption.MAX_LEVEL);
+        data.adapted.add(Concepts.ENV_FIRE);
+        data.adapted.add(Concepts.MUTATION_THERMAL);
         data.levels.put(FistTiers.concept(2), PlayerAdaption.MAX_LEVEL - 1);
         helper.assertTrue(Synergies.satisfied(data, Synergies.ASHWALKER),
                 "Ashwalker does not require a fist, so it must already be active");

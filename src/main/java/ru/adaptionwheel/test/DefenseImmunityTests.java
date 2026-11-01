@@ -13,6 +13,7 @@ import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.category.AdaptionCategory;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
+import ru.adaptionwheel.data.LegacyConcepts;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.server.AdaptionEvents;
 
@@ -27,13 +28,15 @@ import ru.adaptionwheel.server.AdaptionEvents;
  *
  * <p>Two traps this file exists to keep closed:
  * <ul>
- *   <li>{@code active()} answers from the {@code adapted} set, and a leveled concept lives in
- *       {@code levels}. The old fire branch asked {@code active(Type_FIRE)} and was therefore false
- *       for every player at every level -- a full fire adaptation still burned. Nothing here may
- *       use {@code active()} for a leveled concept; {@code levelOrZero()} is the accessor that both
- *       reads the level and honours the panel's off switch.</li>
- *   <li>Lava is not fire. {@code Type_FIRE} is trained by fire ticks and fireballs, {@code Env_Lava}
- *       by standing in lava, and maxing one must not grant the other.</li>
+ *   <li>Leveled concepts live in {@code levels} and are read with {@code levelOrZero()}; one-time
+ *       concepts live in {@code adapted} and are read with {@code active()}. Fire is a one-time
+ *       {@code Env_Fire} adaptation, so its immunity must be asked for with {@code active()}, while
+ *       a {@code Type_*} immunity is asked for with {@code levelOrZero()}. Mixing the two is how a
+ *       completed adaptation silently keeps taking damage -- the {@code active(Type_FIRE)} arm was
+ *       correct when fire was one-time and only looked like the accessor trap after the concept was
+ *       renamed.</li>
+ *   <li>Lava is not fire. {@code Env_Fire} is trained by fire ticks and fireballs, {@code Env_Lava}
+ *       by standing in lava, and adapting to one must not grant the other.</li>
  * </ul>
  */
 @GameTestHolder(AdaptionWheel.MODID)
@@ -83,17 +86,81 @@ public class DefenseImmunityTests {
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void lavaIsNotFire(GameTestHelper helper) {
+    public static void fireIsAOneTimeEnvironmentAdaptation(GameTestHelper helper) {
+        helper.assertTrue(Concepts.type(AdaptionCategory.FIRE).equals(Concepts.ENV_FIRE),
+                "the fire concept must be Env_Fire; Type_Fire would promise an eight-level ladder"
+                        + " that the one-time adaptation does not have");
+        helper.assertTrue(Concepts.isOneTime(Concepts.ENV_FIRE),
+                "fire is completed once, like the other Env_ adaptations");
+        helper.assertFalse(Concepts.isLevelBased(Concepts.ENV_FIRE),
+                "a one-time adaptation must not be read as leveled");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void fireImmunityComesFromTheOneTimeConcept(GameTestHelper helper) {
+        PlayerAdaption data = new PlayerAdaption();
+        DamageSources sources = helper.getLevel().damageSources();
+        DamageSource burning = sources.inFire();
+        DamageSource lava = sources.lava();
+
+        helper.assertFalse(AdaptionEvents.hasFullImmunity(data, AdaptionCategory.FIRE, burning),
+                "a wheel that has not adapted to fire must still burn");
+
+        data.adapted.add(Concepts.ENV_FIRE);
+        helper.assertTrue(AdaptionEvents.hasFullImmunity(data, AdaptionCategory.FIRE, burning),
+                "Env_Fire is one-time and makes ordinary fire harmless");
+        helper.assertFalse(AdaptionEvents.hasFullImmunity(data, AdaptionCategory.FIRE, lava),
+                "Env_Fire must not grant lava immunity; lava belongs to Env_Lava");
+
+        data.toggleEnabled(Concepts.ENV_FIRE);
+        helper.assertFalse(AdaptionEvents.hasFullImmunity(data, AdaptionCategory.FIRE, burning),
+                "switching Env_Fire off must switch its immunity off too");
+
+        data.toggleEnabled(Concepts.ENV_FIRE);
+        data.adapted.add(Concepts.ENV_LAVA);
+        helper.assertTrue(AdaptionEvents.hasFullImmunity(data, AdaptionCategory.FIRE, lava),
+                "Env_Lava is the only thing that answers lava damage");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aLevelOnTheFireKeyIsNotAnAdaptation(GameTestHelper helper) {
         PlayerAdaption data = new PlayerAdaption();
         DamageSources sources = helper.getLevel().damageSources();
 
-        data.levels.put(Concepts.type(AdaptionCategory.FIRE), PlayerAdaption.MAX_LEVEL);
-        helper.assertTrue(
-                AdaptionEvents.isMaxedImmunity(data, AdaptionCategory.FIRE, sources.inFire()),
-                "a maxed Type_FIRE must nullify ordinary burning");
+        // The old Type_FIRE key lived in `levels`. After the rename nothing may read a level as a
+        // fire immunity: only `adapted` counts.
+        data.levels.put(Concepts.ENV_FIRE, PlayerAdaption.MAX_LEVEL);
         helper.assertFalse(
-                AdaptionEvents.isMaxedImmunity(data, AdaptionCategory.FIRE, sources.lava()),
-                "lava belongs to the one-time Env_Lava adaptation; Type_FIRE must never grant it");
+                AdaptionEvents.hasFullImmunity(data, AdaptionCategory.FIRE, sources.inFire()),
+                "a stray level on Env_Fire must not stand in for the one-time grant");
+        helper.assertFalse(
+                AdaptionEvents.isMaxedImmunity(data, AdaptionCategory.FIRE, sources.inFire()),
+                "fire is not a leveled phenomenon, so maxed immunity must not claim it");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void legacyTypeFireBecomesEnvFire(GameTestHelper helper) {
+        PlayerAdaption data = new PlayerAdaption();
+        data.levels.put("Type_FIRE", 3);
+        data.adapted.add("Type_FIRE");
+        data.history.add("Type_FIRE");
+        data.disabled.add("Type_FIRE");
+
+        LegacyConcepts.migrate(data);
+
+        helper.assertTrue(data.adapted.contains(Concepts.ENV_FIRE),
+                "a save carrying Type_FIRE must keep the earned fire adaptation under Env_Fire");
+        helper.assertFalse(data.adapted.contains("Type_FIRE"),
+                "the old key must not survive next to the new one");
+        helper.assertFalse(data.levels.containsKey("Type_FIRE"),
+                "the leveled key must be gone, or the Type_ prefix fallback would treat it as a ladder");
+        helper.assertFalse(data.history.contains("Type_FIRE"),
+                "history is displayed, so it must carry the new name");
+        helper.assertTrue(data.disabled.contains(Concepts.ENV_FIRE),
+                "a player who switched fire off must keep it off after the rename");
         helper.succeed();
     }
 

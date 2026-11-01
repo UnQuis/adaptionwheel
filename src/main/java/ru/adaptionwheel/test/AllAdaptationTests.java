@@ -348,7 +348,7 @@ public class AllAdaptationTests {
         data.adapted.add(levitation);
         data.levels.put(levitation, PlayerAdaption.MAX_LEVEL);
         data.adapted.add("Env_Void");
-        data.levels.put("Type_Fire", 1);
+        data.levels.put("Type_Magic", 1);
 
         helper.assertTrue(data.getAdaptCount() == 3,
                 "one debuff stored in both collections plus two distinct concepts must count as 3,"
