@@ -9,6 +9,7 @@ import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
@@ -196,21 +197,84 @@ public class AdaptionEvents {
     }
 
     /**
-     * True when the player's current adaptation makes this whole damage category harmless.
+     * True when a one-time adaptation makes this whole damage category harmless.
      *
-     * <p>FIRE is the one category with two separate one-time adaptations, because lava and fire are
+     * <p>Only the one-time {@code Env_*} concepts answer here. Leveled {@code Type_*} concepts are
+     * the other half of the same idea and are handled by {@link #isMaxedImmunity}: {@code active()}
+     * asks the {@code adapted} set, while a leveled concept lives in {@code levels}, so the old
+     * {@code data.active(Type_FIRE)} arm was false by construction -- fire never became harmless no
+     * matter the level. That is the accessor trap the data classes warn about, and it is why a maxed
+     * fire adaptation still took 60 % damage.
+     *
+     * <p>FIRE is the one category with two separate adaptations, because lava and fire are
      * learned and should be lived through separately: {@link Concepts#ENV_LAVA} comes only from
      * actual immersion in lava, while {@code Type_FIRE} comes from every other fire hit. A fire arrow
-     * must not grant lava immunity, and standing in lava must not train the fire adaptation.
+     * must not grant lava immunity, and standing in lava must not train the fire adaptation. Lava is
+     * therefore the only fire damage this method answers for; ordinary fire is a maxed Type_FIRE.
      */
     private static boolean hasFullImmunity(PlayerAdaption data, AdaptionCategory category, DamageSource source) {
         if (category == AdaptionCategory.FIRE) {
-            return data.active(isLavaDamage(source)
-                    ? Concepts.ENV_LAVA
-                    : Concepts.type(AdaptionCategory.FIRE));
+            return isLavaDamage(source) && data.active(Concepts.ENV_LAVA);
         }
         String immunity = envImmunityConcept(category);
         return immunity != null && data.active(immunity);
+    }
+
+    /**
+     * True when a maxed leveled adaptation makes this incoming hit harmless outright.
+     *
+     * <p>This is the other half of {@link #hasFullImmunity}: that one covers the one-time
+     * {@code Env_*} immunities, this one the last rung of a {@code Type_*} or {@code Contact_<mob>}
+     * ladder. A maxed adaptation is the completed phenomenon adaptation, so the hit is nullified
+     * instead of reduced -- no damage, no red flash, no knockback. Level 7 and below keep the
+     * reduction curve.
+     *
+     * <p>Three deliberate exclusions:
+     * <ul>
+     *   <li>{@link DamageTypeTags#BYPASSES_INVULNERABILITY} -- that is the {@code /kill} command, not
+     *       a phenomenon to adapt to; an adaptation must not make an operator's kill fail.</li>
+     *   <li>Lava -- it belongs to the one-time {@code Env_Lava} adaptation, never to
+     *       {@code Type_FIRE}; the fire/lava split is what keeps a fire arrow from granting lava
+     *       immunity.</li>
+     *   <li>The environmental categories -- fall, drowning, starvation, suffocation, void and
+     *       thorns are one-time {@code Env_*} concepts with no leveled family, so there is no level
+     *       eight to ask about.</li>
+     * </ul>
+     *
+     * <p>Contact is checked before the category, because a mob's melee swing is matched as
+     * {@code MOB} (or {@code PLAYER}) by {@link AdaptionCategory} even though the adaptation that
+     * learned it is {@code Contact_<mob>}. Only a direct living attacker counts, exactly as in the
+     * {@code contactDefense.immunityLevel} check: a projectile is the projectile family, not
+     * contact.
+     *
+     * <p>Public so the boundaries can be pinned by a gametest without a mock player.
+     */
+    public static boolean isMaxedImmunity(PlayerAdaption data, AdaptionCategory category, DamageSource source) {
+        if (data == null || category == null || source == null) {
+            return false;
+        }
+        if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            return false;
+        }
+        if (source.getDirectEntity() instanceof LivingEntity attacker) {
+            String mobPath = entityPath(attacker.getType());
+            if (data.levelOrZero(Concepts.contact(mobPath)) >= PlayerAdaption.MAX_LEVEL) {
+                return true;
+            }
+        }
+        switch (category) {
+            case FALL, STARVE, DROWN, SUFFOCATE, VOID, CONTACT -> {
+                return false;
+            }
+            case FIRE -> {
+                if (isLavaDamage(source)) {
+                    return false;
+                }
+            }
+            default -> {
+            }
+        }
+        return data.levelOrZero(Concepts.type(category)) >= PlayerAdaption.MAX_LEVEL;
     }
 
     /** The damage type vanilla uses for lava itself; fire ticks and fireballs are not lava. */
@@ -360,6 +424,16 @@ public class AdaptionEvents {
             reflectAttack(player, source.getDirectEntity() != null ? source.getDirectEntity() : source.getEntity(),
                     event.getContainer().getNewDamage());
             event.setCanceled(true);
+            return;
+        }
+
+        // Deliberately the last gate, behind the existence reflection: a maxed Type_MOB would
+        // otherwise swallow a boss hit before existence could reflect it, and the reflection is the
+        // only offence an existence adaptation has. A hit that was going to be reflected already
+        // dealt the player no damage, so skipping the immunity check for it changes nothing for the
+        // player and keeps the boss taking its own hit.
+        if (AdaptionConfig.FULL_IMMUNITY_AT_MAX.get() && isMaxedImmunity(data, category, source)) {
+            event.setCanceled(true);
         }
     }
 
@@ -401,6 +475,13 @@ public class AdaptionEvents {
             if (category == AdaptionCategory.VOID) {
                 rescueFromVoid(player, data);
             }
+            event.setNewDamage(0); return;
+        }
+
+        // The incoming handler already cancelled this in the ordinary path. Kept here as the same
+        // second layer the one-time immunities above have, so a future damage route that reaches
+        // Pre without passing Incoming cannot quietly keep hitting a fully adapted player.
+        if (AdaptionConfig.FULL_IMMUNITY_AT_MAX.get() && isMaxedImmunity(data, category, source)) {
             event.setNewDamage(0); return;
         }
 
@@ -588,6 +669,15 @@ public class AdaptionEvents {
         }
         if (!AdaptionConfig.ENABLE_CHAOS_GUARDIAN.get()) {
             target.setHealth(newHealth);
+            return;
+        }
+
+        // The laser writes health directly, so it never reaches onAttack; a maxed explosion or
+        // Chaos Guardian adaptation has to nullify it here, or "fully adapted" has a hole exactly
+        // where the hardest-hitting attack in the game is.
+        if (AdaptionConfig.FULL_IMMUNITY_AT_MAX.get()
+                && (data.levelOrZero(Concepts.type(AdaptionCategory.EXPLOSION)) >= PlayerAdaption.MAX_LEVEL
+                || data.levelOrZero(Concepts.contact(DraconicCompat.GUARDIAN_ID)) >= PlayerAdaption.MAX_LEVEL)) {
             return;
         }
 

@@ -194,6 +194,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> VOICE_VOLUME;
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_REDUCTION_LEVELS;
+    public static final ModConfigSpec.ConfigValue<Boolean> FULL_IMMUNITY_AT_MAX;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> DEFENSE_HEAL_RATIO_LEVELS;
     public static final ModConfigSpec.ConfigValue<Integer> DEFENSE_LV8_IFRAMES_TICKS;
     public static final ModConfigSpec.ConfigValue<Integer> EXISTENCE_REFLECT_IFRAMES_TICKS;
@@ -610,10 +611,12 @@ public final class AdaptionConfig {
         s.comment("--- Contact Defense ---").push("contactDefense");
 
         CONTACT_IMMUNITY_LEVEL = s
-                .comment("At which contact level the player gains TOTAL immunity to that mob (no damage, no red flash).",
-                        "Set to 0 to disable full immunity entirely; the protection table below still applies.",
-                        "At level 8 the protection table reaches 60 % — set this to 9 or higher if you want",
-                        "the table to be the ONLY defense mechanism without any hard immunity.")
+                .comment("An EARLIER contact level at which the player gains TOTAL immunity to that mob",
+                        "(no damage, no red flash). Full adaptation (level 8) is already immunity while",
+                        "defenseScaling.fullImmunityAtMax is on, which is the default, so this knob is",
+                        "only for cutting in before the ladder is finished: 1..7. 0 means no earlier",
+                        "cutoff. Set fullImmunityAtMax=false for the protection table to be the only",
+                        "defence and no hard immunity at all.")
                 .defineInRange("immunityLevel", 0, 0, 64);
         CONTACT_PROTECTION_LEVELS = s
                 .comment("Damage reduction % applied per contact level (1-8).",
@@ -643,8 +646,23 @@ public final class AdaptionConfig {
         s.comment("--- Defense Scaling (Lv1-8) ---").push("defenseScaling");
 
         DEFENSE_REDUCTION_LEVELS = s
-                .comment("Flat damage reduction % at each defense level against that damage type.")
+                .comment("Flat damage reduction % at each defense level against that damage type.",
+                        "This is the curve on the way to full adaptation, not the finished state:",
+                        "see fullImmunityAtMax below.")
                 .defineList("reductionPct", doubleList(DEFENSE_REDUCTION), AdaptionConfig::isDouble);
+        FULL_IMMUNITY_AT_MAX = s
+                .comment("At Lv8 of a damage type, or of a Contact_<mob> adaptation, that phenomenon",
+                        "stops hurting entirely: the hit is cancelled, so there is no damage, no red",
+                        "flash and no knockback. That is what 'fully adapted' means -- the table above",
+                        "is the road there, and it deliberately stops at 60 % so that the last level",
+                        "still changes something perceptible.",
+                        "The one-time Env_* adaptations (fall, drowning, starvation, suffocation, void,",
+                        "thorns) are already full immunity and are unaffected by this switch.",
+                        "Lava is deliberately NOT covered by Type_FIRE: it belongs to the one-time",
+                        "Env_Lava adaptation, and the fire/lava split is load-bearing.",
+                        "Damage that bypasses invulnerability (the /kill command) is never nullified.",
+                        "Set to false to keep the reduction table as the final state.")
+                .define("fullImmunityAtMax", true);
         DEFENSE_HEAL_RATIO_LEVELS = s
                 .comment("At Lv5+ a fraction of incoming damage is converted to healing.",
                         "Values are % of damage absorbed.")
@@ -652,6 +670,8 @@ public final class AdaptionConfig {
 
         DEFENSE_LV8_IFRAMES_TICKS = s
                 .comment("At Lv8 of a damage type you gain invulnerability after every hit.",
+                        "Only used when fullImmunityAtMax is false: with it on (the default) a maxed",
+                        "adaptation cancels the hit outright, so there is nothing to grant i-frames for.",
                         "The original sets immuneTime = 120, which is 2 SECONDS there because Terraria",
                         "runs at 60 ticks a second. This used to be 120 here too, which is 6 seconds at",
                         "Minecraft's 20 -- a 3x mistranslation, and a brutal one: a mob in melee range",
@@ -663,10 +683,11 @@ public final class AdaptionConfig {
                         "Terraria ticks is 2 seconds, and a melee mob swings about every 20 ticks",
                         "there too, so in the original an Lv8 capstone is effectively immunity to that",
                         "damage category rather than i-frames. That was reported as a bug -- mobs",
-                        "standing next to the player could not hurt them at all -- so the default here",
-                        "is deliberately 10 ticks, half a second, which is short enough to lapse",
-                        "between two melee swings and so actually reduces damage instead of erasing",
-                        "it. Raise it to 40 for the original's exact two seconds if you want that.")
+                        "standing next to the player could not hurt them at all -- so when the table",
+                        "is the only defence the default here is deliberately 10 ticks, half a second,",
+                        "which is short enough to lapse between two melee swings and so actually",
+                        "reduces damage instead of erasing it. Raise it to 40 for the original's",
+                        "exact two seconds if you want that.")
                 .defineInRange("lv8IFramesTicks", DEFAULT_LV8_IFRAMES_TICKS, 0, 1200);
         EXISTENCE_REFLECT_IFRAMES_TICKS = s
                 .comment("I-frames granted by reflecting a boss's hit back at it.",
