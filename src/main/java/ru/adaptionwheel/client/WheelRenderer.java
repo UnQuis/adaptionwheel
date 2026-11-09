@@ -409,7 +409,7 @@ public class WheelRenderer {
                 float specR, specG, specB;
                 if (blockAmount > skyAmount + 0.15f) {
                     specR = blockWarmR; specG = blockWarmG; specB = blockWarmB;
-                } else if (sunY < 0.25f) {
+                } else if (wLightY < 0.25f) {
                     // Night: pale moonlight
                     specR = 0.70f; specG = 0.78f; specB = 1.00f;
                 } else {
