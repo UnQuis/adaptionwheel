@@ -349,8 +349,15 @@ public class WheelRenderer {
                 float mr = corners[o + 8];
                 float mg = corners[o + 9];
                 float mb = corners[o + 10];
+                // Clamp to [0,1]: VertexConsumer converts float -> byte as (int)(f*255) & 0xFF
+                // without clamping, so an overbright specular highlight (light can reach ~1.9)
+                // wraps the red channel around to a small value and leaves green as the loudest
+                // channel, which reads as bright green flecks on the fully-adapted gold wheel.
+                float cr = Math.min(1.0F, mr * red * light);
+                float cg = Math.min(1.0F, mg * green * light);
+                float cb = Math.min(1.0F, mb * blue * light);
                 consumer.addVertex(pose, corners[o], corners[o + 1], corners[o + 2])
-                        .setColor(mr * red * light, mg * green * light, mb * blue * light, alpha)
+                        .setColor(cr, cg, cb, alpha)
                         .setUv(corners[o + 3], corners[o + 4])
                         .setOverlay(OverlayTexture.NO_OVERLAY)
                         .setLight(LightTexture.FULL_BRIGHT)
