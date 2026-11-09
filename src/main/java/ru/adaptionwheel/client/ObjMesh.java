@@ -11,13 +11,15 @@ import java.util.List;
  * <p>Deliberately <em>not</em> NeoForge's {@code ObjLoader}. That one is a baked block/item model
  * loader: it wants a model JSON, a material library and a texture-atlas sprite, and it hands back
  * quads for a {@code BakedModel} — none of which applies to an untextured mesh drawn above an
- * entity. What is needed here is positions, a triangle list and one normal per face, which is a
- * hundred lines and no model-baking machinery at all.
+ * entity. What is needed here is positions, a triangle list and one normal per corner (per-face
+ * flat on the faceted torus and beams, per-vertex smooth on the spheres), which is a hundred lines
+ * and no model-baking machinery at all.
  *
- * <p>Only {@code v}, {@code vt} and {@code f} are read, plus the vertex-colour extension Blender
- * writes on {@code v} lines ({@code v x y z r g b}). Object names, materials, smoothing groups and
- * the material library are ignored on purpose: shading is derived from the geometry so it cannot
- * depend on how Blender happened to export its normals.
+ * <p>Only {@code v}, {@code vt}, {@code vn} and {@code f} are read, plus the vertex-colour extension
+ * Blender writes on {@code v} lines ({@code v x y z r g b}). Object names, materials and smoothing
+ * groups are ignored on purpose; when a face supplies a {@code vn} for every corner that normal is
+ * used as-is (so the re-authored spheres carry smooth per-vertex normals), otherwise a flat
+ * per-face normal is derived from the geometry exactly as before (torus and beams stay flat-shaded).
  *
  * <p><b>The vertex colour is how the artist's material survives the export.</b> The wheel is one
  * mesh made of three Blender materials — a bright gold for the ring and the spheres, a darker
@@ -134,6 +136,7 @@ public final class ObjMesh {
         List<float[]> positions = new ArrayList<>();
         List<float[]> colours = new ArrayList<>();
         List<float[]> uvs = new ArrayList<>();
+        List<float[]> normals = new ArrayList<>();
         List<int[]> triangles = new ArrayList<>();
         int faces = 0;
 
@@ -149,9 +152,6 @@ public final class ObjMesh {
                 case "v" -> {
                     if (tokens.length >= 4) {
                         positions.add(new float[]{number(tokens[1]), number(tokens[2]), number(tokens[3])});
-                        // The colour extension appends r g b after the position. A fourth number
-                        // without a fifth and sixth is the homogeneous w, not a red channel, so the
-                        // test is "three extra tokens", not "more than three".
                         colours.add(tokens.length >= 7
                                 ? new float[]{number(tokens[4]), number(tokens[5]), number(tokens[6])}
                                 : WHITE);
@@ -162,13 +162,18 @@ public final class ObjMesh {
                         uvs.add(new float[]{number(tokens[1]), number(tokens[2])});
                     }
                 }
+                case "vn" -> {
+                    if (tokens.length >= 4) {
+                        normals.add(new float[]{number(tokens[1]), number(tokens[2]), number(tokens[3])});
+                    }
+                }
                 case "f" -> {
-                    if (readFace(tokens, positions.size(), uvs.size(), triangles)) {
+                    if (readFace(tokens, positions.size(), uvs.size(), normals.size(), triangles)) {
                         faces++;
                     }
                 }
                 default -> {
-                    // vn, o, g, s, usemtl, mtllib: not used, see the class javadoc.
+                    // o, g, s, usemtl, mtllib: ignored.
                 }
             }
         }
@@ -204,17 +209,28 @@ public final class ObjMesh {
         float[] corners = new float[triangles.size() * 3 * STRIDE];
         int out = 0;
         for (int[] triangle : triangles) {
-            float[] normal = faceNormal(positions.get(triangle[0]), positions.get(triangle[2]), positions.get(triangle[4]));
+            // Triangle layout: [p0, uv0, n0, p1, uv1, n1, p2, uv2, n2]; n is -1 when the file gave
+            // no normal (torus/beams) and the geometric flat normal should be used instead.
+            float[] flatNormal = null;
+            boolean anySmooth = triangle[2] >= 0 || triangle[5] >= 0 || triangle[8] >= 0;
+            if (!anySmooth) {
+                flatNormal = faceNormal(positions.get(triangle[0]), positions.get(triangle[3]), positions.get(triangle[6]));
+            }
             for (int corner = 0; corner < 3; corner++) {
-                float[] position = positions.get(triangle[corner * 2]);
-                float[] colour = colours.get(triangle[corner * 2]);
-                int uv = triangle[corner * 2 + 1];
+                int pi = triangle[corner * 3];
+                int ui = triangle[corner * 3 + 1];
+                int ni = triangle[corner * 3 + 2];
+                float[] position = positions.get(pi);
+                float[] colour = colours.get(pi);
+                float[] normal = ni >= 0
+                        ? normals.get(ni)
+                        : (flatNormal != null ? flatNormal : faceNormal(positions.get(triangle[0]), positions.get(triangle[3]), positions.get(triangle[6])));
 
                 corners[out++] = position[0] - cx;
                 corners[out++] = position[1] - cy;
                 corners[out++] = position[2] - cz;
-                corners[out++] = uv >= 0 ? uvs.get(uv)[0] : 0.0f;
-                corners[out++] = uv >= 0 ? uvs.get(uv)[1] : 0.0f;
+                corners[out++] = ui >= 0 ? uvs.get(ui)[0] : 0.0f;
+                corners[out++] = ui >= 0 ? uvs.get(ui)[1] : 0.0f;
                 corners[out++] = normal[0];
                 corners[out++] = normal[1];
                 corners[out++] = normal[2];
@@ -230,8 +246,14 @@ public final class ObjMesh {
     /**
      * Triangulates one {@code f} line as a fan and appends it. Returns {@code false} if the line is
      * unusable, which is how a single bad face stays a single lost triangle.
+     *
+     * <p>Each output triangle is laid out as {@code [p0, u0, n0, p1, u1, n1, p2, u2, n2]} where
+     * {@code n} is {@code -1} when the corner did not carry a {@code vn} (so the caller fills in a
+     * flat per-face normal) and a valid index into {@code normals} otherwise. This lets a file mix
+     * smooth-shaded parts (the spheres, re-authored with per-vertex normals) and flat-shaded parts
+     * (the torus and the beams, which look wrong with smooth normals).
      */
-    private static boolean readFace(String[] tokens, int positionCount, int uvCount, List<int[]> out) {
+    private static boolean readFace(String[] tokens, int positionCount, int uvCount, int normalCount, List<int[]> out) {
         int count = tokens.length - 1;
         if (count < 3) {
             return false;
@@ -239,10 +261,12 @@ public final class ObjMesh {
 
         int[] position = new int[count];
         int[] uv = new int[count];
+        int[] normal = new int[count];
         for (int i = 0; i < count; i++) {
             String[] parts = tokens[i + 1].split("/", -1);
             position[i] = resolve(parts[0], positionCount);
             uv[i] = parts.length > 1 && !parts[1].isEmpty() ? resolve(parts[1], uvCount) : -1;
+            normal[i] = parts.length > 2 && !parts[2].isEmpty() ? resolve(parts[2], normalCount) : -1;
             if (position[i] < 0) {
                 return false;
             }
@@ -250,9 +274,9 @@ public final class ObjMesh {
 
         for (int i = 1; i + 1 < count; i++) {
             out.add(new int[]{
-                    position[0], uv[0],
-                    position[i], uv[i],
-                    position[i + 1], uv[i + 1]});
+                    position[0], uv[0], normal[0],
+                    position[i], uv[i], normal[i],
+                    position[i + 1], uv[i + 1], normal[i + 1]});
         }
         return true;
     }
@@ -278,11 +302,12 @@ public final class ObjMesh {
     }
 
     /**
-     * The geometric normal, not the file's {@code vn}. Flat shading is the point: the wheel is a
-     * mechanical chakra of beams and spheres, and a smooth normal from Blender would round the
-     * beams. A degenerate face (two identical corners, which a fan can produce at a repeated
-     * vertex) gets a straight-up normal instead of a division by zero — a NaN here poisons the
-     * whole vertex buffer and the wheel disappears with no error anywhere.
+     * The geometric (flat) normal for a triangle, used for faces that do not carry per-vertex
+     * {@code vn} normals in the file — the torus and the bronze beams, whose faceted look is
+     * part of the design. The spheres carry smooth per-vertex normals in the OBJ and are read
+     * straight from the file. A degenerate face (two identical corners, which a fan can produce
+     * at a repeated vertex) gets a straight-up normal instead of a division by zero — a NaN here
+     * poisons the whole vertex buffer and the wheel disappears with no error anywhere.
      *
      * <p><b>The corner order is the winding, and getting it wrong lights the mesh from below.</b>
      * Blender writes faces counter-clockwise seen from outside, so {@code (a, b, c)} in that order

@@ -4,7 +4,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.logging.LogUtils;
 import com.mojang.math.Axis;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -18,7 +17,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
@@ -99,57 +97,10 @@ public class WheelRenderer {
     private static final int TINT_ALPHA = 0xF3;
 
     /**
-     * Light for the flat-shaded OBJ, in <b>world space</b> — above and slightly towards -X/-Z.
-     * Vanilla bakes one brightness per cube face (up 1.0, down 0.5, sides 0.8/0.6); arbitrary
-     * triangles have no face direction to look up, so the equivalent here is a fixed direction
-     * dotted with the face normal.
-     *
-     * <p>It is deliberately not model space. The wheel spins, and a model-space light would carry
-     * its own sun around with it, so the bright side would sweep across the beams once per turn and
-     * the highlight would look painted on rather than lit. The pose's normal matrix is what turns
-     * the face normal into world space; the camera rotation lives in the shader's model-view
-     * matrix, not in this pose, so the result is world-aligned.
+     * Scratch vector for transforming per-vertex normals through the pose; reused every corner so
+     * a wheel does not allocate ~15k vectors a frame.
      */
-    private static final Vector3f LIGHT = new Vector3f(-0.30f, 0.90f, -0.30f).normalize();
-
-    /** Scratch for the transformed normal, so a wheel does not allocate 15k vectors a frame. */
     private static final Vector3f NORMAL_SCRATCH = new Vector3f();
-
-    /**
-     * Floor of the shade curve, so the underside reads as dark gold rather than as a hole.
-     *
-     * <p>It came down from 0.55 with the metal work. A high floor is what a matte object needs to
-     * stay readable, and it is exactly what a metal must not have: polished gold is mostly dark
-     * except where it catches the light, and at 0.55 the wheel looked like painted plastic with a
-     * gold tint. The specular term below is what keeps the dark side from reading as a hole now.
-     */
-    private static final float AMBIENT = 0.32f;
-
-    /**
-     * Brushed-metal highlight: Blinn-Phong, one value per face, added on top of the diffuse shade.
-     *
-     * <p>This is the part that makes the wheel read as metal rather than as a gold-coloured solid.
-     * A diffuse term alone cannot: it says which way a surface faces, never that it is <em>shiny</em>.
-     * The highlight is computed in world space from the face normal and the direction to the camera,
-     * so it sweeps around the ring as the wheel clicks round a spoke and stays put when the player
-     * turns their head — which is what a real highlight does, and the opposite of what a model-space
-     * light would do.
-     *
-     * <p>The exponent was measured on the real mesh rather than guessed: over the shipped geometry,
-     * {@code pow(dot, 8)} puts a strong glint on 6% of the faces and {@code pow(dot, 26)} on 1.8%,
-     * and at 26 the highlight mostly falls <em>between</em> facets — a sphere here is 16 segments,
-     * so neighbouring faces are 12 degrees apart and a narrow lobe lands in the gap. At 10 it reads
-     * as a few sparkles along the beams and the spheres, which is what polished metal does at this
-     * size.
-     */
-    private static final float SPEC_STRENGTH = 0.90f;
-    private static final float SPEC_POWER = 10.0f;
-
-    /** Half-vector for {@link #SPEC_STRENGTH}; rebuilt per face, never allocated. */
-    private static final Vector3f HALF_SCRATCH = new Vector3f();
-
-    /** Scratch for the eye-to-wheel direction, likewise never allocated. */
-    private static final Vector3f VIEW_SCRATCH = new Vector3f();
 
     @SubscribeEvent
     public static void registerReloadListener(RegisterClientReloadListenersEvent event) {
@@ -205,10 +156,10 @@ public class WheelRenderer {
         float time = player.level().getGameTime() + partialTick;
         float bob = Mth.sin(time * BOB_SPEED) * BOB_AMPLITUDE;
 
-        // One direction for the whole wheel, not one per face. The wheel is 1.3 blocks wide and the
-        // camera is at least a couple of blocks away, so the parallax across it is a few degrees —
-        // far below what a highlight of this size can show, and it saves a vector per corner.
-        Vector3f viewDir = viewDirection(entity, height + bob);
+        // Real light from the world: sky (sun/moon) + block (torches, glowstone, etc.) at the
+        // entity's position, so the wheel responds to night, caves, torches and beacons the way
+        // every other entity in the game does.
+        int packedLight = entity.getLightLevelDependentMagicValue();
 
         poseStack.pushPose();
 
@@ -225,14 +176,14 @@ public class WheelRenderer {
         poseStack.scale(scale, scale, scale);
 
         if (mesh != null) {
-            drawMesh(mesh, poseStack, bufferSource, tint, viewDir);
+            drawMesh(mesh, poseStack, bufferSource, tint, packedLight);
         } else {
             if (!fallbackLogged) {
                 fallbackLogged = true;
                 LOGGER.warn("[{}] No wheel mesh is loaded; drawing the old 25-cube model. If {} exists, "
                         + "the reload listener did not run", AdaptionWheel.MODID, WHEEL_MODEL);
             }
-            drawFallback(poseStack, bufferSource, tint);
+            drawFallback(poseStack, bufferSource, tint, packedLight);
         }
 
         poseStack.popPose();
@@ -303,14 +254,22 @@ public class WheelRenderer {
     /**
      * Pushes the OBJ's triangle soup into the entity vertex format.
      *
-     * <p>Three things multiply into one vertex colour, because the entity shader gives exactly that
-     * one channel and no custom shader is wanted: the artist's material colour (gold ring, bronze
-     * beams, carried in the mesh as vertex colours), the adaptation tint (grey at nothing adapted,
-     * warming to gold), and the shading. The texture is a neutral brushed steel that only adds
-     * grain — a gold sprite under a gold vertex colour would have been gold squared, and the
-     * material colours are the part that came out of Blender.
+     * <p>Two things multiply into the vertex colour: the artist's material (gold ring/spheres,
+     * bronze beams — baked into the mesh as per-vertex colours at export time) and the adaptation
+     * tint (grey at nothing adapted, warming to gold as the wheel fills out). The texture
+     * ({@code dharma_chakra.png}) is a neutral brushed-steel grain that adds micro-detail only —
+     * a gold sprite under a gold vertex colour would be gold squared.
+     *
+     * <p>Lighting is <b>not</b> done on the CPU anymore. The real Minecraft lighting pipeline —
+     * sun direction for diffuse, the sky/block lightmap for night/torches/lamps, fog and the
+     * entity-in-shadow darkening — is exactly what the rendertype's shader already does, and it
+     * responds to the world the way every other entity does. Handing the mesh real per-vertex
+     * normals (smooth on the spheres, flat on the torus and beams — which is what {@link ObjMesh}
+     * now reads out of the OBJ) and real {@code packedLight} coordinates is enough; the previous
+     * hardcoded {@code LIGHT} vector ignored everything that wasn't a fixed sun and turned torches
+     * and moonlight into nothing.
      */
-    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, MultiBufferSource buffers, int tint, Vector3f viewDir) {
+    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, MultiBufferSource buffers, int tint, int packedLight) {
         VertexConsumer consumer = buffers.getBuffer(RenderType.entityCutoutNoCull(DharmaChakraModel.TEXTURE));
         PoseStack.Pose pose = poseStack.last();
 
@@ -319,79 +278,47 @@ public class WheelRenderer {
         float blue = (tint & 0xFF) / 255.0F;
         float alpha = (TINT_ALPHA & 0xFF) / 255.0F;
 
-        // The half-vector between the light and the eye is the same for every face of this wheel,
-        // because both are fixed for the frame; only the normal moves.
-        HALF_SCRATCH.set(LIGHT).add(viewDir).normalize();
-
-        // Four corners per triangle, not three: the render type's mode is QUADS, and three vertices
-        // per triangle would be grouped across triangle boundaries into slivers that leave holes in
-        // the mesh. See ObjMesh.quadCorners() — this is the one place the packing matters.
         Matrix3f normalMatrix = pose.normal();
+        // Four corners per triangle, not three: the rendertype's vertex mode is QUADS, and three
+        // vertices per triangle would be grouped across triangle boundaries into slivers. See
+        // ObjMesh.quadCorners().
         float[] corners = mesh.quadCorners();
         for (int i = 0; i < corners.length; i += ObjMesh.STRIDE * 4) {
-            float nx = corners[i + 5];
-            float ny = corners[i + 6];
-            float nz = corners[i + 7];
-
-            // One normal for all four corners: every triangle is flat-shaded, so its corners share
-            // the face normal, and the world-space shade is therefore constant across the quad.
-            NORMAL_SCRATCH.set(nx, ny, nz).mul(normalMatrix).normalize();
-            float shade = AMBIENT + (1.0F - AMBIENT) * Math.max(0.0F, NORMAL_SCRATCH.dot(LIGHT));
-            float facing = Math.max(0.0F, NORMAL_SCRATCH.dot(HALF_SCRATCH));
-            float light = shade + SPEC_STRENGTH * (float) Math.pow(facing, SPEC_POWER);
-
             for (int corner = 0; corner < 4; corner++) {
                 int o = i + corner * ObjMesh.STRIDE;
-                // The artist's material, carried in the mesh: gold for the ring and the spheres,
-                // bronze for the beams. Multiplied by the tint, so the wheel still starts grey and
-                // warms to gold as it fills out — the metal decides the hue, the adaptation count
-                // decides how much of it there is.
                 float mr = corners[o + 8];
                 float mg = corners[o + 9];
                 float mb = corners[o + 10];
-                // Clamp to [0,1]: VertexConsumer converts float -> byte as (int)(f*255) & 0xFF
-                // without clamping, so an overbright specular highlight (light can reach ~1.9)
-                // wraps the red channel around to a small value and leaves green as the loudest
-                // channel, which reads as bright green flecks on the fully-adapted gold wheel.
-                float cr = Math.min(1.0F, mr * red * light);
-                float cg = Math.min(1.0F, mg * green * light);
-                float cb = Math.min(1.0F, mb * blue * light);
+                float cr = mr * red;
+                float cg = mg * green;
+                float cb = mb * blue;
+
+                // Transform the per-corner normal (smooth on spheres, flat on torus/beams) into
+                // pose space; the shader takes it from there for diffuse + lightmap.
+                NORMAL_SCRATCH.set(corners[o + 5], corners[o + 6], corners[o + 7])
+                        .mul(normalMatrix);
+                // If the pose has zero scale on an axis the normal can end up zero-length; guard
+                // against NaN the same way faceNormal() does for degenerate faces.
+                if (NORMAL_SCRATCH.lengthSquared() < 1.0e-6F) {
+                    NORMAL_SCRATCH.set(0.0F, 1.0F, 0.0F);
+                } else {
+                    NORMAL_SCRATCH.normalize();
+                }
+
                 consumer.addVertex(pose, corners[o], corners[o + 1], corners[o + 2])
                         .setColor(cr, cg, cb, alpha)
                         .setUv(corners[o + 3], corners[o + 4])
                         .setOverlay(OverlayTexture.NO_OVERLAY)
-                        .setLight(LightTexture.FULL_BRIGHT)
+                        .setLight(packedLight)
                         .setNormal(NORMAL_SCRATCH.x(), NORMAL_SCRATCH.y(), NORMAL_SCRATCH.z());
             }
         }
     }
 
-    /**
-     * Unit vector from the wheel's centre towards the camera, in world space.
-     *
-     * <p>Read off the main camera rather than derived from the pose: at {@code RenderLivingEvent.Post}
-     * the pose holds the entity's position and its own rotations, and the camera's orientation lives
-     * in the shader's model-view matrix, which is not reachable from here at all. The camera's world
-     * position is, and a highlight only needs the direction between two points.
-     */
-    private static Vector3f viewDirection(LivingEntity entity, float height) {
-        Vec3 eye = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
-        VIEW_SCRATCH.set(
-                (float) (eye.x - entity.getX()),
-                (float) (eye.y - entity.getY() - height),
-                (float) (eye.z - entity.getZ()));
-        if (VIEW_SCRATCH.lengthSquared() < 1.0e-6F) {
-            // The camera is inside the wheel: no meaningful direction, and normalizing would hand
-            // the draw loop a NaN that takes the whole mesh off the screen.
-            return VIEW_SCRATCH.set(0.0F, 0.0F, 1.0F);
-        }
-        return VIEW_SCRATCH.normalize();
-    }
-
-    private static void drawFallback(PoseStack poseStack, MultiBufferSource buffers, int tint) {
+    private static void drawFallback(PoseStack poseStack, MultiBufferSource buffers, int tint, int packedLight) {
         ModelPart rootPart = DharmaChakraModel.getBakedRoot();
         VertexConsumer consumer = buffers.getBuffer(RenderType.entityCutoutNoCull(DharmaChakraModel.TEXTURE));
-        rootPart.render(poseStack, consumer, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY,
+        rootPart.render(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,
                 tintWithAlpha(tint, TINT_ALPHA));
     }
 
