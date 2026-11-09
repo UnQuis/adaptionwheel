@@ -310,16 +310,22 @@ public class WheelRenderer {
         // Sun/moon direction in world space. At night we flip to the moon; underground we still
         // use the world sun direction (the lightmap takes care of darkening) so the highlight
         // does not invent an extra light above the player's head.
+        // Sun direction in world space. getSunAngle returns radians where 0 = noon (straight up,
+        // Y+), PI/2 = sunset (sun is toward the horizon at -Z), PI = midnight (sun directly below).
+        // Vanilla uses (0, cos, -sin) for the light vector around the Z axis; the Y component is
+        // cos(angle) so at noon Y=1, at the horizon Y=0. We flip to the moon at night.
         ClientLevel level = (ClientLevel) entity.level();
         float celestialAngle = level.getSunAngle(1.0f);
-        float sunHoriz = Mth.cos(celestialAngle);
-        float sunY = Mth.sin(celestialAngle);
-        float sunZ = -sunHoriz;
-        if (sunY < -0.1f) {
-            sunZ = sunHoriz;
-            sunY = -sunY;
+        float wLightX = 0.0f;
+        float wLightY = Mth.cos(celestialAngle);
+        float wLightZ = -Mth.sin(celestialAngle);
+        if (wLightY < -0.1f) {
+            wLightY = -wLightY;
+            wLightZ = -wLightZ;
         }
-        float wLightX = 0.0f, wLightY = Math.max(sunY, 0.20f), wLightZ = sunZ;
+        // Renormalise after the flip/max so light direction stays unit length.
+        float lLen = (float) Math.sqrt(wLightX*wLightX + wLightY*wLightY + wLightZ*wLightZ);
+        wLightX /= lLen; wLightY /= lLen; wLightZ /= lLen;
 
         // View direction from wheel centre to camera, in world space.
         Vec3 eye = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
