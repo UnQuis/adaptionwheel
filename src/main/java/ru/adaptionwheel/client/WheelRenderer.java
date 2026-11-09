@@ -109,15 +109,20 @@ public class WheelRenderer {
     private static final Vector3f HALF_SCRATCH = new Vector3f();
 
     /**
-     * Brushed-metal Blinn-Phong highlight strength and power, applied on top of vanilla lighting
-     * (which already supplies diffuse from the sun direction and the block/sky lightmap). The
-     * highlight stays metallic-looking at night and under torches because the half-vector uses the
-     * world-space sun direction from the client level — not a hardcoded vector — and falls back to
-     * a faint up-vector highlight underground so the wheel never reads as flat plastic in a cave.
+     * Metal lighting constants. The key difference from "plastic gold" is that a metal's diffuse
+     * term is dark and contrasty (polished gold is black in the shade, not middle-grey) while the
+     * specular term is a separate additive highlight in the colour of the sky / light source —
+     * NOT a multiplier on the material. That is why the earlier `bright = 1 + spec` read as
+     * glossy plastic: it lifted everything evenly instead of adding a tight bright fleck.
+     *
+     * SPEC_POWER of 48 is a narrower lobe than the previous 16 — gives a sharp pinprick glint
+     * rather than a wide glossy sheen. SPEC_STRENGTH is the peak intensity of that fleck.
+     * No ambient headlamp underground: in pure torchlight the glint follows the sun-halfvector
+     * dimmed down, which reads as torchlight catching edges rather than as even plastic shine.
      */
-    private static final float SPEC_STRENGTH = 0.55f;
-    private static final float SPEC_POWER = 16.0f;
-    private static final float SPEC_AMBIENT_STRENGTH = 0.15f;
+    private static final float METAL_AMBIENT = 0.18f;
+    private static final float SPEC_STRENGTH = 0.95f;
+    private static final float SPEC_POWER = 48.0f;
 
     @SubscribeEvent
     public static void registerReloadListener(RegisterClientReloadListenersEvent event) {
@@ -301,32 +306,19 @@ public class WheelRenderer {
 
         Matrix3f normalMatrix = pose.normal();
 
-        // Sun/moon direction in world space, derived from the level's celestial angle the same way
-        // vanilla does it for its own directional shading. At night (angle > pi/2) the sun dips
-        // below the horizon; we flip to the moon direction so the highlight still comes from the
-        // bright side of the sky. Underground (low sky light) falls back to a weak up-vector so
-        // the glint doesn't vanish when only torches are lighting the wheel.
+        // Sun/moon direction in world space. At night we flip to the moon; underground we still
+        // use the world sun direction (the lightmap takes care of darkening) so the highlight
+        // does not invent an extra light above the player's head.
         ClientLevel level = (ClientLevel) entity.level();
         float celestialAngle = level.getSunAngle(1.0f);
         float sunHoriz = Mth.cos(celestialAngle);
         float sunY = Mth.sin(celestialAngle);
-        float sunX = 0.0f;
         float sunZ = -sunHoriz;
-        boolean night = sunY < -0.1f;
-        if (night) {
+        if (sunY < -0.1f) {
             sunZ = sunHoriz;
             sunY = -sunY;
         }
-
-        int skyI = LightTexture.sky(packedLight);
-        float skyFactor = skyI / 15.0f;
-
-        if (skyFactor < 0.15f) {
-            LIGHT_SCRATCH.set(0.0f, 1.0f, 0.3f);
-        } else {
-            LIGHT_SCRATCH.set(sunX, Math.max(sunY, 0.25f), sunZ);
-        }
-        LIGHT_SCRATCH.normalize();
+        LIGHT_SCRATCH.set(0.0f, Math.max(sunY, 0.20f), sunZ).normalize();
 
         // View direction from wheel centre to camera, in world space.
         Vec3 eye = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
@@ -337,10 +329,21 @@ public class WheelRenderer {
         if (VIEW_SCRATCH.lengthSquared() < 1.0e-6f) VIEW_SCRATCH.set(0.0f, 0.0f, 1.0f);
         VIEW_SCRATCH.normalize();
 
-        // Half vector for Blinn-Phong, in world space. Normal matrix rotates normals into the
-        // pose (world-after-spin) space, but the pose stack is only a translate+Y-rotation+scale
-        // around Y, so Y-up directions are not tilted. Use world-space light/view for simplicity.
+        // Half vector for Blinn-Phong.
         HALF_SCRATCH.set(LIGHT_SCRATCH).add(VIEW_SCRATCH).normalize();
+
+        // Extract the 0..1 sky amount from the packed light so we can dim both diffuse and
+        // specular when the sky is not contributing (caves, deep night). Block light is added
+        // to the diffuse term directly: torches tint the wheel warm the way they tint every
+        // entity in the game.
+        int blockI = LightTexture.block(packedLight);
+        int skyI = LightTexture.sky(packedLight);
+        float skyAmount = skyI / 15.0f;
+        float blockAmount = blockI / 15.0f;
+        // Block light is warm orange (torch colour ~(1.0, 0.65, 0.33)); its contribution is
+        // ambient-ish because the engine has already composited every nearby source into one
+        // brightness value and we have no direction to attach a highlight to.
+        float blockWarmR = 1.00f, blockWarmG = 0.65f, blockWarmB = 0.33f;
 
         float[] corners = mesh.quadCorners();
         for (int i = 0; i < corners.length; i += ObjMesh.STRIDE * 4) {
@@ -358,22 +361,38 @@ public class WheelRenderer {
                     NORMAL_SCRATCH.normalize();
                 }
 
-                // Specular scalar per corner (gouraud-ish — interpolated by the GPU between
-                // corners which is fine at 32 segments on the spheres).
-                float specDot = Math.max(0.0f, NORMAL_SCRATCH.dot(HALF_SCRATCH));
-                float spec = SPEC_STRENGTH * (float)Math.pow(specDot, SPEC_POWER);
-                // When the sky is dark (night, cave) add a faint ambient glint that keeps the
-                // metal reading as metal even under pure torchlight.
-                if (skyFactor < 0.4f) {
-                    float upDot = Math.max(0.0f, NORMAL_SCRATCH.y());
-                    spec += SPEC_AMBIENT_STRENGTH * (float)Math.pow(upDot, 6.0);
-                }
+                // --- DIFFUSE: low ambient floor + N·L sun term, weighted by how much sky is
+                // visible, plus a warm block-light ambient. Dark in shade = metal, not plastic.
+                float nDotL = Math.max(0.0f, NORMAL_SCRATCH.dot(LIGHT_SCRATCH));
+                float skyDiffuse = METAL_AMBIENT + (1.0f - METAL_AMBIENT) * nDotL;
+                skyDiffuse *= skyAmount;
+                float blockDiffuse = METAL_AMBIENT * blockAmount;
 
-                // Multiply into the base material* tint; clamp to [0,1] to prevent wrap-around.
-                float bright = 1.0f + spec;
-                float cr = Math.min(1.0f, mr * red * bright);
-                float cg = Math.min(1.0f, mg * green * bright);
-                float cb = Math.min(1.0f, mb * blue * bright);
+                // Per-channel diffuse: material * tint * (skyDiffuse neutral + blockDiffuse warm).
+                float baseR = mr * red * skyDiffuse + mr * blockWarmR * blockDiffuse;
+                float baseG = mg * green * skyDiffuse + mg * blockWarmG * blockDiffuse;
+                float baseB = mb * blue * skyDiffuse + mb * blockWarmB * blockDiffuse;
+
+                // --- SPECULAR: tight Blinn-Phong fleck, additive, in the colour of the dominant
+                // light (sky white by day, moon blue-grey at night, torch warm underground).
+                // This is the critical difference from plastic: specular is NOT multiplying the
+                // diffuse term and tinting everything brighter; it is a separate bright fleck.
+                float nDotH = Math.max(0.0f, NORMAL_SCRATCH.dot(HALF_SCRATCH));
+                float spec = SPEC_STRENGTH * (float)Math.pow(nDotH, SPEC_POWER);
+                spec *= Math.max(skyAmount, blockAmount * 0.85f); // glint dies with no light
+                // Specular tints: sun = warm white, moon = cool blue, torch = same orange as diffuse
+                float specR, specG, specB;
+                if (blockAmount > skyAmount + 0.15f) {
+                    specR = blockWarmR; specG = blockWarmG; specB = blockWarmB;
+                } else if (sunY < 0.25f) {
+                    // Night: pale moonlight
+                    specR = 0.70f; specG = 0.78f; specB = 1.00f;
+                } else {
+                    specR = 1.00f; specG = 0.95f; specB = 0.82f;
+                }
+                float cr = Math.min(1.0f, baseR + spec * specR);
+                float cg = Math.min(1.0f, baseG + spec * specG);
+                float cb = Math.min(1.0f, baseB + spec * specB);
 
                 consumer.addVertex(pose, corners[o], corners[o + 1], corners[o + 2])
                         .setColor(cr, cg, cb, alpha)
