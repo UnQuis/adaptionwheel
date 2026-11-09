@@ -6,6 +6,7 @@ import com.mojang.logging.LogUtils;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.phys.Vec3;
 
 import net.minecraft.client.renderer.LightTexture;
@@ -175,7 +176,13 @@ public class WheelRenderer {
         // Real light from the world: sky (sun/moon) + block (torches, glowstone, etc.) at the
         // entity's position, so the wheel responds to night, caves, torches and beacons the way
         // every other entity in the game does.
-        int packedLight = entity.getLightLevelDependentMagicValue();
+        // Packed light coordinates, 4 bits block | 4 bits sky in each short. The block term is
+        // measured at the entity's feet the way every living renderer samples it; the sky term is
+        // derived from the level-dependent magic value (0..1) so darkness/bad-omen/darkness effects
+        // darken the wheel the same way they darken the entity.
+        int blockI = entity.level().getMaxLocalRawBrightness(entity.blockPosition());
+        int skyI = (int)(entity.getLightLevelDependentMagicValue() * 15.0f);
+        int packedLight = LightTexture.pack(blockI, skyI);
 
         poseStack.pushPose();
 
@@ -301,27 +308,19 @@ public class WheelRenderer {
         // the glint doesn't vanish when only torches are lighting the wheel.
         ClientLevel level = (ClientLevel) entity.level();
         float celestialAngle = level.getSunAngle(1.0f);
-        float sunHoriz = Mth.cos(celestialAngle);   // horizontal term
-        float sunY = Mth.sin(celestialAngle);       // Y (positive = sun above horizon)
-        // Vanilla's sun spins around the Z axis; the "up" direction at the horizon is (0,1,0) at
-        // noon and (0,-1,0) at midnight. Azimuth is zero (noon is south/-Z in vanilla).
+        float sunHoriz = Mth.cos(celestialAngle);
+        float sunY = Mth.sin(celestialAngle);
         float sunX = 0.0f;
         float sunZ = -sunHoriz;
         boolean night = sunY < -0.1f;
         if (night) {
-            // Moon is opposite the sun; flip so highlight follows the bright sky.
             sunZ = sunHoriz;
             sunY = -sunY;
         }
 
-        int skyI = LightTexture.sky(packedLight);
         float skyFactor = skyI / 15.0f;
 
         if (skyFactor < 0.15f) {
-            // Underground/pure torchlight: use an up-ish "headlamp" highlight so the metal still
-            // has a glint even when there is no sky light. Torchlight itself doesn't have a
-            // single fixed direction from here (the engine composites it from the lightmap), but
-            // bright tops read as metal and keeping a small specular on top is a good-enough cue.
             LIGHT_SCRATCH.set(0.0f, 1.0f, 0.3f);
         } else {
             LIGHT_SCRATCH.set(sunX, Math.max(sunY, 0.25f), sunZ);
