@@ -318,6 +318,7 @@ public class WheelRenderer {
             sunY = -sunY;
         }
 
+        int skyI = LightTexture.sky(packedLight);
         float skyFactor = skyI / 15.0f;
 
         if (skyFactor < 0.15f) {
