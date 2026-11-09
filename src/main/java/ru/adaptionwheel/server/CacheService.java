@@ -2,6 +2,7 @@ package ru.adaptionwheel.server;
 
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import ru.adaptionwheel.data.AttachmentTypes;
 import ru.adaptionwheel.data.PlayerAdaption;
 
 public final class CacheService {
@@ -52,10 +53,13 @@ public final class CacheService {
     public static final int SIDE_HEIGHT = VANILLA_HEIGHT;
 
     public static PlayerAdaption data(Player player) {
-        if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
-            return AdaptionEvents.dataOf(serverPlayer);
-        }
-        return new PlayerAdaption();
+        // Always read off the player's live attachment. The old `new PlayerAdaption()` fallback on
+        // the client path was returning a BRAND NEW empty instance every call -- which meant every
+        // client-side caller that touched `data.cache` was mutating a local list that nothing
+        // persisted. On top of that, any code path that called this method during a menu open on a
+        // non-ServerPlayer shadowed the real attachment with an empty list and "saw" an empty
+        // cache, which is one of the ways the extra inventory could look wiped across a relog.
+        return player.getData(ru.adaptionwheel.data.AttachmentTypes.ADAPTION.get());
     }
 
     /** Pushes the cache mirror for the overlay drawn inside other container screens. */
