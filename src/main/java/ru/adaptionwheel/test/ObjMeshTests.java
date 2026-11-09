@@ -239,6 +239,8 @@ public class ObjMeshTests {
         helper.assertTrue(firstR < 0.99f || firstG < 0.99f || firstB < 0.99f,
                 "the first vertex is white, which is what a file without colours produces; the metal "
                         + "is not white");
+
+        helper.succeed();
     }
 
     /** A file with no colours is the sword's: it must multiply to nothing, not to black. */
