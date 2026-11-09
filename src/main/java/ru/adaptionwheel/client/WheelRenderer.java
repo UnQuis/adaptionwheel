@@ -199,12 +199,13 @@ public class WheelRenderer {
         // LivingEntityRenderer's push — so there is nothing to cancel here. The old -bodyYaw turn
         // only looked harmless because the wheel was spinning anyway; without the spin it would
         // read as the wheel turning whenever the player turned.
-        poseStack.mulPose(Axis.YP.rotation(wheelAngle(player, adaptCount, time)));
+        float spinAngle = wheelAngle(player, adaptCount, time);
+        poseStack.mulPose(Axis.YP.rotation(spinAngle));
 
         poseStack.scale(scale, scale, scale);
 
         if (mesh != null) {
-            drawMesh(mesh, poseStack, bufferSource, tint, packedLight, entity, height + bob);
+            drawMesh(mesh, poseStack, bufferSource, tint, packedLight, entity, height + bob, spinAngle);
         } else {
             if (!fallbackLogged) {
                 fallbackLogged = true;
@@ -295,7 +296,7 @@ public class WheelRenderer {
      * way metal should. Per-corner normals are real: smooth on the re-authored spheres, flat on
      * the faceted torus and bronze beams.
      */
-    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, MultiBufferSource buffers, int tint, int packedLight, LivingEntity entity, float wheelCenterY) {
+    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, MultiBufferSource buffers, int tint, int packedLight, LivingEntity entity, float wheelCenterY, float spinAngle) {
         VertexConsumer consumer = buffers.getBuffer(RenderType.entityCutoutNoCull(DharmaChakraModel.TEXTURE));
         PoseStack.Pose pose = poseStack.last();
 
@@ -318,18 +319,36 @@ public class WheelRenderer {
             sunZ = sunHoriz;
             sunY = -sunY;
         }
-        LIGHT_SCRATCH.set(0.0f, Math.max(sunY, 0.20f), sunZ).normalize();
+        float wLightX = 0.0f, wLightY = Math.max(sunY, 0.20f), wLightZ = sunZ;
 
         // View direction from wheel centre to camera, in world space.
         Vec3 eye = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
-        VIEW_SCRATCH.set(
-                (float)(eye.x - entity.getX()),
-                (float)(eye.y - entity.getY() - wheelCenterY),
-                (float)(eye.z - entity.getZ()));
-        if (VIEW_SCRATCH.lengthSquared() < 1.0e-6f) VIEW_SCRATCH.set(0.0f, 0.0f, 1.0f);
-        VIEW_SCRATCH.normalize();
+        float wViewX = (float)(eye.x - entity.getX());
+        float wViewY = (float)(eye.y - entity.getY() - wheelCenterY);
+        float wViewZ = (float)(eye.z - entity.getZ());
+        if (wViewX*wViewX + wViewY*wViewY + wViewZ*wViewZ < 1.0e-6f) {
+            wViewX = 0.0f; wViewY = 0.0f; wViewZ = 1.0f;
+        }
 
-        // Half vector for Blinn-Phong.
+        // The pose stack has rotated the mesh by +spinAngle around Y, and normalMatrix carries
+        // that rotation into the normals we feed the shader. That means every normal coming out
+        // of the mesh has been turned by +spinAngle, but the world light/view vectors have not.
+        // Rotate them by -spinAngle around Y to bring them into the same frame as the normals,
+        // otherwise N.L and the half-vector are computed between vectors in different bases and
+        // the highlight sweeps to the wrong side of the wheel.
+        float cos = Mth.cos(-spinAngle);
+        float sin = Mth.sin(-spinAngle);
+        LIGHT_SCRATCH.set(
+                wLightX * cos - wLightZ * sin,
+                wLightY,
+                wLightX * sin + wLightZ * cos).normalize();
+        float vLen = (float)Math.sqrt(wViewX*wViewX + wViewY*wViewY + wViewZ*wViewZ);
+        VIEW_SCRATCH.set(
+                (wViewX * cos - wViewZ * sin) / vLen,
+                wViewY / vLen,
+                (wViewX * sin + wViewZ * cos) / vLen);
+
+        // Half vector for Blinn-Phong, now in the rotated frame.
         HALF_SCRATCH.set(LIGHT_SCRATCH).add(VIEW_SCRATCH).normalize();
 
         // Extract the 0..1 sky amount from the packed light so we can dim both diffuse and
