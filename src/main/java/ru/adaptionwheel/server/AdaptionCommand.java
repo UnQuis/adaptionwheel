@@ -1,7 +1,9 @@
 package ru.adaptionwheel.server;
 
+import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -11,6 +13,7 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -32,6 +35,7 @@ import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.adapt.AdaptationDefinition;
 import ru.adaptionwheel.adapt.AdaptationDomain;
 import ru.adaptionwheel.adapt.AdaptationRegistry;
+import ru.adaptionwheel.category.AdaptionCategory;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.ModDataComponents;
@@ -40,13 +44,15 @@ import ru.adaptionwheel.data.WheelData;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
- * The /adaptionwheel command tree.
+ * The /adaptionwheel command tree, and its /aw alias.
  *
  * <p>Two real bugs lived here before this revision, both in how the tree was wired rather than in
  * the command bodies themselves:
@@ -74,6 +80,21 @@ import java.util.Set;
  * parent may ever both be argument nodes capable of parsing the same token -- separate them with a
  * literal keyword, the way {@code level} and {@code domain} do above, the moment a second argument
  * sibling is added anywhere in this tree.
+ *
+ * <p>Every concept-taking subcommand ({@code info}, {@code grant}, {@code ungrant}, {@code shed},
+ * {@code analyze}) now shares one selector set, wired once by {@link #addConceptSelectors}: the raw
+ * quoted {@code <concept>}, {@code type <category>}, {@code env <name>},
+ * {@code contact|offense|drop|existence <mob>} and {@code debuff <effect>}. The structured forms are
+ * not sugar -- a concept key embeds a {@link ResourceLocation} ({@code Contact_minecraft:zombie}) and
+ * a colon is not allowed in an unquoted Brigadier string, so the raw form has to be quoted. A player
+ * who forgets the quote gets the key truncated at the colon, which used to look like a successful
+ * grant of a concept that cannot exist. Handing the mob/effect half to a
+ * {@link ResourceLocationArgument} keeps the id intact and lets the client receive registry-aware
+ * suggestions.
+ *
+ * <p>The whole tree is registered twice, under {@code /adaptionwheel} and {@code /aw}, from the same
+ * builder. A second hand-written tree would be a second thing to keep in step, and the alias is the
+ * full tree rather than a stub.
  */
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public final class AdaptionCommand {
@@ -81,14 +102,48 @@ public final class AdaptionCommand {
     private AdaptionCommand() {
     }
 
+    /** How many suggestions the raw concept argument will offer before the list is truncated. */
+    private static final int SUGGESTION_CAP = 80;
+
+    /** Selector keyword to concept prefix, for the per-mob adaptation families. */
+    private static final Map<String, String> ENTITY_FAMILIES = createEntityFamilies();
+
+    /** The {@code type <category>} choices, built from the live category enum. */
+    private static final List<AdaptionCategory> TYPE_CATEGORIES = buildTypeCategories();
+
+    /** Selector keyword to concept key, for the one-time environments. */
+    private static final Map<String, String> ENV_CHOICES = createEnvChoices();
+
     private static final SuggestionProvider<CommandSourceStack> CONCEPT_SUGGESTIONS =
             (ctx, builder) -> {
-                for (AdaptationDefinition def : AdaptationRegistry.allDefinitions()) {
-                    builder.suggest(def.concept());
+                String remaining = builder.getRemainingLowerCase();
+                // The raw concept argument carries a leading quote when the player has already
+                // started a quoted key, and the pool is matched against the key itself.
+                if (remaining.startsWith("\"")) {
+                    remaining = remaining.substring(1);
                 }
-                for (String family : new String[]{
-                        "Contact_", "Offense_NPC_", "Drop_NPC_", "Debuff_", "Existence_"}) {
-                    builder.suggest(family);
+                for (String id : conceptSuggestionIds(remaining)) {
+                    // A bare family prefix is a fragment, not a concept: it has no display name and
+                    // must never be quoted, or the player is told to type a key that cannot resolve.
+                    boolean barePrefix = id.endsWith("_");
+                    builder.suggest(needsQuotes(id) ? "\"" + id + "\"" : id,
+                            barePrefix ? null : Concepts.displayName(id));
+                }
+                return builder.buildFuture();
+            };
+
+    private static final SuggestionProvider<CommandSourceStack> MOB_SUGGESTIONS =
+            (ctx, builder) -> {
+                for (String id : entitySuggestionIds(builder.getRemainingLowerCase())) {
+                    builder.suggest(id);
+                }
+                return builder.buildFuture();
+            };
+
+    private static final SuggestionProvider<CommandSourceStack> EFFECT_SUGGESTIONS =
+            (ctx, builder) -> {
+                for (String id : effectSuggestionIds(builder.getRemainingLowerCase())) {
+                    builder.suggest(id);
                 }
                 return builder.buildFuture();
             };
@@ -101,20 +156,322 @@ public final class AdaptionCommand {
                 return builder.buildFuture();
             };
 
-    private static RequiredArgumentBuilder<CommandSourceStack, String> conceptArg(String name) {
-        return Commands.argument(name, StringArgumentType.string())
-                .suggests(CONCEPT_SUGGESTIONS);
-    }
+    /**
+     * The type behind {@link #resolveConcept}'s failures.
+     *
+     * <p>Brigadier only accepts a {@link CommandSyntaxException} built from a type, and the message
+     * is what vanilla prints, so the whole "unknown concept, did you mean ..." text rides on it
+     * instead of being sent as a separate failure line that the caller could forget.
+     */
+    private static final SimpleCommandExceptionType DYNAMIC_ERROR =
+            new SimpleCommandExceptionType(Component.empty());
 
-    private static RequiredArgumentBuilder<CommandSourceStack, String> domainArg(String name) {
-        return Commands.argument(name, StringArgumentType.word())
-                .suggests(DOMAIN_SUGGESTIONS);
-    }
+    private static final int LEVEL_DEFAULT = -1;
 
     private static final IntegerArgumentType LEVEL_ARG =
             IntegerArgumentType.integer(0, PlayerAdaption.MAX_LEVEL);
 
-    private static final int LEVEL_DEFAULT = -1;
+    private static final SimpleCommandExceptionType NO_PLAYER_ERROR =
+            new SimpleCommandExceptionType(Component.translatable("adaptionwheel.cmd.no_player"));
+
+    private static final String[] DYNAMIC_PREFIXES = {
+            "Type_", "Env_", "Debuff_", "Contact_", "Offense_", "Drop_NPC_", "Existence_",
+            "Mutation_", "Move_", "Percep_", "Mine_", "Combat_", "Fist_", "Dimension_"
+    };
+
+    private static Map<String, String> createEntityFamilies() {
+        Map<String, String> out = new LinkedHashMap<>();
+        out.put("contact", Concepts.CONTACT_PREFIX);
+        out.put("offense", Concepts.OFFENSE_PREFIX);
+        out.put("drop", Concepts.DROP_PREFIX);
+        out.put("existence", Concepts.EXISTENCE_PREFIX);
+        return out;
+    }
+
+    /**
+     * The {@code type <category>} choices.
+     *
+     * <p>Fire is not one of them: it stopped being a ladder when it became the one-time
+     * {@link Concepts#ENV_FIRE}, and that is offered under {@code env fire} instead. Retired
+     * categories are skipped for the same reason from the other direction -- their keys survive
+     * only as legacy data with no definition behind them, so offering them would build a command
+     * that grants nothing.
+     */
+    private static List<AdaptionCategory> buildTypeCategories() {
+        List<AdaptionCategory> out = new ArrayList<>();
+        for (AdaptionCategory category : AdaptionCategory.values()) {
+            if (category == AdaptionCategory.FIRE || Concepts.isRetired(Concepts.type(category))) {
+                continue;
+            }
+            out.add(category);
+        }
+        return out;
+    }
+
+    private static Map<String, String> createEnvChoices() {
+        Map<String, String> out = new LinkedHashMap<>();
+        out.put("fire", Concepts.ENV_FIRE);
+        out.put("lava", Concepts.ENV_LAVA);
+        out.put("fall", Concepts.ENV_FALL);
+        out.put("drowning", Concepts.ENV_DROWN);
+        out.put("thorns", Concepts.ENV_THORNS);
+        out.put("darkness", Concepts.ENV_DARKNESS);
+        out.put("suffocate", Concepts.ENV_SUFFOCATE);
+        out.put("void", Concepts.ENV_VOID);
+        out.put("starve", Concepts.ENV_STARVE);
+        out.put("liquid", Concepts.ENV_LIQUID);
+        out.put("inventory", Concepts.ENV_INVENTORY);
+        out.put("ice", Concepts.ENV_ICE);
+        out.put("slime", Concepts.ENV_SLIME);
+        out.put("cobweb", Concepts.ENV_COBWEB);
+        out.put("knockback", Concepts.ENV_KNOCKBACK);
+        return out;
+    }
+
+    /**
+     * Entity ids for the {@code <mob>} argument of a family selector.
+     *
+     * <p>Prefix first so that {@code zomb} lands on {@code minecraft:zombie} directly, then a
+     * contains fallback once two characters have been typed -- that is what lets {@code skele}
+     * find {@code minecraft:skeleton_horse}. Unquoted ids are the whole point of the structured
+     * form, so nothing here is ever quoted.
+     */
+    public static List<String> entitySuggestionIds(String remaining) {
+        String rem = remaining == null ? "" : remaining.toLowerCase(Locale.ROOT);
+        List<ResourceLocation> keys = new ArrayList<>(BuiltInRegistries.ENTITY_TYPE.keySet());
+        keys.sort(Comparator.comparing(ResourceLocation::toString));
+
+        List<String> out = new ArrayList<>();
+        for (ResourceLocation id : keys) {
+            String full = id.toString();
+            if (!rem.isEmpty() && !full.startsWith(rem) && !id.getPath().startsWith(rem)) {
+                continue;
+            }
+            out.add(full);
+        }
+        if (out.isEmpty() && rem.length() >= 2) {
+            for (ResourceLocation id : keys) {
+                String full = id.toString();
+                if (full.contains(rem) || id.getPath().contains(rem)) {
+                    out.add(full);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Effect ids for the {@code <effect>} argument of {@code debuff}, with the same matching. */
+    public static List<String> effectSuggestionIds(String remaining) {
+        String rem = remaining == null ? "" : remaining.toLowerCase(Locale.ROOT);
+        List<ResourceLocation> keys = new ArrayList<>(BuiltInRegistries.MOB_EFFECT.keySet());
+        keys.sort(Comparator.comparing(ResourceLocation::toString));
+
+        List<String> out = new ArrayList<>();
+        for (ResourceLocation id : keys) {
+            String full = id.toString();
+            if (!rem.isEmpty() && !full.startsWith(rem) && !id.getPath().startsWith(rem)) {
+                continue;
+            }
+            out.add(full);
+        }
+        if (out.isEmpty() && rem.length() >= 2) {
+            for (ResourceLocation id : keys) {
+                String full = id.toString();
+                if (full.contains(rem) || id.getPath().contains(rem)) {
+                    out.add(full);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The suggestion pool for the raw concept argument.
+     *
+     * <p>Four sources, in the order a player expects them: registered concepts, the family
+     * prefixes, concepts whose id or display name contains what was typed, and finally the
+     * generated family-plus-mob ids -- {@code Contact_minecraft:zombie} and friends cannot be
+     * enumerated up front because the registry mints them at runtime, so they are assembled from
+     * the live entity and effect registries on every keystroke. The result is capped at
+     * {@link #SUGGESTION_CAP}, because the generated pass alone can reach the hundreds.
+     */
+    public static List<String> conceptSuggestionIds(String remaining) {
+        String rem = remaining == null ? "" : remaining.toLowerCase(Locale.ROOT);
+        List<AdaptationDefinition> definitions = AdaptationRegistry.allDefinitions();
+        Set<String> out = new LinkedHashSet<>();
+
+        for (AdaptationDefinition def : definitions) {
+            String id = def.concept();
+            if (!rem.isEmpty() && !id.toLowerCase(Locale.ROOT).startsWith(rem)) {
+                continue;
+            }
+            out.add(id);
+        }
+        for (String prefix : ENTITY_FAMILIES.values()) {
+            if (!rem.isEmpty() && !prefix.toLowerCase(Locale.ROOT).startsWith(rem)) {
+                continue;
+            }
+            out.add(prefix);
+        }
+
+        if (rem.length() >= 2) {
+            for (AdaptationDefinition def : definitions) {
+                String id = def.concept();
+                if (id.toLowerCase(Locale.ROOT).contains(rem)) {
+                    out.add(id);
+                }
+            }
+            for (AdaptationDefinition def : definitions) {
+                String id = def.concept();
+                if (out.contains(id)
+                        || !Concepts.displayName(id).getString().toLowerCase(Locale.ROOT).contains(rem)) {
+                    continue;
+                }
+                out.add(id);
+            }
+
+            // "contact_mine" is a family plus half a mob id: keep the family and match only the
+            // remainder, otherwise the prefix itself is what gets compared and nothing matches.
+            String family = null;
+            String body = rem;
+            for (Map.Entry<String, String> entry : ENTITY_FAMILIES.entrySet()) {
+                String lower = entry.getValue().toLowerCase(Locale.ROOT);
+                if (!rem.startsWith(lower)) {
+                    continue;
+                }
+                family = entry.getValue();
+                body = rem.substring(lower.length());
+                break;
+            }
+
+            for (ResourceLocation id : BuiltInRegistries.ENTITY_TYPE.keySet()) {
+                if (body.isEmpty() || id.getPath().contains(body) || id.toString().contains(body)) {
+                    if (family != null) {
+                        out.add(family + id);
+                    } else {
+                        for (String prefix : ENTITY_FAMILIES.values()) {
+                            out.add(prefix + id);
+                        }
+                    }
+                }
+                if (out.size() > SUGGESTION_CAP) {
+                    break;
+                }
+            }
+            for (ResourceLocation id : BuiltInRegistries.MOB_EFFECT.keySet()) {
+                if (id.getPath().contains(body) || id.toString().contains(body)) {
+                    out.add(Concepts.debuff(id.toString()));
+                }
+                if (out.size() > SUGGESTION_CAP) {
+                    break;
+                }
+            }
+        }
+
+        List<String> list = new ArrayList<>(out);
+        return list.size() > SUGGESTION_CAP ? new ArrayList<>(list.subList(0, SUGGESTION_CAP)) : list;
+    }
+
+    /** Whether a suggested key has to be quoted to survive {@link StringArgumentType#string()}. */
+    private static boolean needsQuotes(String id) {
+        for (int i = 0; i < id.length(); i++) {
+            if (!StringReader.isAllowedInUnquotedString(id.charAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Turns whatever the player typed into a concept key, or fails with the unknown-concept text.
+     *
+     * <p>Deliberately lenient, in this order: a plausible key as typed, a case-insensitive registry
+     * key, the capitalised form ({@code env_fire} becomes {@code Env_Fire}), the historical
+     * {@code offense_<mob>} spelling of {@code Offense_NPC_<mob>}, and finally a display name. The
+     * display-name pass is what makes {@code grant Fire} work, because the panel shows names and
+     * not keys.
+     */
+    private static String resolveConcept(String needle) throws CommandSyntaxException {
+        String raw = needle.trim();
+        if (!raw.isEmpty()) {
+            if (isPlausibleConcept(raw)) {
+                return raw;
+            }
+            for (AdaptationDefinition def : AdaptationRegistry.allDefinitions()) {
+                if (def.concept().equalsIgnoreCase(raw)) {
+                    return def.concept();
+                }
+            }
+            String capped = Character.toUpperCase(raw.charAt(0)) + raw.substring(1);
+            if (!capped.equals(raw) && isPlausibleConcept(capped)) {
+                return capped;
+            }
+            String lower = raw.toLowerCase(Locale.ROOT);
+            if (lower.startsWith("offense_")) {
+                String alternate = Concepts.OFFENSE_PREFIX + raw.substring("offense_".length());
+                if (isPlausibleConcept(alternate)) {
+                    return alternate;
+                }
+            }
+            for (AdaptationDefinition def : AdaptationRegistry.allDefinitions()) {
+                if (Concepts.displayName(def.concept()).getString().equalsIgnoreCase(raw)) {
+                    return def.concept();
+                }
+            }
+        }
+        throw new CommandSyntaxException(DYNAMIC_ERROR, unknownConceptMessage(raw));
+    }
+
+    private static MutableComponent unknownConceptMessage(String raw) {
+        MutableComponent message = Component.translatable("adaptionwheel.cmd.unknown_concept", raw);
+        List<String> near = conceptSuggestionIds(raw.toLowerCase(Locale.ROOT));
+        if (!near.isEmpty()) {
+            List<String> few = near.size() > 8 ? near.subList(0, 8) : near;
+            message.append(" ").append(Component.translatable("adaptionwheel.cmd.did_you_mean",
+                    Component.literal(String.join(", ", few))));
+        } else {
+            message.append(" ").append(Component.translatable("adaptionwheel.cmd.use_registry"));
+        }
+        return message;
+    }
+
+    private static ResourceLocation requireEntity(ResourceLocation id) throws CommandSyntaxException {
+        if (BuiltInRegistries.ENTITY_TYPE.containsKey(id)) {
+            return id;
+        }
+        List<String> near = new ArrayList<>();
+        for (ResourceLocation key : BuiltInRegistries.ENTITY_TYPE.keySet()) {
+            if (!key.getPath().contains(id.getPath()) || near.size() >= 8) {
+                continue;
+            }
+            near.add(key.toString());
+        }
+        MutableComponent message = Component.translatable("adaptionwheel.cmd.unknown_entity", id.toString());
+        if (!near.isEmpty()) {
+            message.append(" ").append(Component.translatable("adaptionwheel.cmd.did_you_mean",
+                    Component.literal(String.join(", ", near))));
+        }
+        throw new CommandSyntaxException(DYNAMIC_ERROR, message);
+    }
+
+    private static ResourceLocation requireEffect(ResourceLocation id) throws CommandSyntaxException {
+        if (BuiltInRegistries.MOB_EFFECT.containsKey(id)) {
+            return id;
+        }
+        List<String> near = new ArrayList<>();
+        for (ResourceLocation key : BuiltInRegistries.MOB_EFFECT.keySet()) {
+            if (!key.getPath().contains(id.getPath()) || near.size() >= 8) {
+                continue;
+            }
+            near.add(key.toString());
+        }
+        MutableComponent message = Component.translatable("adaptionwheel.cmd.unknown_effect", id.toString());
+        if (!near.isEmpty()) {
+            message.append(" ").append(Component.translatable("adaptionwheel.cmd.did_you_mean",
+                    Component.literal(String.join(", ", near))));
+        }
+        throw new CommandSyntaxException(DYNAMIC_ERROR, message);
+    }
 
     private static int level(CommandContext<CommandSourceStack> ctx) {
         return IntegerArgumentType.getInteger(ctx, "level");
@@ -124,9 +481,101 @@ public final class AdaptionCommand {
         return StringArgumentType.getString(ctx, "domain");
     }
 
+    private static String concept(CommandContext<CommandSourceStack> ctx) {
+        return StringArgumentType.getString(ctx, "concept");
+    }
+
+    /**
+     * Appends every concept selector, plus the raw {@code <concept>} string, to a parent node.
+     *
+     * <p>The tail says what may follow a selector; it never changes what the selector itself looks
+     * like, so all five subcommands accept exactly the same set and the shapes cannot drift apart
+     * one command at a time.
+     *
+     * <p>{@code targetNeedsPermission} is not the subcommand's own permission: {@code shed} is
+     * deliberately open to any player for their own wheel, and only naming someone else costs
+     * permission level 2. That is why the gate sits on the target node rather than on the parent.
+     */
+    private static void addConceptSelectors(LiteralArgumentBuilder<CommandSourceStack> parent, Tail tail,
+                                            boolean targetNeedsPermission, ConceptRunner runner) {
+        parent.then(withTail(conceptArg("concept"), tail, targetNeedsPermission, runner,
+                ctx -> resolveConcept(concept(ctx))));
+
+        LiteralArgumentBuilder<CommandSourceStack> type = Commands.literal("type");
+        for (AdaptionCategory category : TYPE_CATEGORIES) {
+            type.then(withTail(Commands.literal(category.getKey()), tail, targetNeedsPermission,
+                    runner, ctx -> Concepts.type(category)));
+        }
+        parent.then(type);
+
+        LiteralArgumentBuilder<CommandSourceStack> env = Commands.literal("env");
+        for (Map.Entry<String, String> entry : ENV_CHOICES.entrySet()) {
+            env.then(withTail(Commands.literal(entry.getKey()), tail, targetNeedsPermission,
+                    runner, ctx -> entry.getValue()));
+        }
+        parent.then(env);
+
+        for (Map.Entry<String, String> family : ENTITY_FAMILIES.entrySet()) {
+            String prefix = family.getValue();
+            parent.then(Commands.literal(family.getKey()).then(withTail(
+                    Commands.argument("mob", ResourceLocationArgument.id()).suggests(MOB_SUGGESTIONS),
+                    tail, targetNeedsPermission, runner,
+                    ctx -> prefix + requireEntity(ResourceLocationArgument.getId(ctx, "mob")))));
+        }
+
+        parent.then(Commands.literal("debuff").then(withTail(
+                Commands.argument("effect", ResourceLocationArgument.id()).suggests(EFFECT_SUGGESTIONS),
+                tail, targetNeedsPermission, runner,
+                ctx -> Concepts.debuff(requireEffect(ResourceLocationArgument.getId(ctx, "effect")).toString()))));
+    }
+
+    /**
+     * Wires the argument tail a selector needs and hands the node back, so selectors stay one
+     * expression each.
+     */
+    private static <B extends ArgumentBuilder<CommandSourceStack, B>> B withTail(
+            B node, Tail tail, boolean targetNeedsPermission, ConceptRunner runner,
+            ConceptExtractor extractor) {
+        switch (tail) {
+            case NONE -> node.executes(ctx ->
+                    runner.run(ctx, selfOrNull(ctx), extractor.extract(ctx), LEVEL_DEFAULT));
+            case TARGET -> {
+                node.executes(ctx ->
+                        runner.run(ctx, self(ctx), extractor.extract(ctx), LEVEL_DEFAULT));
+                RequiredArgumentBuilder<CommandSourceStack, ?> target =
+                        Commands.argument("target", EntityArgument.player());
+                if (targetNeedsPermission) {
+                    target.requires(s -> s.hasPermission(2));
+                }
+                node.then(target.executes(ctx -> runner.run(ctx,
+                        EntityArgument.getPlayer(ctx, "target"), extractor.extract(ctx), LEVEL_DEFAULT)));
+            }
+            case TARGET_AND_LEVEL -> {
+                node.executes(ctx ->
+                        runner.run(ctx, self(ctx), extractor.extract(ctx), LEVEL_DEFAULT));
+                node.then(Commands.argument("target", EntityArgument.player())
+                        .executes(ctx -> runner.run(ctx, EntityArgument.getPlayer(ctx, "target"),
+                                extractor.extract(ctx), LEVEL_DEFAULT)));
+                node.then(Commands.literal("level")
+                        .then(Commands.argument("level", LEVEL_ARG)
+                                .executes(ctx -> runner.run(ctx, self(ctx), extractor.extract(ctx), level(ctx)))
+                                .then(Commands.argument("target", EntityArgument.player())
+                                        .executes(ctx -> runner.run(ctx,
+                                                EntityArgument.getPlayer(ctx, "target"),
+                                                extractor.extract(ctx), level(ctx))))));
+            }
+        }
+        return node;
+    }
+
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
-        LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("adaptionwheel");
+        event.getDispatcher().register(buildRoot("adaptionwheel"));
+        event.getDispatcher().register(buildRoot("aw"));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildRoot(String name) {
+        LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal(name);
 
         root.executes(ctx -> {
             ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.usage"), false);
@@ -149,17 +598,10 @@ public final class AdaptionCommand {
                                 .executes(ctx -> list(ctx, EntityArgument.getPlayer(ctx, "target"),
                                         domain(ctx))))));
 
-        root.then(Commands.literal("info")
-                .then(conceptArg("concept")
-                        .executes(ctx -> {
-                            ServerPlayer target;
-                            try {
-                                target = self(ctx);
-                            } catch (CommandSyntaxException e) {
-                                target = null;
-                            }
-                            return info(ctx, target, concept(ctx));
-                        })));
+        LiteralArgumentBuilder<CommandSourceStack> infoNode = Commands.literal("info");
+        addConceptSelectors(infoNode, Tail.NONE, false,
+                (ctx, target, concept, lvl) -> info(ctx, target, concept));
+        root.then(infoNode);
 
         // grant <concept>                       -> self, default level
         // grant <concept> <target>               -> target, default level
@@ -169,53 +611,38 @@ public final class AdaptionCommand {
         // "level" is a literal keyword, not a second argument sibling of "target": a player can
         // legally be named anything an integer can also look like, so a bare integer argument and
         // a bare player argument must never compete for the same token. See the class javadoc.
-        root.then(Commands.literal("grant")
-                .requires(s -> s.hasPermission(2))
-                .then(Commands.literal("all")
-                        .executes(ctx -> grantAll(ctx, self(ctx), null))
-                        .then(Commands.argument("target", EntityArgument.player())
-                                .executes(ctx -> grantAll(ctx, EntityArgument.getPlayer(ctx, "target"), null)))
-                        .then(Commands.literal("domain")
-                                .then(domainArg("domain")
-                                        .executes(ctx -> grantAll(ctx, self(ctx), domain(ctx)))
-                                        .then(Commands.argument("target", EntityArgument.player())
-                                                .executes(ctx -> grantAll(ctx,
-                                                        EntityArgument.getPlayer(ctx, "target"), domain(ctx)))))))
-                .then(conceptArg("concept")
-                        .executes(ctx -> grant(ctx, self(ctx), concept(ctx), LEVEL_DEFAULT))
-                        .then(Commands.argument("target", EntityArgument.player())
-                                .executes(ctx -> grant(ctx, EntityArgument.getPlayer(ctx, "target"),
-                                        concept(ctx), LEVEL_DEFAULT)))
-                        .then(Commands.literal("level")
-                                .then(Commands.argument("level", LEVEL_ARG)
-                                        .executes(ctx -> grant(ctx, self(ctx), concept(ctx), level(ctx)))
-                                        .then(Commands.argument("target", EntityArgument.player())
-                                                .executes(ctx -> grant(ctx, EntityArgument.getPlayer(ctx, "target"),
-                                                        concept(ctx), level(ctx))))))));
+        LiteralArgumentBuilder<CommandSourceStack> grantNode = Commands.literal("grant")
+                .requires(s -> s.hasPermission(2));
+        grantNode.then(Commands.literal("all")
+                .executes(ctx -> grantAll(ctx, self(ctx), null))
+                .then(Commands.argument("target", EntityArgument.player())
+                        .executes(ctx -> grantAll(ctx, EntityArgument.getPlayer(ctx, "target"), null)))
+                .then(Commands.literal("domain")
+                        .then(domainArg("domain")
+                                .executes(ctx -> grantAll(ctx, self(ctx), domain(ctx)))
+                                .then(Commands.argument("target", EntityArgument.player())
+                                        .executes(ctx -> grantAll(ctx,
+                                                EntityArgument.getPlayer(ctx, "target"), domain(ctx)))))));
+        addConceptSelectors(grantNode, Tail.TARGET_AND_LEVEL, false,
+                (ctx, target, concept, lvl) -> grant(ctx, target, concept, lvl));
+        root.then(grantNode);
 
-        root.then(Commands.literal("ungrant")
-                .requires(s -> s.hasPermission(2))
-                .then(conceptArg("concept")
-                        .executes(ctx -> ungrant(ctx, selfOrTarget(ctx, "target"), concept(ctx)))
-                        .then(Commands.argument("target", EntityArgument.player())
-                                .executes(ctx -> ungrant(ctx, EntityArgument.getPlayer(ctx, "target"),
-                                        concept(ctx))))));
+        LiteralArgumentBuilder<CommandSourceStack> ungrantNode = Commands.literal("ungrant")
+                .requires(s -> s.hasPermission(2));
+        addConceptSelectors(ungrantNode, Tail.TARGET, false,
+                (ctx, target, concept, lvl) -> ungrant(ctx, target, concept));
+        root.then(ungrantNode);
 
-        root.then(Commands.literal("shed")
-                .then(conceptArg("concept")
-                        .executes(ctx -> shed(ctx, selfOrTarget(ctx, "target"), concept(ctx)))
-                        .then(Commands.argument("target", EntityArgument.player())
-                                .requires(s -> s.hasPermission(2))
-                                .executes(ctx -> shed(ctx, EntityArgument.getPlayer(ctx, "target"),
-                                        concept(ctx))))));
+        LiteralArgumentBuilder<CommandSourceStack> shedNode = Commands.literal("shed");
+        addConceptSelectors(shedNode, Tail.TARGET, true,
+                (ctx, target, concept, lvl) -> shed(ctx, target, concept));
+        root.then(shedNode);
 
-        root.then(Commands.literal("analyze")
-                .requires(s -> s.hasPermission(2))
-                .then(conceptArg("concept")
-                        .executes(ctx -> analyze(ctx, selfOrTarget(ctx, "target"), concept(ctx)))
-                        .then(Commands.argument("target", EntityArgument.player())
-                                .executes(ctx -> analyze(ctx, EntityArgument.getPlayer(ctx, "target"),
-                                        concept(ctx))))));
+        LiteralArgumentBuilder<CommandSourceStack> analyzeNode = Commands.literal("analyze")
+                .requires(s -> s.hasPermission(2));
+        addConceptSelectors(analyzeNode, Tail.TARGET, false,
+                (ctx, target, concept, lvl) -> analyze(ctx, target, concept));
+        root.then(analyzeNode);
 
         root.then(Commands.literal("reset")
                 .requires(s -> s.hasPermission(2))
@@ -245,11 +672,37 @@ public final class AdaptionCommand {
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(ctx -> wheel(ctx, selfOrTarget(ctx, "player"))))));
 
-        event.getDispatcher().register(root);
+        return root;
+    }
+
+    private static RequiredArgumentBuilder<CommandSourceStack, String> conceptArg(String name) {
+        return Commands.argument(name, StringArgumentType.string())
+                .suggests(CONCEPT_SUGGESTIONS);
+    }
+
+    private static RequiredArgumentBuilder<CommandSourceStack, String> domainArg(String name) {
+        return Commands.argument(name, StringArgumentType.word())
+                .suggests(DOMAIN_SUGGESTIONS);
     }
 
     private static ServerPlayer self(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         return ctx.getSource().getPlayerOrException();
+    }
+
+    /**
+     * The source player, or null when the command was run from the console.
+     *
+     * <p>Only {@code info} uses this: it is the one subcommand that can answer without a player
+     * ("what is this concept and what does it cap at"), and refusing to answer from the console
+     * would be a limitation with nothing behind it.
+     */
+    @Nullable
+    private static ServerPlayer selfOrNull(CommandContext<CommandSourceStack> ctx) {
+        try {
+            return ctx.getSource().getPlayerOrException();
+        } catch (CommandSyntaxException e) {
+            return null;
+        }
     }
 
     private static ServerPlayer selfOrTarget(CommandContext<CommandSourceStack> ctx, String name)
@@ -264,13 +717,6 @@ public final class AdaptionCommand {
         } catch (CommandSyntaxException e) {
             throw NO_PLAYER_ERROR.create();
         }
-    }
-
-    private static final SimpleCommandExceptionType NO_PLAYER_ERROR =
-            new SimpleCommandExceptionType(Component.translatable("adaptionwheel.cmd.no_player"));
-
-    private static String concept(CommandContext<CommandSourceStack> ctx) {
-        return StringArgumentType.getString(ctx, "concept");
     }
 
     private static int status(CommandContext<CommandSourceStack> ctx, ServerPlayer target) {
@@ -380,7 +826,7 @@ public final class AdaptionCommand {
             return 0;
         }
         if (!isPlausibleConcept(concept)) {
-            reportUnknownConcept(ctx, concept);
+            ctx.getSource().sendFailure(unknownConceptMessage(concept));
             return 0;
         }
         boolean oneTime = Concepts.isOneTime(concept);
@@ -419,11 +865,6 @@ public final class AdaptionCommand {
 
     private static int shed(CommandContext<CommandSourceStack> ctx, ServerPlayer target,
                             String concept) {
-        Component truncated = truncationHint(concept);
-        if (truncated != null) {
-            ctx.getSource().sendFailure(truncated);
-            return 0;
-        }
         Shedding.Refusal refusal = Shedding.shed(target, AdaptionEvents.dataOf(target), concept);
         if (refusal != Shedding.Refusal.OK) {
             ctx.getSource().sendFailure(Component.translatable(
@@ -438,11 +879,6 @@ public final class AdaptionCommand {
 
     private static int ungrant(CommandContext<CommandSourceStack> ctx, ServerPlayer target,
                                String concept) {
-        Component truncated = truncationHint(concept);
-        if (truncated != null) {
-            ctx.getSource().sendFailure(truncated);
-            return 0;
-        }
         if (!AdaptionEvents.debugUngrant(target, concept)) {
             ctx.getSource().sendFailure(Component.translatable("adaptionwheel.cmd.ungrant_absent",
                     concept, target.getName()));
@@ -451,17 +887,6 @@ public final class AdaptionCommand {
         ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.ungrant_done",
                 concept, target.getName()), true);
         return 1;
-    }
-
-    private static void reportUnknownConcept(CommandContext<CommandSourceStack> ctx, String concept) {
-        ctx.getSource().sendFailure(Component.translatable("adaptionwheel.cmd.unknown_concept", concept));
-        List<String> near = nearMatches(concept);
-        if (!near.isEmpty()) {
-            ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.did_you_mean",
-                    String.join(", ", near)), false);
-        } else {
-            ctx.getSource().sendSuccess(() -> Component.translatable("adaptionwheel.cmd.use_registry"), false);
-        }
     }
 
     @Nullable
@@ -489,20 +914,6 @@ public final class AdaptionCommand {
         return out;
     }
 
-    private static List<String> nearMatches(String needle) {
-        String lower = needle.toLowerCase(Locale.ROOT);
-        List<String> hits = new ArrayList<>();
-        for (AdaptationDefinition def : AdaptationRegistry.allDefinitions()) {
-            if (def.concept().toLowerCase(Locale.ROOT).contains(lower)) {
-                hits.add(def.concept());
-                if (hits.size() >= 8) {
-                    break;
-                }
-            }
-        }
-        return hits;
-    }
-
     private static boolean isPlausibleConcept(String concept) {
         if (AdaptationRegistry.isRegistered(concept)) {
             return true;
@@ -514,11 +925,6 @@ public final class AdaptionCommand {
         }
         return concept.equals(Concepts.SELF_DAMAGE) || concept.equals(Concepts.ADVERSITY);
     }
-
-    private static final String[] DYNAMIC_PREFIXES = {
-            "Type_", "Env_", "Debuff_", "Contact_", "Offense_", "Drop_NPC_", "Existence_",
-            "Mutation_", "Move_", "Percep_", "Mine_", "Combat_", "Fist_", "Dimension_"
-    };
 
     private static int analyze(CommandContext<CommandSourceStack> ctx, ServerPlayer target, String concept) {
         PlayerAdaption data = AdaptionEvents.dataOf(target);
@@ -721,7 +1127,7 @@ public final class AdaptionCommand {
         if (itemId == null) {
             int mobs = AltarOfferings.allMobs(server).size();
             source.sendSuccess(() -> Component.literal(mobs
-                    + " mobs have loot here. /adaptionwheel debug altar <item> for one item."), false);
+                    + " mobs have loot here. /aw debug altar <item> for one item."), false);
             return mobs;
         }
         ResourceLocation id = ResourceLocation.tryParse(itemId);
@@ -759,5 +1165,28 @@ public final class AdaptionCommand {
                     .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(def.domain().getColor()))), false);
         }
         return all.size();
+    }
+
+    /** What may follow a concept selector. */
+    private enum Tail {
+        /** Nothing: the selector is the last token. */
+        NONE,
+        /** An optional {@code <target>} player. */
+        TARGET,
+        /** An optional {@code <target>} player and an optional {@code level <level>} tail. */
+        TARGET_AND_LEVEL
+    }
+
+    @FunctionalInterface
+    private interface ConceptExtractor {
+
+        String extract(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException;
+    }
+
+    @FunctionalInterface
+    private interface ConceptRunner {
+
+        int run(CommandContext<CommandSourceStack> ctx, ServerPlayer target, String concept, int level)
+                throws CommandSyntaxException;
     }
 }

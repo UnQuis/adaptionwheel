@@ -49,6 +49,7 @@ public final class ConfigMigration {
         var value = AdaptionConfig.DEFENSE_LV8_IFRAMES_TICKS;
         var done = AdaptionConfig.LV8_IFRAMES_MIGRATION_DONE;
         if (value == null || done == null || done.get()) {
+            migrateFullImmunityOff();
             return;
         }
         int stored = value.get();
@@ -56,6 +57,7 @@ public final class ConfigMigration {
         done.set(true);
         if (corrected == stored) {
             done.save();
+            migrateFullImmunityOff();
             return;
         }
         value.set(corrected);
@@ -66,5 +68,34 @@ public final class ConfigMigration {
                         + " attack interval. Corrected to {} in your config file. Set it yourself if"
                         + " you want a different window, or 0 to disable the Lv8 i-frames entirely.",
                 stored, corrected);
+        migrateFullImmunityOff();
+    }
+
+    /**
+     * Turns off the maxed-immunity capstone once for configs written while it was the default.
+     *
+     * <p>It shipped on and had to be withdrawn: a completed {@code Type_MOB} made the wearer
+     * absolutely immune to every mob, which in turn froze every {@code Contact_<mob>} ladder --
+     * the very analysis that is supposed to be learned by being hit. The always-on exceptions
+     * ({@code Contact_}, {@code PROJECTILE}, {@code OTHER}) live in code, so this only needs to
+     * correct the stored value; a player who wants the old behaviour can set it back to true and
+     * the flag keeps this from touching it again.
+     */
+    private static void migrateFullImmunityOff() {
+        var immunity = AdaptionConfig.FULL_IMMUNITY_AT_MAX;
+        var done = AdaptionConfig.FULL_IMMUNITY_MIGRATION_DONE;
+        if (immunity == null || done == null || done.get() || !immunity.get()) {
+            return;
+        }
+        immunity.set(false);
+        immunity.save();
+        done.set(true);
+        done.save();
+        LOGGER.warn(
+                "fullImmunityAtMax was true, the value shipped before a maxed Mob Attacks was found"
+                        + " to make the wearer absolutely immune to every mob, which froze the"
+                        + " Contact_<mob> ladders. Corrected to false in your config file: level 8"
+                        + " now ends at the reduction table (60 %) plus the short Lv8 i-frames. Set"
+                        + " fullImmunityAtMax back to true yourself if you want the old capstone.");
     }
 }

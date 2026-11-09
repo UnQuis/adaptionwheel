@@ -70,6 +70,7 @@ import ru.adaptionwheel.network.TaskProgressPayload;
 import ru.adaptionwheel.sound.ModSounds;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -258,18 +259,68 @@ public class AdaptionEvents {
         if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
             return false;
         }
-        if (source.getDirectEntity() instanceof LivingEntity attacker) {
-            String mobPath = entityPath(attacker.getType());
-            if (data.levelOrZero(Concepts.contact(mobPath)) >= PlayerAdaption.MAX_LEVEL) {
-                return true;
-            }
+        if (contactImmunityApplies(data, source)) {
+            return true;
         }
         switch (category) {
-            case FALL, STARVE, DROWN, SUFFOCATE, VOID, CONTACT, FIRE -> {
+            case FALL, STARVE, DROWN, FIRE, SUFFOCATE, VOID, CONTACT -> {
                 return false;
             }
             default -> {
             }
+        }
+        return data.levelOrZero(Concepts.type(category)) >= PlayerAdaption.MAX_LEVEL;
+    }
+
+    /**
+     * True when a completed {@code Contact_<mob>} adaptation makes this hit harmless.
+     *
+     * <p>A completed contact ladder is ALWAYS total immunity, independent of
+     * {@code fullImmunityAtMax}: the old capstone made a maxed {@code Type_MOB} absolute, which
+     * stopped every mob from ever landing a hit and therefore froze the {@code Contact_<mob>}
+     * ladders that are trained by being hit. Contact itself has no such side effect, so it keeps
+     * the hard promise. The {@code contactDefense.immunityLevel} knob still offers an EARLIER
+     * cutoff; 0 means "only the completed ladder".
+     *
+     * <p>Public so the boundaries can be pinned by a gametest without a mock player.
+     */
+    public static boolean contactImmunityApplies(PlayerAdaption data, DamageSource source) {
+        if (data == null || source == null) {
+            return false;
+        }
+        if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            return false;
+        }
+        if (!(source.getDirectEntity() instanceof LivingEntity attacker)) {
+            return false;
+        }
+        int contactLevel = data.levelOrZero(Concepts.contact(entityPath(attacker.getType())));
+        if (contactLevel >= PlayerAdaption.MAX_LEVEL) {
+            return true;
+        }
+        int cutoff = AdaptionConfig.CONTACT_IMMUNITY_LEVEL.get();
+        return cutoff > 0 && contactLevel >= cutoff;
+    }
+
+    /**
+     * True when the completed adaptation of a category that is safe to make absolute is maxed.
+     *
+     * <p>Only {@link #TOTAL_IMMUNITY_CATEGORIES} answer here. {@code PROJECTILE} and {@code OTHER}
+     * cannot stall a training ladder -- a projectile is not a direct attacker, and {@code OTHER} is
+     * the residue no category claims -- so their level eight stays total immunity even with
+     * {@code fullImmunityAtMax} off.
+     *
+     * <p>Public so the boundaries can be pinned by a gametest without a mock player.
+     */
+    public static boolean categoryCapstoneApplies(PlayerAdaption data, AdaptionCategory category, DamageSource source) {
+        if (data == null || category == null || source == null) {
+            return false;
+        }
+        if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            return false;
+        }
+        if (!TOTAL_IMMUNITY_CATEGORIES.contains(category)) {
+            return false;
         }
         return data.levelOrZero(Concepts.type(category)) >= PlayerAdaption.MAX_LEVEL;
     }
@@ -404,22 +455,23 @@ public class AdaptionEvents {
             event.setCanceled(true); return;
         }
 
-        int immunityLevel = AdaptionConfig.CONTACT_IMMUNITY_LEVEL.get();
-        if (immunityLevel > 0) {
-            Entity direct = source.getDirectEntity();
-            if (direct instanceof LivingEntity livingDirect) {
-                String mobPath = entityPath(livingDirect.getType());
-                int contactLevel = data.levelOrZero(Concepts.contact(mobPath));
-                if (contactLevel >= immunityLevel) {
-                    event.setCanceled(true); return;
-                }
-            }
-        }
-
         String adaptedBoss = adaptedExistenceTarget(data, source);
         if (adaptedBoss != null) {
             reflectAttack(player, source.getDirectEntity() != null ? source.getDirectEntity() : source.getEntity(),
                     event.getContainer().getNewDamage());
+            event.setCanceled(true);
+            return;
+        }
+
+        // Both of these come AFTER the existence reflection, for the same reason the config-gated
+        // check below is last: a hit that is about to be reflected already deals the player no
+        // damage, and cancelling it first would silently remove the only offence an existence
+        // adaptation has.
+        if (contactImmunityApplies(data, source)) {
+            event.setCanceled(true);
+            return;
+        }
+        if (categoryCapstoneApplies(data, category, source)) {
             event.setCanceled(true);
             return;
         }
@@ -751,6 +803,18 @@ public class AdaptionEvents {
             player.invulnerableTime = Math.max(player.invulnerableTime, reflectIFrames);
         }
     }
+
+    /**
+     * Categories whose completed adaptation is ALWAYS total immunity, whatever the
+     * {@code fullImmunityAtMax} switch says.
+     *
+     * <p>These two are the ones that cannot freeze a training ladder: a projectile is not a direct
+     * living attacker, so it never trained {@code Contact_<mob>} in the first place, and
+     * {@code OTHER} is the bucket for everything no category claims. Making them absolute was the
+     * narrow half of the old capstone that had no downside.
+     */
+    private static final Set<AdaptionCategory> TOTAL_IMMUNITY_CATEGORIES =
+            EnumSet.of(AdaptionCategory.PROJECTILE, AdaptionCategory.OTHER);
 
     private static final Set<UUID> REFLECTING = new HashSet<>();
 
@@ -1799,31 +1863,10 @@ public class AdaptionEvents {
         if (data.active(Concepts.ENV_LAVA) && player.isInLava()) {
             player.clearFire();
         }
+        int hungerFloor = AdaptionConfig.STARVE_HUNGER_FLOOR.get();
         if (data.isEnabled(Concepts.ENV_STARVE) && data.active(Concepts.ENV_STARVE)
-                && player.tickCount % 20 == 0) {
-            player.getFoodData().setFoodLevel(20);
-            player.getFoodData().setSaturation(20f);
-            resetExhaustion(player.getFoodData());
-        }
-    }
-
-    private static final java.lang.reflect.Field EXHAUSTION_FIELD;
-    static {
-        java.lang.reflect.Field f = null;
-        try {
-            f = net.minecraft.world.food.FoodData.class.getDeclaredField("exhaustionLevel");
-            f.setAccessible(true);
-        } catch (NoSuchFieldException ignored) {
-        }
-        EXHAUSTION_FIELD = f;
-    }
-
-    private static void resetExhaustion(net.minecraft.world.food.FoodData foodData) {
-        if (EXHAUSTION_FIELD != null) {
-            try {
-                EXHAUSTION_FIELD.setFloat(foodData, 0f);
-            } catch (IllegalAccessException ignored) {
-            }
+                && hungerFloor > 0 && player.getFoodData().getFoodLevel() < hungerFloor) {
+            player.getFoodData().setFoodLevel(hungerFloor);
         }
     }
 

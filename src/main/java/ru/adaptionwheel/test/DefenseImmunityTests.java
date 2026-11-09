@@ -7,6 +7,9 @@ import net.minecraft.world.damagesource.DamageSources;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Skeleton;
 import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import ru.adaptionwheel.AdaptionWheel;
@@ -18,13 +21,15 @@ import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.server.AdaptionEvents;
 
 /**
- * Pins "full adaptation is immunity, not a 60 % discount".
+ * Pins the defence capstones: which completed adaptations are immunity, and which are not.
  *
- * <p>The leveled defence used to end at the reduction table: level eight of {@code Type_Magic}
- * took 60 % off a magic hit and that was the whole promise. The one-time {@code Env_*} adaptations
- * were already full immunity, so the mod had two different meanings of "adapted" depending on
- * which family the phenomenon belonged to. Max level now cancels the hit outright, and these tests
- * pin the boundaries and the three deliberate holes in it.
+ * <p>A maxed {@code Type_*} used to be nothing but 60 % off, so "fully adapted" and "half adapted"
+ * were the same promise with a bigger number. The first fix was to cancel every maxed hit outright,
+ * but that had to be withdrawn: a completed {@code Type_MOB} made the wearer absolutely immune to
+ * every mob, which in turn froze every {@code Contact_<mob>} ladder, because the contact family is
+ * trained by being hit. The capstone is therefore <b>off by default</b>
+ * ({@code defenseScaling.fullImmunityAtMax}) and the always-on immunities are the ones that cannot
+ * starve a ladder: a completed {@code Contact_<mob>}, {@code Type_PROJECTILE} and {@code Type_OTHER}.
  *
  * <p>Two traps this file exists to keep closed:
  * <ul>
@@ -32,9 +37,7 @@ import ru.adaptionwheel.server.AdaptionEvents;
  *       concepts live in {@code adapted} and are read with {@code active()}. Fire is a one-time
  *       {@code Env_Fire} adaptation, so its immunity must be asked for with {@code active()}, while
  *       a {@code Type_*} immunity is asked for with {@code levelOrZero()}. Mixing the two is how a
- *       completed adaptation silently keeps taking damage -- the {@code active(Type_FIRE)} arm was
- *       correct when fire was one-time and only looked like the accessor trap after the concept was
- *       renamed.</li>
+ *       completed adaptation silently keeps taking damage.</li>
  *   <li>Lava is not fire. {@code Env_Fire} is trained by fire ticks and fireballs, {@code Env_Lava}
  *       by standing in lava, and adapting to one must not grant the other.</li>
  * </ul>
@@ -44,10 +47,21 @@ import ru.adaptionwheel.server.AdaptionEvents;
 public class DefenseImmunityTests {
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void fullImmunityIsOnByDefault(GameTestHelper helper) {
-        helper.assertTrue(AdaptionConfig.FULL_IMMUNITY_AT_MAX.get(),
-                "full adaptation must default to immunity; the reduction table is the road there,"
-                        + " not the destination");
+    public static void fullImmunityDefaultsOff(GameTestHelper helper) {
+        helper.assertFalse(AdaptionConfig.FULL_IMMUNITY_AT_MAX.get(),
+                "a maxed Type_MOB used to nullify every mob hit, which froze the Contact_<mob>"
+                        + " ladders; level 8 must default to the reduction table, and the old"
+                        + " capstone stays available behind the switch");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void levelEightEndsAtTheReductionTable(GameTestHelper helper) {
+        helper.assertTrue(AdaptionConfig.defenseReduction(PlayerAdaption.MAX_LEVEL) == 60.0,
+                "the shipped reduction table must end at 60 % on level 8; it is the final state of"
+                        + " a Type_* ladder now");
+        helper.assertTrue(AdaptionConfig.contactProtection(PlayerAdaption.MAX_LEVEL) == 60.0,
+                "a maxed Contact_<mob> must land on the same final reduction");
         helper.succeed();
     }
 
@@ -186,6 +200,84 @@ public class DefenseImmunityTests {
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aMaxedContactIsImmuneWithoutTheCapstone(GameTestHelper helper) {
+        // The contact family is trained by being hit, so making it immune at level 8 cannot starve
+        // its own ladder: the ladder is already finished by then. It is therefore the one leveled
+        // family that keeps its hard immunity while the generic capstone is switched off.
+        helper.assertFalse(AdaptionConfig.FULL_IMMUNITY_AT_MAX.get(),
+                "this test pins the shipped default; with the capstone on, isMaxedImmunity tests apply");
+        PlayerAdaption data = new PlayerAdaption();
+        DamageSources sources = helper.getLevel().damageSources();
+        Zombie zombie = new Zombie(helper.getLevel());
+        data.levels.put(Concepts.contact("minecraft:zombie"), PlayerAdaption.MAX_LEVEL);
+        DamageSource zombieHit = sources.mobAttack(zombie);
+
+        helper.assertTrue(AdaptionEvents.contactImmunityApplies(data, zombieHit),
+                "a completed Contact_minecraft:zombie must make the zombie unable to hurt the"
+                        + " wearer while the capstone switch is off");
+        helper.assertTrue(AdaptionEvents.isMaxedImmunity(data, AdaptionCategory.match(zombieHit), zombieHit),
+                "the capstone path must answer the same as the always-on path for that mob");
+
+        data.levels.put(Concepts.contact("minecraft:zombie"), PlayerAdaption.MAX_LEVEL - 1);
+        helper.assertFalse(AdaptionEvents.contactImmunityApplies(data, zombieHit),
+                "level 7 is still on the contact protection table; immunity belongs to the"
+                        + " completed rung");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void maxedProjectilesAreTotallyImmune(GameTestHelper helper) {
+        helper.assertFalse(AdaptionConfig.FULL_IMMUNITY_AT_MAX.get(),
+                "this test pins the shipped default; with the capstone on, the isMaxedImmunity tests apply");
+        PlayerAdaption data = new PlayerAdaption();
+        DamageSources sources = helper.getLevel().damageSources();
+        Arrow arrow = new Arrow(EntityType.ARROW, helper.getLevel());
+        DamageSource arrowHit = sources.arrow(arrow, null);
+        String concept = Concepts.type(AdaptionCategory.PROJECTILE);
+
+        helper.assertTrue(AdaptionCategory.match(arrowHit) == AdaptionCategory.PROJECTILE,
+                "an arrow must match the Projectiles ladder, got " + AdaptionCategory.match(arrowHit));
+
+        data.levels.put(concept, PlayerAdaption.MAX_LEVEL - 1);
+        helper.assertFalse(AdaptionEvents.categoryCapstoneApplies(data, AdaptionCategory.PROJECTILE, arrowHit),
+                "level 7 is still on the reduction table; immunity belongs to the completed rung");
+
+        data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
+        helper.assertTrue(AdaptionEvents.categoryCapstoneApplies(data, AdaptionCategory.PROJECTILE, arrowHit),
+                "a completed Projectiles adaptation must make the wearer immune to arrows while"
+                        + " the capstone switch is off");
+        helper.assertTrue(AdaptionEvents.isMaxedImmunity(data, AdaptionCategory.match(arrowHit), arrowHit),
+                "the capstone path must answer the same for a completed projectile ladder");
+
+        data.toggleEnabled(concept);
+        helper.assertFalse(AdaptionEvents.categoryCapstoneApplies(data, AdaptionCategory.PROJECTILE, arrowHit),
+                "switching the adaptation off in the panel must switch its immunity off too");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void maxedMiscellaneousIsTotallyImmune(GameTestHelper helper) {
+        PlayerAdaption data = new PlayerAdaption();
+        DamageSources sources = helper.getLevel().damageSources();
+        DamageSource generic = sources.generic();
+        String concept = Concepts.type(AdaptionCategory.OTHER);
+
+        helper.assertTrue(AdaptionCategory.match(generic) == AdaptionCategory.OTHER,
+                "generic damage must match the Miscellaneous ladder, got " + AdaptionCategory.match(generic));
+
+        data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
+        helper.assertTrue(AdaptionEvents.categoryCapstoneApplies(data, AdaptionCategory.OTHER, generic),
+                "a completed Miscellaneous adaptation must stop uncategorised damage while the"
+                        + " capstone switch is off");
+        helper.assertFalse(AdaptionEvents.categoryCapstoneApplies(data, AdaptionCategory.OTHER, sources.genericKill()),
+                "the /kill command bypasses invulnerability on purpose; the always-on capstone"
+                        + " must respect that too");
+        helper.assertFalse(AdaptionEvents.categoryCapstoneApplies(data, AdaptionCategory.MAGIC, sources.magic()),
+                "a maxed Miscellaneous must not spill over into a categorised damage type");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void environmentalCategoriesStayOneTime(GameTestHelper helper) {
         PlayerAdaption data = new PlayerAdaption();
         DamageSources sources = helper.getLevel().damageSources();
@@ -209,6 +301,9 @@ public class DefenseImmunityTests {
                 AdaptionEvents.isMaxedImmunity(data, AdaptionCategory.OTHER, sources.genericKill()),
                 "the /kill command bypasses invulnerability on purpose; an adaptation must not"
                         + " make an operator's kill fail");
+        helper.assertFalse(
+                AdaptionEvents.categoryCapstoneApplies(data, AdaptionCategory.OTHER, sources.genericKill()),
+                "the always-on Miscellaneous capstone must respect the same boundary");
         helper.succeed();
     }
 }
