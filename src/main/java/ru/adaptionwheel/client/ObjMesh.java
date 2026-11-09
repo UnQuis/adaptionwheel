@@ -14,21 +14,32 @@ import java.util.List;
  * entity. What is needed here is positions, a triangle list and one normal per face, which is a
  * hundred lines and no model-baking machinery at all.
  *
- * <p>Only {@code v}, {@code vt} and {@code f} are read. Object names, materials, smoothing groups
- * and the material library are ignored on purpose: the wheel ships one material, and shading is
- * derived from the geometry so it cannot depend on how Blender happened to export its normals.
+ * <p>Only {@code v}, {@code vt} and {@code f} are read, plus the vertex-colour extension Blender
+ * writes on {@code v} lines ({@code v x y z r g b}). Object names, materials, smoothing groups and
+ * the material library are ignored on purpose: shading is derived from the geometry so it cannot
+ * depend on how Blender happened to export its normals.
+ *
+ * <p><b>The vertex colour is how the artist's material survives the export.</b> The wheel is one
+ * mesh made of three Blender materials — a bright gold for the ring and the spheres, a darker
+ * bronze for the beams — and a Wavefront OBJ carries a material only by name, pointing at an MTL
+ * the game does not read. Blender's vertex-colour export bakes that difference into the mesh, so
+ * the two metals arrive as data rather than as a hardcoded list of face ranges in the renderer.
+ * A file without colours (the sword's) gets white, which multiplies to "no tint".
  *
  * <p>The mesh is <b>centred on its own bounding box</b> while it is built. The wheel spins around
  * the Y axis and hangs from a point above the player's head, so a model whose origin sits on its
- * bottom face (this one's does — it spans y 0.53..0.72) would spin and bob around a point that is
- * not its centre. Baking the offset in means the renderer does not have to know the file's origin.
+ * bottom face would spin and bob around a point that is not its centre. Baking the offset in means
+ * the renderer does not have to know the file's origin.
  *
  * <p>Instances are immutable and safe to share between the render thread and a reload listener.
  */
 public final class ObjMesh {
 
-    /** Floats per corner: x, y, z, u, v, nx, ny, nz. */
-    public static final int STRIDE = 8;
+    /** Floats per corner: x, y, z, u, v, nx, ny, nz, r, g, b. */
+    public static final int STRIDE = 11;
+
+    /** The colour of a vertex in a file that carries none — "multiply by nothing". */
+    private static final float[] WHITE = {1.0f, 1.0f, 1.0f};
 
     private final float[] corners;
     private final int faceCount;
@@ -121,6 +132,7 @@ public final class ObjMesh {
      */
     public static ObjMesh parse(BufferedReader reader) throws IOException {
         List<float[]> positions = new ArrayList<>();
+        List<float[]> colours = new ArrayList<>();
         List<float[]> uvs = new ArrayList<>();
         List<int[]> triangles = new ArrayList<>();
         int faces = 0;
@@ -137,6 +149,12 @@ public final class ObjMesh {
                 case "v" -> {
                     if (tokens.length >= 4) {
                         positions.add(new float[]{number(tokens[1]), number(tokens[2]), number(tokens[3])});
+                        // The colour extension appends r g b after the position. A fourth number
+                        // without a fifth and sixth is the homogeneous w, not a red channel, so the
+                        // test is "three extra tokens", not "more than three".
+                        colours.add(tokens.length >= 7
+                                ? new float[]{number(tokens[4]), number(tokens[5]), number(tokens[6])}
+                                : WHITE);
                     }
                 }
                 case "vt" -> {
@@ -189,6 +207,7 @@ public final class ObjMesh {
             float[] normal = faceNormal(positions.get(triangle[0]), positions.get(triangle[2]), positions.get(triangle[4]));
             for (int corner = 0; corner < 3; corner++) {
                 float[] position = positions.get(triangle[corner * 2]);
+                float[] colour = colours.get(triangle[corner * 2]);
                 int uv = triangle[corner * 2 + 1];
 
                 corners[out++] = position[0] - cx;
@@ -199,6 +218,9 @@ public final class ObjMesh {
                 corners[out++] = normal[0];
                 corners[out++] = normal[1];
                 corners[out++] = normal[2];
+                corners[out++] = colour[0];
+                corners[out++] = colour[1];
+                corners[out++] = colour[2];
             }
         }
 
@@ -261,6 +283,15 @@ public final class ObjMesh {
      * beams. A degenerate face (two identical corners, which a fan can produce at a repeated
      * vertex) gets a straight-up normal instead of a division by zero — a NaN here poisons the
      * whole vertex buffer and the wheel disappears with no error anywhere.
+     *
+     * <p><b>The corner order is the winding, and getting it wrong lights the mesh from below.</b>
+     * Blender writes faces counter-clockwise seen from outside, so {@code (a, b, c)} in that order
+     * gives the outward normal. This method used to take the corners as {@code (a, c, b)} — the
+     * fan's own order was fine, the call site swapped two of them — which negated every normal on
+     * every mesh drawn through here. Nothing failed: with a light from above and a 0.55 ambient
+     * floor the wheel simply read as a gold ring lit from underneath, which looks like a stylistic
+     * choice until you put a specular highlight on it, and then the highlight lands on the wrong
+     * side and the whole thing looks hollow.
      */
     private static float[] faceNormal(float[] a, float[] b, float[] c) {
         float ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];

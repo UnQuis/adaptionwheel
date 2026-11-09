@@ -4,6 +4,7 @@ build/
 out/
 
 # Dev runs & worlds
+run/
 runs/
 
 # IDE
@@ -39,3 +40,5 @@ run/
 Errors/
 mahoraga-wheel-spin-adaption-sound-effect-made-with-Voicemod.mp3
 
+Архив.zip
+cfr-0.152.jar

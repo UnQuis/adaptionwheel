@@ -204,6 +204,116 @@ public class ObjMeshTests {
         helper.succeed();
     }
 
+    /**
+     * The wheel's two metals are carried as vertex colours, because a Wavefront OBJ has nowhere
+     * else to put a material colour: it names an MTL file, and nothing in the game reads one.
+     *
+     * <p>The failure this pins is silent in both directions. An export without colours leaves the
+     * wheel a single flat gold — a plausible-looking wheel, just not the one that was modelled. And
+     * a parser that reads a {@code v} line's fourth number as red would turn the file's homogeneous
+     * coordinate into a colour, which is white everywhere and looks identical to the first case.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theShippedWheelCarriesItsMetalColours(GameTestHelper helper) {
+        ObjMesh mesh = shipped();
+        helper.assertTrue(mesh != null, "the wheel OBJ must load before its colours can be checked");
+        if (mesh == null) {
+            return;
+        }
+
+        float[] corners = mesh.corners();
+        int distinct = 0;
+        float firstR = corners[8], firstG = corners[9], firstB = corners[10];
+        for (int i = 0; i < corners.length; i += ObjMesh.STRIDE) {
+            float r = corners[i + 8], g = corners[i + 9], b = corners[i + 10];
+            helper.assertTrue(r >= 0.0f && r <= 1.0f && g >= 0.0f && g <= 1.0f && b >= 0.0f && b <= 1.0f,
+                    "a vertex colour outside 0..1 cannot be a multiply: " + r + ", " + g + ", " + b);
+            if (Math.abs(r - firstR) > 1.0e-3f || Math.abs(g - firstG) > 1.0e-3f || Math.abs(b - firstB) > 1.0e-3f) {
+                distinct++;
+            }
+        }
+
+        helper.assertTrue(distinct > 0,
+                "the shipped wheel must carry more than one colour -- the ring is gold and the beams "
+                        + "are bronze, and a file with one colour means the export dropped the materials");
+        helper.assertTrue(firstR < 0.99f || firstG < 0.99f || firstB < 0.99f,
+                "the first vertex is white, which is what a file without colours produces; the metal "
+                        + "is not white");
+    }
+
+    /** A file with no colours is the sword's: it must multiply to nothing, not to black. */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aFileWithoutColoursIsWhite(GameTestHelper helper) {
+        ObjMesh mesh = parse("""
+                v 0 0 0
+                v 1 0 0
+                v 1 0 1
+                v 0 0 1
+                f 1 2 3 4
+                """);
+
+        helper.assertTrue(mesh != null, "a plain quad must parse");
+        if (mesh == null) {
+            return;
+        }
+        for (int i = 0; i < mesh.corners().length; i += ObjMesh.STRIDE) {
+            helper.assertTrue(mesh.corners()[i + 8] == 1.0f
+                            && mesh.corners()[i + 9] == 1.0f
+                            && mesh.corners()[i + 10] == 1.0f,
+                    "a corner with no colour in the file must be white, or every untextured mesh drawn "
+                            + "through this reader turns black");
+        }
+
+        helper.succeed();
+    }
+
+    /**
+     * Blender writes faces counter-clockwise seen from outside, and the renderer derives its flat
+     * normal from that winding rather than from the file's {@code vn}. Taking the corners in the
+     * wrong order negates every normal on every mesh: the wheel is then lit from below, and with a
+     * specular highlight added it glints on the underside. Nothing throws and nothing logs — it
+     * just looks like an artistic choice, which is why the convention needs a test of its own.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void faceNormalsPointOutwards(GameTestHelper helper) {
+        ObjMesh mesh = parse("""
+                v -1 -1 -1
+                v  1 -1 -1
+                v  1 -1  1
+                v -1 -1  1
+                v -1  1 -1
+                v  1  1 -1
+                v  1  1  1
+                v -1  1  1
+                f 1 2 3 4
+                f 5 8 7 6
+                f 1 5 6 2
+                f 4 3 7 8
+                f 1 4 8 5
+                f 2 6 7 3
+                """);
+
+        helper.assertTrue(mesh != null, "a cube must parse");
+        if (mesh == null) {
+            return;
+        }
+
+        float[] corners = mesh.corners();
+        for (int i = 0; i < corners.length; i += ObjMesh.STRIDE * 3) {
+            float nx = corners[i + 5], ny = corners[i + 6], nz = corners[i + 7];
+            float cx = (corners[i] + corners[i + ObjMesh.STRIDE] + corners[i + 2 * ObjMesh.STRIDE]) / 3.0f;
+            float cy = (corners[i + 1] + corners[i + 1 + ObjMesh.STRIDE] + corners[i + 1 + 2 * ObjMesh.STRIDE]) / 3.0f;
+            float cz = (corners[i + 2] + corners[i + 2 + ObjMesh.STRIDE] + corners[i + 2 + 2 * ObjMesh.STRIDE]) / 3.0f;
+            float dot = nx * cx + ny * cy + nz * cz;
+            helper.assertTrue(dot > 0.0f,
+                    "the normal of the face centred at (" + cx + ", " + cy + ", " + cz + ") points "
+                            + "towards the middle of the cube: " + dot + ". The winding is being read "
+                            + "backwards, so every mesh drawn through this reader is lit from inside.");
+        }
+
+        helper.succeed();
+    }
+
     private static ObjMesh shipped() {
         try (InputStream in = ObjMesh.class.getResourceAsStream(WHEEL_OBJ)) {
             if (in == null) {
