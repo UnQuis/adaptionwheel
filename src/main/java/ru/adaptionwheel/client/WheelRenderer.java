@@ -205,7 +205,7 @@ public class WheelRenderer {
         poseStack.scale(scale, scale, scale);
 
         if (mesh != null) {
-            drawMesh(mesh, poseStack, bufferSource, tint, packedLight, entity, height + bob, spinAngle);
+            drawMesh(mesh, poseStack, bufferSource, tint, packedLight, entity, height + bob, spinAngle, partialTick);
         } else {
             if (!fallbackLogged) {
                 fallbackLogged = true;
@@ -296,7 +296,7 @@ public class WheelRenderer {
      * way metal should. Per-corner normals are real: smooth on the re-authored spheres, flat on
      * the faceted torus and bronze beams.
      */
-    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, MultiBufferSource buffers, int tint, int packedLight, LivingEntity entity, float wheelCenterY, float spinAngle) {
+    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, MultiBufferSource buffers, int tint, int packedLight, LivingEntity entity, float wheelCenterY, float spinAngle, float partialTick) {
         VertexConsumer consumer = buffers.getBuffer(RenderType.entityCutoutNoCull(DharmaChakraModel.TEXTURE));
         PoseStack.Pose pose = poseStack.last();
 
@@ -307,25 +307,23 @@ public class WheelRenderer {
 
         Matrix3f normalMatrix = pose.normal();
 
-        // Sun/moon direction in world space. At night we flip to the moon; underground we still
-        // use the world sun direction (the lightmap takes care of darkening) so the highlight
-        // does not invent an extra light above the player's head.
-        // Sun direction in world space. getSunAngle returns radians where 0 = noon (straight up,
-        // Y+), PI/2 = sunset (sun is toward the horizon at -Z), PI = midnight (sun directly below).
-        // Vanilla uses (0, cos, -sin) for the light vector around the Z axis; the Y component is
-        // cos(angle) so at noon Y=1, at the horizon Y=0. We flip to the moon at night.
+        // Sun/moon direction in world space, from the same angle vanilla uses to draw the sun.
+        // **The axis is the part that is easy to get wrong, and it is invisible at noon.** Vanilla
+        // places the sun quad at (0, 100, 0) inside `YP(-90) * XP(getSunAngle)`, and rotating that
+        // point through the pair gives (-sin, cos, 0) — so the sun travels along **X**, and at
+        // noon (angle 0) it is straight up. A light vector of (0, cos, -sin) is 90 degrees off in
+        // azimuth: a flat disc whose faces point up hides that completely, and only the spheres
+        // show it, which is why it survived a pass of "looks fine in game".
         ClientLevel level = (ClientLevel) entity.level();
-        float celestialAngle = level.getSunAngle(1.0f);
-        float wLightX = 0.0f;
-        float wLightY = Mth.cos(celestialAngle);
-        float wLightZ = -Mth.sin(celestialAngle);
-        if (wLightY < -0.1f) {
-            wLightY = -wLightY;
-            wLightZ = -wLightZ;
-        }
-        // Renormalise after the flip/max so light direction stays unit length.
-        float lLen = (float) Math.sqrt(wLightX*wLightX + wLightY*wLightY + wLightZ*wLightZ);
-        wLightX /= lLen; wLightY /= lLen; wLightZ /= lLen;
+        float celestialAngle = level.getSunAngle(partialTick);
+        float sunY = Mth.cos(celestialAngle);
+        // Below the horizon the sun is not the light source any more; the moon is, and it sits at
+        // exactly the opposite point of the sky. Flipping the whole vector is what "the moon is up"
+        // means, and it keeps the highlight on the thing that is actually shining.
+        boolean night = sunY < 0.0f;
+        float wLightX = -Mth.sin(celestialAngle);
+        float wLightY = night ? -sunY : sunY;
+        float wLightZ = 0.0f;
 
         // View direction from wheel centre to camera, in world space.
         Vec3 eye = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
@@ -409,8 +407,10 @@ public class WheelRenderer {
                 float specR, specG, specB;
                 if (blockAmount > skyAmount + 0.15f) {
                     specR = blockWarmR; specG = blockWarmG; specB = blockWarmB;
-                } else if (wLightY < 0.25f) {
-                    // Night: pale moonlight
+                } else if (night) {
+                    // Pale moonlight. It has to be the flipped-sun flag, not an elevation test:
+                    // after the flip the light is always above the horizon, so "low" would have
+                    // meant dawn and dusk, i.e. the two moments the light is at its warmest.
                     specR = 0.70f; specG = 0.78f; specB = 1.00f;
                 } else {
                     specR = 1.00f; specG = 0.95f; specB = 0.82f;
