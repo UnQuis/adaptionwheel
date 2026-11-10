@@ -6,6 +6,9 @@ import com.mojang.logging.LogUtils;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.phys.Vec3;
+
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -18,7 +21,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
@@ -99,57 +101,28 @@ public class WheelRenderer {
     private static final int TINT_ALPHA = 0xF3;
 
     /**
-     * Light for the flat-shaded OBJ, in <b>world space</b> — above and slightly towards -X/-Z.
-     * Vanilla bakes one brightness per cube face (up 1.0, down 0.5, sides 0.8/0.6); arbitrary
-     * triangles have no face direction to look up, so the equivalent here is a fixed direction
-     * dotted with the face normal.
-     *
-     * <p>It is deliberately not model space. The wheel spins, and a model-space light would carry
-     * its own sun around with it, so the bright side would sweep across the beams once per turn and
-     * the highlight would look painted on rather than lit. The pose's normal matrix is what turns
-     * the face normal into world space; the camera rotation lives in the shader's model-view
-     * matrix, not in this pose, so the result is world-aligned.
+     * Scratch vectors reused every corner so a wheel does not allocate ~15k vectors a frame.
      */
-    private static final Vector3f LIGHT = new Vector3f(-0.30f, 0.90f, -0.30f).normalize();
-
-    /** Scratch for the transformed normal, so a wheel does not allocate 15k vectors a frame. */
     private static final Vector3f NORMAL_SCRATCH = new Vector3f();
-
-    /**
-     * Floor of the shade curve, so the underside reads as dark gold rather than as a hole.
-     *
-     * <p>It came down from 0.55 with the metal work. A high floor is what a matte object needs to
-     * stay readable, and it is exactly what a metal must not have: polished gold is mostly dark
-     * except where it catches the light, and at 0.55 the wheel looked like painted plastic with a
-     * gold tint. The specular term below is what keeps the dark side from reading as a hole now.
-     */
-    private static final float AMBIENT = 0.32f;
-
-    /**
-     * Brushed-metal highlight: Blinn-Phong, one value per face, added on top of the diffuse shade.
-     *
-     * <p>This is the part that makes the wheel read as metal rather than as a gold-coloured solid.
-     * A diffuse term alone cannot: it says which way a surface faces, never that it is <em>shiny</em>.
-     * The highlight is computed in world space from the face normal and the direction to the camera,
-     * so it sweeps around the ring as the wheel clicks round a spoke and stays put when the player
-     * turns their head — which is what a real highlight does, and the opposite of what a model-space
-     * light would do.
-     *
-     * <p>The exponent was measured on the real mesh rather than guessed: over the shipped geometry,
-     * {@code pow(dot, 8)} puts a strong glint on 6% of the faces and {@code pow(dot, 26)} on 1.8%,
-     * and at 26 the highlight mostly falls <em>between</em> facets — a sphere here is 16 segments,
-     * so neighbouring faces are 12 degrees apart and a narrow lobe lands in the gap. At 10 it reads
-     * as a few sparkles along the beams and the spheres, which is what polished metal does at this
-     * size.
-     */
-    private static final float SPEC_STRENGTH = 0.90f;
-    private static final float SPEC_POWER = 10.0f;
-
-    /** Half-vector for {@link #SPEC_STRENGTH}; rebuilt per face, never allocated. */
+    private static final Vector3f LIGHT_SCRATCH = new Vector3f();
+    private static final Vector3f VIEW_SCRATCH = new Vector3f();
     private static final Vector3f HALF_SCRATCH = new Vector3f();
 
-    /** Scratch for the eye-to-wheel direction, likewise never allocated. */
-    private static final Vector3f VIEW_SCRATCH = new Vector3f();
+    /**
+     * Metal lighting constants. The key difference from "plastic gold" is that a metal's diffuse
+     * term is dark and contrasty (polished gold is black in the shade, not middle-grey) while the
+     * specular term is a separate additive highlight in the colour of the sky / light source —
+     * NOT a multiplier on the material. That is why the earlier `bright = 1 + spec` read as
+     * glossy plastic: it lifted everything evenly instead of adding a tight bright fleck.
+     *
+     * SPEC_POWER of 48 is a narrower lobe than the previous 16 — gives a sharp pinprick glint
+     * rather than a wide glossy sheen. SPEC_STRENGTH is the peak intensity of that fleck.
+     * No ambient headlamp underground: in pure torchlight the glint follows the sun-halfvector
+     * dimmed down, which reads as torchlight catching edges rather than as even plastic shine.
+     */
+    private static final float METAL_AMBIENT = 0.18f;
+    private static final float SPEC_STRENGTH = 0.95f;
+    private static final float SPEC_POWER = 48.0f;
 
     @SubscribeEvent
     public static void registerReloadListener(RegisterClientReloadListenersEvent event) {
@@ -205,10 +178,16 @@ public class WheelRenderer {
         float time = player.level().getGameTime() + partialTick;
         float bob = Mth.sin(time * BOB_SPEED) * BOB_AMPLITUDE;
 
-        // One direction for the whole wheel, not one per face. The wheel is 1.3 blocks wide and the
-        // camera is at least a couple of blocks away, so the parallax across it is a few degrees —
-        // far below what a highlight of this size can show, and it saves a vector per corner.
-        Vector3f viewDir = viewDirection(entity, height + bob);
+        // Real light from the world: sky (sun/moon) + block (torches, glowstone, etc.) at the
+        // entity's position, so the wheel responds to night, caves, torches and beacons the way
+        // every other entity in the game does.
+        // Packed light coordinates, 4 bits block | 4 bits sky in each short. The block term is
+        // measured at the entity's feet the way every living renderer samples it; the sky term is
+        // derived from the level-dependent magic value (0..1) so darkness/bad-omen/darkness effects
+        // darken the wheel the same way they darken the entity.
+        int blockI = entity.level().getMaxLocalRawBrightness(entity.blockPosition());
+        int skyI = (int)(entity.getLightLevelDependentMagicValue() * 15.0f);
+        int packedLight = LightTexture.pack(blockI, skyI);
 
         poseStack.pushPose();
 
@@ -220,19 +199,20 @@ public class WheelRenderer {
         // LivingEntityRenderer's push — so there is nothing to cancel here. The old -bodyYaw turn
         // only looked harmless because the wheel was spinning anyway; without the spin it would
         // read as the wheel turning whenever the player turned.
-        poseStack.mulPose(Axis.YP.rotation(wheelAngle(player, adaptCount, time)));
+        float spinAngle = wheelAngle(player, adaptCount, time);
+        poseStack.mulPose(Axis.YP.rotation(spinAngle));
 
         poseStack.scale(scale, scale, scale);
 
         if (mesh != null) {
-            drawMesh(mesh, poseStack, bufferSource, tint, viewDir);
+            drawMesh(mesh, poseStack, bufferSource, tint, packedLight, entity, height + bob, spinAngle);
         } else {
             if (!fallbackLogged) {
                 fallbackLogged = true;
                 LOGGER.warn("[{}] No wheel mesh is loaded; drawing the old 25-cube model. If {} exists, "
                         + "the reload listener did not run", AdaptionWheel.MODID, WHEEL_MODEL);
             }
-            drawFallback(poseStack, bufferSource, tint);
+            drawFallback(poseStack, bufferSource, tint, packedLight);
         }
 
         poseStack.popPose();
@@ -303,14 +283,20 @@ public class WheelRenderer {
     /**
      * Pushes the OBJ's triangle soup into the entity vertex format.
      *
-     * <p>Three things multiply into one vertex colour, because the entity shader gives exactly that
-     * one channel and no custom shader is wanted: the artist's material colour (gold ring, bronze
-     * beams, carried in the mesh as vertex colours), the adaptation tint (grey at nothing adapted,
-     * warming to gold), and the shading. The texture is a neutral brushed steel that only adds
-     * grain — a gold sprite under a gold vertex colour would have been gold squared, and the
-     * material colours are the part that came out of Blender.
+     * <p>Two things multiply into the vertex colour: the artist's material (gold ring/spheres,
+     * bronze beams — baked into the mesh as per-vertex colours at export time) and the adaptation
+     * tint (grey at nothing adapted, warming to gold as the wheel fills out). The texture
+     * ({@code dharma_chakra.png}) is a neutral brushed-steel grain that adds micro-detail only —
+     * a gold sprite under a gold vertex colour would be gold squared.
+     *
+     * <p>Base lighting is the vanilla entity pipeline (diffuse from the sun/moon, sky/block
+     * lightmap from torches and night, fog). On top of that a small Blinn-Phong specular boost is
+     * multiplied into the vertex colour — using the real sun direction from the client level and
+     * the camera's view direction — so polished gold glints under torchlight and at the sun the
+     * way metal should. Per-corner normals are real: smooth on the re-authored spheres, flat on
+     * the faceted torus and bronze beams.
      */
-    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, MultiBufferSource buffers, int tint, Vector3f viewDir) {
+    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, MultiBufferSource buffers, int tint, int packedLight, LivingEntity entity, float wheelCenterY, float spinAngle) {
         VertexConsumer consumer = buffers.getBuffer(RenderType.entityCutoutNoCull(DharmaChakraModel.TEXTURE));
         PoseStack.Pose pose = poseStack.last();
 
@@ -319,72 +305,134 @@ public class WheelRenderer {
         float blue = (tint & 0xFF) / 255.0F;
         float alpha = (TINT_ALPHA & 0xFF) / 255.0F;
 
-        // The half-vector between the light and the eye is the same for every face of this wheel,
-        // because both are fixed for the frame; only the normal moves.
-        HALF_SCRATCH.set(LIGHT).add(viewDir).normalize();
-
-        // Four corners per triangle, not three: the render type's mode is QUADS, and three vertices
-        // per triangle would be grouped across triangle boundaries into slivers that leave holes in
-        // the mesh. See ObjMesh.quadCorners() — this is the one place the packing matters.
         Matrix3f normalMatrix = pose.normal();
+
+        // Sun/moon direction in world space. At night we flip to the moon; underground we still
+        // use the world sun direction (the lightmap takes care of darkening) so the highlight
+        // does not invent an extra light above the player's head.
+        // Sun direction in world space. getSunAngle returns radians where 0 = noon (straight up,
+        // Y+), PI/2 = sunset (sun is toward the horizon at -Z), PI = midnight (sun directly below).
+        // Vanilla uses (0, cos, -sin) for the light vector around the Z axis; the Y component is
+        // cos(angle) so at noon Y=1, at the horizon Y=0. We flip to the moon at night.
+        ClientLevel level = (ClientLevel) entity.level();
+        float celestialAngle = level.getSunAngle(1.0f);
+        float wLightX = 0.0f;
+        float wLightY = Mth.cos(celestialAngle);
+        float wLightZ = -Mth.sin(celestialAngle);
+        if (wLightY < -0.1f) {
+            wLightY = -wLightY;
+            wLightZ = -wLightZ;
+        }
+        // Renormalise after the flip/max so light direction stays unit length.
+        float lLen = (float) Math.sqrt(wLightX*wLightX + wLightY*wLightY + wLightZ*wLightZ);
+        wLightX /= lLen; wLightY /= lLen; wLightZ /= lLen;
+
+        // View direction from wheel centre to camera, in world space.
+        Vec3 eye = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+        float wViewX = (float)(eye.x - entity.getX());
+        float wViewY = (float)(eye.y - entity.getY() - wheelCenterY);
+        float wViewZ = (float)(eye.z - entity.getZ());
+        if (wViewX*wViewX + wViewY*wViewY + wViewZ*wViewZ < 1.0e-6f) {
+            wViewX = 0.0f; wViewY = 0.0f; wViewZ = 1.0f;
+        }
+
+        // The pose stack has rotated the mesh by +spinAngle around Y, and normalMatrix carries
+        // that rotation into the normals we feed the shader. That means every normal coming out
+        // of the mesh has been turned by +spinAngle, but the world light/view vectors have not.
+        // Rotate them by -spinAngle around Y to bring them into the same frame as the normals,
+        // otherwise N.L and the half-vector are computed between vectors in different bases and
+        // the highlight sweeps to the wrong side of the wheel.
+        float cos = Mth.cos(-spinAngle);
+        float sin = Mth.sin(-spinAngle);
+        LIGHT_SCRATCH.set(
+                wLightX * cos - wLightZ * sin,
+                wLightY,
+                wLightX * sin + wLightZ * cos).normalize();
+        float vLen = (float)Math.sqrt(wViewX*wViewX + wViewY*wViewY + wViewZ*wViewZ);
+        VIEW_SCRATCH.set(
+                (wViewX * cos - wViewZ * sin) / vLen,
+                wViewY / vLen,
+                (wViewX * sin + wViewZ * cos) / vLen);
+
+        // Half vector for Blinn-Phong, now in the rotated frame.
+        HALF_SCRATCH.set(LIGHT_SCRATCH).add(VIEW_SCRATCH).normalize();
+
+        // Extract the 0..1 sky amount from the packed light so we can dim both diffuse and
+        // specular when the sky is not contributing (caves, deep night). Block light is added
+        // to the diffuse term directly: torches tint the wheel warm the way they tint every
+        // entity in the game.
+        int blockI = LightTexture.block(packedLight);
+        int skyI = LightTexture.sky(packedLight);
+        float skyAmount = skyI / 15.0f;
+        float blockAmount = blockI / 15.0f;
+        // Block light is warm orange (torch colour ~(1.0, 0.65, 0.33)); its contribution is
+        // ambient-ish because the engine has already composited every nearby source into one
+        // brightness value and we have no direction to attach a highlight to.
+        float blockWarmR = 1.00f, blockWarmG = 0.65f, blockWarmB = 0.33f;
+
         float[] corners = mesh.quadCorners();
         for (int i = 0; i < corners.length; i += ObjMesh.STRIDE * 4) {
-            float nx = corners[i + 5];
-            float ny = corners[i + 6];
-            float nz = corners[i + 7];
-
-            // One normal for all four corners: every triangle is flat-shaded, so its corners share
-            // the face normal, and the world-space shade is therefore constant across the quad.
-            NORMAL_SCRATCH.set(nx, ny, nz).mul(normalMatrix).normalize();
-            float shade = AMBIENT + (1.0F - AMBIENT) * Math.max(0.0F, NORMAL_SCRATCH.dot(LIGHT));
-            float facing = Math.max(0.0F, NORMAL_SCRATCH.dot(HALF_SCRATCH));
-            float light = shade + SPEC_STRENGTH * (float) Math.pow(facing, SPEC_POWER);
-
             for (int corner = 0; corner < 4; corner++) {
                 int o = i + corner * ObjMesh.STRIDE;
-                // The artist's material, carried in the mesh: gold for the ring and the spheres,
-                // bronze for the beams. Multiplied by the tint, so the wheel still starts grey and
-                // warms to gold as it fills out — the metal decides the hue, the adaptation count
-                // decides how much of it there is.
                 float mr = corners[o + 8];
                 float mg = corners[o + 9];
                 float mb = corners[o + 10];
+
+                // Per-corner normal in world/pose space.
+                NORMAL_SCRATCH.set(corners[o + 5], corners[o + 6], corners[o + 7]).mul(normalMatrix);
+                if (NORMAL_SCRATCH.lengthSquared() < 1.0e-6F) {
+                    NORMAL_SCRATCH.set(0.0F, 1.0F, 0.0F);
+                } else {
+                    NORMAL_SCRATCH.normalize();
+                }
+
+                // --- DIFFUSE: low ambient floor + N·L sun term, weighted by how much sky is
+                // visible, plus a warm block-light ambient. Dark in shade = metal, not plastic.
+                float nDotL = Math.max(0.0f, NORMAL_SCRATCH.dot(LIGHT_SCRATCH));
+                float skyDiffuse = METAL_AMBIENT + (1.0f - METAL_AMBIENT) * nDotL;
+                skyDiffuse *= skyAmount;
+                float blockDiffuse = METAL_AMBIENT * blockAmount;
+
+                // Per-channel diffuse: material * tint * (skyDiffuse neutral + blockDiffuse warm).
+                float baseR = mr * red * skyDiffuse + mr * blockWarmR * blockDiffuse;
+                float baseG = mg * green * skyDiffuse + mg * blockWarmG * blockDiffuse;
+                float baseB = mb * blue * skyDiffuse + mb * blockWarmB * blockDiffuse;
+
+                // --- SPECULAR: tight Blinn-Phong fleck, additive, in the colour of the dominant
+                // light (sky white by day, moon blue-grey at night, torch warm underground).
+                // This is the critical difference from plastic: specular is NOT multiplying the
+                // diffuse term and tinting everything brighter; it is a separate bright fleck.
+                float nDotH = Math.max(0.0f, NORMAL_SCRATCH.dot(HALF_SCRATCH));
+                float spec = SPEC_STRENGTH * (float)Math.pow(nDotH, SPEC_POWER);
+                spec *= Math.max(skyAmount, blockAmount * 0.85f); // glint dies with no light
+                // Specular tints: sun = warm white, moon = cool blue, torch = same orange as diffuse
+                float specR, specG, specB;
+                if (blockAmount > skyAmount + 0.15f) {
+                    specR = blockWarmR; specG = blockWarmG; specB = blockWarmB;
+                } else if (wLightY < 0.25f) {
+                    // Night: pale moonlight
+                    specR = 0.70f; specG = 0.78f; specB = 1.00f;
+                } else {
+                    specR = 1.00f; specG = 0.95f; specB = 0.82f;
+                }
+                float cr = Math.min(1.0f, baseR + spec * specR);
+                float cg = Math.min(1.0f, baseG + spec * specG);
+                float cb = Math.min(1.0f, baseB + spec * specB);
+
                 consumer.addVertex(pose, corners[o], corners[o + 1], corners[o + 2])
-                        .setColor(mr * red * light, mg * green * light, mb * blue * light, alpha)
+                        .setColor(cr, cg, cb, alpha)
                         .setUv(corners[o + 3], corners[o + 4])
                         .setOverlay(OverlayTexture.NO_OVERLAY)
-                        .setLight(LightTexture.FULL_BRIGHT)
+                        .setLight(packedLight)
                         .setNormal(NORMAL_SCRATCH.x(), NORMAL_SCRATCH.y(), NORMAL_SCRATCH.z());
             }
         }
     }
 
-    /**
-     * Unit vector from the wheel's centre towards the camera, in world space.
-     *
-     * <p>Read off the main camera rather than derived from the pose: at {@code RenderLivingEvent.Post}
-     * the pose holds the entity's position and its own rotations, and the camera's orientation lives
-     * in the shader's model-view matrix, which is not reachable from here at all. The camera's world
-     * position is, and a highlight only needs the direction between two points.
-     */
-    private static Vector3f viewDirection(LivingEntity entity, float height) {
-        Vec3 eye = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
-        VIEW_SCRATCH.set(
-                (float) (eye.x - entity.getX()),
-                (float) (eye.y - entity.getY() - height),
-                (float) (eye.z - entity.getZ()));
-        if (VIEW_SCRATCH.lengthSquared() < 1.0e-6F) {
-            // The camera is inside the wheel: no meaningful direction, and normalizing would hand
-            // the draw loop a NaN that takes the whole mesh off the screen.
-            return VIEW_SCRATCH.set(0.0F, 0.0F, 1.0F);
-        }
-        return VIEW_SCRATCH.normalize();
-    }
-
-    private static void drawFallback(PoseStack poseStack, MultiBufferSource buffers, int tint) {
+    private static void drawFallback(PoseStack poseStack, MultiBufferSource buffers, int tint, int packedLight) {
         ModelPart rootPart = DharmaChakraModel.getBakedRoot();
         VertexConsumer consumer = buffers.getBuffer(RenderType.entityCutoutNoCull(DharmaChakraModel.TEXTURE));
-        rootPart.render(poseStack, consumer, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY,
+        rootPart.render(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,
                 tintWithAlpha(tint, TINT_ALPHA));
     }
 
