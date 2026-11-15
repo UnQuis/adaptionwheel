@@ -28,11 +28,13 @@ public record AdaptionSyncPayload(
         Map<String, Integer> existenceProgress,
         int existenceThreshold,
         boolean instabreakActive,
+        boolean instabreakUnlocked,
         int fistProgressDone,
         int fistProgressTotal,
         int combatFistDone,
         int combatFistTotal,
-        List<String> disabled
+        List<String> disabled,
+        List<String> abilities
 ) implements CustomPacketPayload {
 
     public static final Type<AdaptionSyncPayload> TYPE =
@@ -73,6 +75,7 @@ public record AdaptionSyncPayload(
                 });
                 buf.writeVarInt(p.existenceThreshold);
                 buf.writeBoolean(p.instabreakActive);
+                buf.writeBoolean(p.instabreakUnlocked);
                 buf.writeVarInt(p.fistProgressDone);
                 buf.writeVarInt(p.fistProgressTotal);
                 buf.writeVarInt(p.combatFistDone);
@@ -80,6 +83,10 @@ public record AdaptionSyncPayload(
                 buf.writeVarInt(p.disabled.size());
                 for (String concept : p.disabled) {
                     buf.writeUtf(concept);
+                }
+                buf.writeVarInt(p.abilities.size());
+                for (String id : p.abilities) {
+                    buf.writeUtf(id);
                 }
             },
             buf -> {
@@ -116,6 +123,7 @@ public record AdaptionSyncPayload(
                 }
                 int existenceThreshold = buf.readVarInt();
                 boolean instabreak = buf.readBoolean();
+                boolean instabreakUnlocked = buf.readBoolean();
                 int fistDone = buf.readVarInt();
                 int fistTotal = buf.readVarInt();
                 int combatDone = buf.readVarInt();
@@ -125,9 +133,14 @@ public record AdaptionSyncPayload(
                 for (int i = 0; i < disabledCount; i++) {
                     disabled.add(buf.readUtf());
                 }
+                List<String> abilities = new ArrayList<>();
+                int abilityCount = buf.readVarInt();
+                for (int i = 0; i < abilityCount; i++) {
+                    abilities.add(buf.readUtf());
+                }
                 return new AdaptionSyncPayload(wearing, adversity, count, advTimer, advCooldown,
                         rotation, tasks, levels, adapted, history, existenceProgress, existenceThreshold,
-                        instabreak, fistDone, fistTotal, combatDone, combatTotal, disabled);
+                        instabreak, instabreakUnlocked, fistDone, fistTotal, combatDone, combatTotal, disabled, abilities);
             }
     );
 
