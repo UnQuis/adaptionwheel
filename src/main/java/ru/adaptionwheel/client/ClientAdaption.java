@@ -94,6 +94,8 @@ public final class ClientAdaption {
         adversityTriggeredAtGameTime = Long.MIN_VALUE;
         syncedAtGameTime = currentGameTime();
         tasksSyncedAtGameTime = syncedAtGameTime;
+        ClientCooldowns.clear();
+        ClientCache.clear();
     }
 
     public static void onSync(AdaptionSyncPayload payload) {
@@ -159,6 +161,10 @@ public final class ClientAdaption {
 
     public static int levelOrZero(String concept) {
         return isEnabled(concept) ? LEVELS.getOrDefault(concept, 0) : 0;
+    }
+
+    public static boolean hasAbility(String id) {
+        return ABILITIES.contains(id);
     }
 
     public static float taskProgress(AdaptionTask task) {
