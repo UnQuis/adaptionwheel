@@ -1,12 +1,19 @@
 package ru.adaptionwheel.client;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.logging.LogUtils;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.world.phys.Vec3;
 
 import net.minecraft.client.renderer.LightTexture;
@@ -25,8 +32,10 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
+import net.neoforged.neoforge.client.event.RegisterShadersEvent;
 import net.neoforged.neoforge.client.event.RenderLivingEvent;
 import org.joml.Matrix3f;
+import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.slf4j.Logger;
 import ru.adaptionwheel.AdaptionWheel;
@@ -143,9 +152,45 @@ public class WheelRenderer {
     private static final float RIM_G = 0.85f;
     private static final float RIM_B = 0.35f;
 
+    /**
+     * The wheel's own shader: Cook-Torrance metal against an analytic environment, so the wheel
+     * actually <b>reflects</b> something. It replaces the per-corner Blinn-Phong baked into the
+     * vertex colour — that model could only add a highlight, because a vertex colour multiplies the
+     * texture and can never carry a reflected image.
+     *
+     * <p>The environment is evaluated per pixel from the reflected ray rather than sampled from the
+     * framebuffer: the wheel is drawn in the middle of the world pass, where the target it would
+     * read is the one it is writing, and that read is undefined. A sky gradient, a sun disc, a
+     * bright horizon band and two studio strips are enough to make the metal read as metal, and
+     * they follow the level's own sky colour and sun angle.
+     */
+    private static final ResourceLocation WHEEL_SHADER = ResourceLocation.fromNamespaceAndPath(
+            AdaptionWheel.MODID, "wheel_metal");
+
+    /** Null until {@link #registerShaders} has compiled it; the old CPU-lit path covers that. */
+    private static volatile ShaderInstance wheelShader;
+
+    /** One-shot, because a shader that failed to compile is otherwise silent. */
+    private static boolean shaderMissingLogged;
+
     @SubscribeEvent
     public static void registerReloadListener(RegisterClientReloadListenersEvent event) {
         event.registerReloadListener(new WheelMeshReloadListener());
+    }
+
+    @SubscribeEvent
+    public static void registerShaders(RegisterShadersEvent event) {
+        try {
+            event.registerShader(
+                    new ShaderInstance(event.getResourceProvider(), WHEEL_SHADER, DefaultVertexFormat.POSITION_TEX_COLOR_NORMAL),
+                    instance -> wheelShader = instance);
+        } catch (IOException e) {
+            // A wheel drawn with the old lighting model is worse than a reflecting one and much
+            // better than none: the fallback below is what keeps a broken driver from deleting the
+            // wheel from the game entirely.
+            LOGGER.error("[{}] Could not compile the wheel metal shader {}; the wheel will use the "
+                    + "old per-vertex lighting", AdaptionWheel.MODID, WHEEL_SHADER, e);
+        }
     }
 
     /**
@@ -224,7 +269,16 @@ public class WheelRenderer {
         poseStack.scale(scale, scale, scale);
 
         if (mesh != null) {
-            drawMesh(mesh, poseStack, bufferSource, tint, packedLight, entity, height + bob, spinAngle, partialTick);
+            if (wheelShader != null) {
+                drawMeshShader(mesh, poseStack, tint, packedLight, entity, partialTick);
+            } else {
+                if (!shaderMissingLogged) {
+                    shaderMissingLogged = true;
+                    LOGGER.warn("[{}] The wheel metal shader {} is not loaded; drawing the wheel with "
+                            + "the old per-vertex lighting", AdaptionWheel.MODID, WHEEL_SHADER);
+                }
+                drawMesh(mesh, poseStack, bufferSource, tint, packedLight, entity, height + bob, spinAngle, partialTick);
+            }
         } else {
             if (!fallbackLogged) {
                 fallbackLogged = true;
@@ -296,6 +350,120 @@ public class WheelRenderer {
 
         SpinState(int count) {
             this.count = count;
+        }
+    }
+
+    /** Roughness of the corroded metal the wheel is made of. */
+    private static final float METAL_ROUGHNESS = 0.42f;
+
+    /** A quad becomes two triangles in the same winding the QUADS path used. */
+    private static final int[] TRIANGLE_CORNERS = {0, 1, 2, 0, 2, 3};
+
+    /** The corners are already in world space, so {@code addVertex} must not transform them again. */
+    private static final Matrix4f IDENTITY = new Matrix4f();
+    private static final Vector3f POS_SCRATCH = new Vector3f();
+    private static final Vector3f SHADER_NORMAL_SCRATCH = new Vector3f();
+
+    /**
+     * Draws the wheel with {@code wheel_metal}: a Cook-Torrance metal that reflects an analytic
+     * environment, evaluated per pixel rather than baked into vertex colours.
+     *
+     * <p><b>Why an immediate draw and not a {@code RenderType}.</b> A render type batches every
+     * quad sharing it under one set of uniforms, so per-wheel values — the sun direction, the sky
+     * colour, the eye — would have to be vertex attributes. Issuing one draw per wheel lets a
+     * single program serve every player at once; a swing-sized wheel is one draw call, and the
+     * vertex buffer is rebuilt each frame because the pose (spin, bob, scale) is baked into it.
+     *
+     * <p><b>The positions are world-space and the matrix is view-projection.</b> The entity
+     * renderer's pose stack is already camera-relative (it translated by {@code entity - camera}),
+     * so the camera position has to be added back on the CPU — the shader needs a real world
+     * position to reflect the sun and the sky around. {@code WheelProj} is
+     * {@code projection * modelView} because in 1.21.1 the camera's <i>view</i> lives in the
+     * model-view matrix, not in the projection: a projection-only matrix places the wheel at
+     * unviewed world coordinates, off screen, with no error anywhere.
+     */
+    private static void drawMeshShader(ObjMesh mesh, PoseStack poseStack, int tint, int packedLight,
+                                       LivingEntity entity, float partialTick) {
+        ShaderInstance shader = wheelShader;
+        if (shader == null) {
+            return;
+        }
+
+        PoseStack.Pose pose = poseStack.last();
+        Matrix4f poseMatrix = pose.pose();
+        Matrix3f normalMatrix = pose.normal();
+
+        ClientLevel level = (ClientLevel) entity.level();
+        Vec3 eye = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+        float eyeX = (float)eye.x;
+        float eyeY = (float)eye.y;
+        float eyeZ = (float)eye.z;
+
+        // Same celestial geometry as the lit path: the sun travels along X, and the moon is the
+        // opposite point of the sky, so "night" is decided before the flip.
+        float celestialAngle = level.getSunAngle(partialTick);
+        float sunY = Mth.cos(celestialAngle);
+        boolean night = sunY < 0.0f;
+
+        float blockAmount = LightTexture.block(packedLight) / 15.0f;
+        float skyAmount = LightTexture.sky(packedLight) / 15.0f;
+        Vec3 skyColor = level.getSkyColor(eye, partialTick);
+
+        Matrix4f viewProj = new Matrix4f(RenderSystem.getProjectionMatrix())
+                .mul(RenderSystem.getModelViewMatrix());
+        shader.safeGetUniform("WheelProj").set(viewProj);
+        shader.safeGetUniform("WheelCamera").set(eyeX, eyeY, eyeZ);
+        shader.safeGetUniform("WheelSun").set(-Mth.sin(celestialAngle), night ? -sunY : sunY, 0.0f);
+        shader.safeGetUniform("WheelSky").set((float)skyColor.x, (float)skyColor.y, (float)skyColor.z, skyAmount);
+        shader.safeGetUniform("WheelParams").set(METAL_ROUGHNESS, night ? 1.0f : 0.0f, blockAmount, 1.0f);
+        float groundLight = 0.35f + 0.65f * Math.max(skyAmount, blockAmount);
+        shader.safeGetUniform("WheelGround").set(
+                0.20f * groundLight, 0.17f * groundLight, 0.13f * groundLight, 1.0f);
+
+        float red = ((tint >> 16) & 0xFF) / 255.0F;
+        float green = ((tint >> 8) & 0xFF) / 255.0F;
+        float blue = (tint & 0xFF) / 255.0F;
+        float alpha = (TINT_ALPHA & 0xFF) / 255.0F;
+
+        // The world pass leaves face culling on, and a fullscreen-style immediate draw is the
+        // classic place it silently eats geometry; the wheel's own winding is correct but this is
+        // cheap insurance and matches the cutout render type the lit path uses.
+        RenderSystem.disableCull();
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthMask(true);
+        RenderSystem.disableBlend();
+        try {
+            shader.setSampler("Sampler0",
+                    Minecraft.getInstance().getTextureManager().getTexture(DharmaChakraModel.TEXTURE).getId());
+            shader.apply();
+
+            BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLES,
+                    DefaultVertexFormat.POSITION_TEX_COLOR_NORMAL);
+            float[] corners = mesh.quadCorners();
+            for (int i = 0; i < corners.length; i += ObjMesh.STRIDE * 4) {
+                for (int corner : TRIANGLE_CORNERS) {
+                    int o = i + corner * ObjMesh.STRIDE;
+                    POS_SCRATCH.set(corners[o], corners[o + 1], corners[o + 2]);
+                    poseMatrix.transformPosition(POS_SCRATCH);
+                    POS_SCRATCH.add(eyeX, eyeY, eyeZ);
+
+                    SHADER_NORMAL_SCRATCH.set(corners[o + 5], corners[o + 6], corners[o + 7]).mul(normalMatrix);
+                    if (SHADER_NORMAL_SCRATCH.lengthSquared() < 1.0e-6F) {
+                        SHADER_NORMAL_SCRATCH.set(0.0F, 1.0F, 0.0F);
+                    } else {
+                        SHADER_NORMAL_SCRATCH.normalize();
+                    }
+
+                    buffer.addVertex(IDENTITY, POS_SCRATCH.x, POS_SCRATCH.y, POS_SCRATCH.z)
+                            .setUv(corners[o + 3], corners[o + 4])
+                            .setColor(red, green, blue, alpha)
+                            .setNormal(SHADER_NORMAL_SCRATCH.x(), SHADER_NORMAL_SCRATCH.y(), SHADER_NORMAL_SCRATCH.z());
+                }
+            }
+            BufferUploader.draw(buffer.buildOrThrow());
+        } finally {
+            shader.clear();
+            RenderSystem.enableCull();
         }
     }
 
