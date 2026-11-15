@@ -14,7 +14,7 @@ public abstract class CachePanelClickMixin {
 
     @Inject(method = "hasClickedOutside", at = @At("HEAD"), cancellable = true)
     private void adaptionwheel$keepCacheInside(double mouseX, double mouseY, int guiLeft, int guiTop,
-                                               int button, CallbackInfoReturnable<Boolean> cir) {
+                                               CallbackInfoReturnable<Boolean> cir) {
         if (ru.adaptionwheel.client.CacheOverlay.blocksOutsideClick(
                 (AbstractContainerScreen<?>) (Object) this, mouseX, mouseY)) {
             cir.setReturnValue(false);
