@@ -187,7 +187,7 @@ public final class CacheOverlay {
         // 26.3 reports left click as button 1; server click semantics expect 0=left, 1=right.
         if (button == 1 || button == 0) {
             int serverButton = (button == 1) ? 0 : 1;
-            CacheClickPayload.send(index, serverButton, Screen.hasShiftDown());
+            CacheClickPayload.send(index, serverButton, Minecraft.getInstance().hasShiftDown());
         }
         event.setCanceled(true);
     }

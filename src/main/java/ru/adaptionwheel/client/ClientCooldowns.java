@@ -1,6 +1,6 @@
 package ru.adaptionwheel.client;
 
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.util.Mth;
 import ru.adaptionwheel.network.AbilityCooldownPayload;
 

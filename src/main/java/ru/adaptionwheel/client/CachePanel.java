@@ -1,6 +1,7 @@
 package ru.adaptionwheel.client;
 
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 import ru.adaptionwheel.server.CacheService;
 
@@ -43,7 +44,7 @@ public final class CachePanel {
         graphics.fill(x + 1, bottom, right + 1, bottom + 1, SHADOW);
 
         for (int index = 0; index < CacheService.SLOTS; index++) {
-            graphics.blitSprite(SLOT_SPRITE,
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, SLOT_SPRITE,
                     x + CacheService.slotX(index % CacheService.COLUMNS) - 1,
                     y + CacheService.CACHE_TOP_PAD
                             + (index / CacheService.COLUMNS) * CacheService.SLOT - 1,

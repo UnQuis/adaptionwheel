@@ -11,7 +11,13 @@ import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.network.OpenCachePayload;
 
 /**
- * Routes the player's normal inventory key into the adapted inventory (26.3).
+ * Routes the player's normal inventory key into the adapted inventory.
+ *
+ * <p>The replacement happens here rather than in a new key mapping because the request is
+ * specifically that {@code E} opens the inventory with the extra slots: a second key would leave
+ * the normal inventory one keystroke away and the cache looking like a separate screen again. The
+ * server still owns the menu, so this only cancels the client-side vanilla screen and asks for the
+ * cache menu; the client never fabricates slots locally.
  */
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class CacheInventoryHook {
@@ -28,11 +34,9 @@ public final class CacheInventoryHook {
         if (minecraft.player == null || minecraft.gameMode == null) {
             return;
         }
-        // Avoid racing Curios' own screen transitions.
-        if (CuriosCompat.isCurioScreen(minecraft.screen)) {
-            return;
-        }
-        if (minecraft.gameMode.hasInfiniteItems()) {
+        // Creative's inventory is a different screen with item tabs; replacing it would remove
+        // those. Creative players can still open the cache with V.
+        if (minecraft.player != null && minecraft.player.hasInfiniteMaterials()) {
             return;
         }
         if (!ClientAdaption.active(Concepts.ENV_INVENTORY)) {
