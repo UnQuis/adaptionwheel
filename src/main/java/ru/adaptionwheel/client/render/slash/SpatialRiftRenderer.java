@@ -44,11 +44,24 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile, S
     @Override
     public void submit(SlashRenderState state, PoseStack poseStack, SubmitNodeCollector collector,
                        CameraRenderState camera) {
+        Vec3 motion = state.motion;
         float age = state.age;
         float lifeRatio = Mth.clamp(age / SpatialRiftProjectile.LIFETIME_TICKS, 0f, 1f);
         float fade = lifeRatio > 0.82f ? Mth.clamp((1f - lifeRatio) / 0.18f, 0f, 1f) : 1f;
 
-        FlyingSlashRenderer.render(poseStack, collector, state.motion, state.roll, age,
+        Vec3 dir = motion.lengthSqr() < 1.0e-8 ? new Vec3(0, 0, 1) : motion.normalize();
+        for (int i = 2; i >= 1; i--) {
+            poseStack.pushPose();
+            Vec3 offset = dir.scale(-i * 0.75);
+            poseStack.translate(offset.x, offset.y, offset.z);
+            float echoAge = Math.max(0f, age - i * 1.25f);
+            float echoFade = fade * (i == 1 ? 0.26f : 0.11f);
+            FlyingSlashRenderer.render(poseStack, collector, motion, state.roll + i * 0.045f, echoAge,
+                    SPAN * 0.92f, GLOW_HALF * 0.78f, CORE_HALF * 0.62f, TINT_VIOLET, GLOW_VIOLET, echoFade);
+            poseStack.popPose();
+        }
+
+        FlyingSlashRenderer.render(poseStack, collector, motion, state.roll, age,
                 SPAN, GLOW_HALF, CORE_HALF, TINT_VIOLET, GLOW_VIOLET, fade);
         super.submit(state, poseStack, collector, camera);
     }
