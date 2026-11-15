@@ -60,15 +60,13 @@ vec3 aces(vec3 x) {
 
 vec3 fakeEnvironment(vec3 R, float roughness, vec3 baseSky, vec3 baseGround) {
     float up = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 sky = mix(baseGround, baseSky, smoothstep(0.25, 0.9, up));
-    vec3 horizon = mix(baseGround, vec3(1.0, 0.97, 0.92), 0.6);
-    vec3 env = mix(horizon, sky, smoothstep(0.35, 0.75, up));
-    float specBand = pow(max(R.y, 0.0), mix(14.0, 2.5, roughness));
-    env += vec3(1.0, 0.95, 0.85) * specBand * (0.45 * (1.0 - roughness * 0.6));
-    float strip = pow(abs(sin(atan(R.z, R.x) * 3.0 + R.y * 2.0)), mix(18.0, 4.0, roughness));
-    env += vec3(0.9, 0.95, 1.0) * strip * 0.08 * (1.0 - roughness);
-    vec3 avg = mix(baseGround, baseSky, 0.45);
-    return mix(env, avg, clamp(roughness * 0.7, 0.0, 0.85));
+    vec3 sky = mix(baseGround, baseSky, smoothstep(0.2, 0.95, up));
+    vec3 horizon = mix(baseGround, baseSky * 0.9 + vec3(0.15, 0.14, 0.12), 0.5);
+    vec3 env = mix(horizon, sky, smoothstep(0.3, 0.8, up));
+    float specBand = pow(max(R.y, 0.0), mix(10.0, 3.0, roughness));
+    env += baseSky * specBand * (0.18 * (1.0 - roughness * 0.5));
+    vec3 avg = mix(baseGround, baseSky, 0.4);
+    return mix(env, avg, clamp(roughness * 0.55, 0.0, 0.8));
 }
 
 vec4 calculateFinalColor(vec4 color, vec3 N, vec3 V) {
@@ -76,10 +74,10 @@ vec4 calculateFinalColor(vec4 color, vec3 N, vec3 V) {
     color.rgb = mix(overlayColor.rgb, color.rgb, overlayColor.a);
     #endif
 
-    // PBR-ish metal shading in view space (ported/adapted from 1.21.1 wheel_metal concept)
     vec3 albedo = color.rgb;
-    float roughness = 0.42;
-    float metallic = 1.0;
+    // Preserve texture/material detail; avoid washing out to white
+    float roughness = 0.48;
+    float metallic = 0.92;
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
     vec3 L = normalize(vec3(0.35, 0.85, 0.45));
@@ -96,29 +94,31 @@ vec4 calculateFinalColor(vec4 color, vec3 N, vec3 V) {
     vec3 kS = F;
     vec3 kD = (1.0 - kS) * (1.0 - metallic);
 
-    vec3 radiance = vec3(1.05, 1.0, 0.95);
-    vec3 Lo = (kD * albedo / 3.14159265 + specular) * radiance * NoL;
-
-    float skyAmt = clamp(lightMapColor.r * 0.9 + 0.1, 0.1, 1.0);
-    vec3 skyCol = mix(vec3(0.18, 0.2, 0.28), vec3(0.7, 0.82, 1.0), skyAmt);
-    vec3 groundCol = vec3(0.16, 0.15, 0.13);
-    vec3 R = reflect(-V, N);
-    vec3 env = fakeEnvironment(R, roughness, skyCol, groundCol);
-    vec3 ambientSpec = env * fresnelSchlick(F0, NoV) * (0.9 + 0.6 * (1.0 - roughness));
-    vec3 ambientDiff = albedo * skyCol * 0.12 * (1.0 - metallic);
-
-    float rim = pow(1.0 - NoV, 3.0);
-    vec3 rimCol = vec3(1.0, 0.85, 0.35) * rim * 0.35;
-
-    vec3 shaded = Lo + ambientDiff + ambientSpec + rimCol;
+    vec3 radiance = vec3(0.95, 0.92, 0.86);
+    vec3 Lo = (kD * albedo / 3.14159265 + specular * 0.8) * radiance * NoL;
 
     #ifndef EMISSIVE
-    shaded *= mix(vec3(0.55), vec3(1.0), clamp(lightMapColor.rgb, 0.0, 1.0));
+    vec3 lm = clamp(lightMapColor.rgb, 0.0, 1.0);
     #else
-    shaded *= vec3(1.0);
+    vec3 lm = vec3(1.0);
     #endif
+    float skyAmt = clamp(lm.r * 0.85 + lm.g * 0.15, 0.15, 1.0);
+    vec3 skyCol = mix(vec3(0.22, 0.24, 0.30), vec3(0.62, 0.72, 0.88), skyAmt);
+    vec3 groundCol = vec3(0.14, 0.13, 0.12);
+    vec3 R = reflect(-V, N);
+    vec3 env = fakeEnvironment(R, roughness, skyCol, groundCol);
+    vec3 ambientSpec = env * fresnelSchlick(F0, NoV) * (0.55 + 0.35 * (1.0 - roughness));
+    vec3 ambientDiff = albedo * skyCol * 0.18 * (1.0 - metallic);
 
-    shaded = aces(shaded * 1.15);
+    float rim = pow(1.0 - NoV, 3.0);
+    vec3 rimCol = mix(albedo, vec3(1.0, 0.85, 0.45), 0.35) * rim * 0.18;
+
+    vec3 shaded = Lo + ambientDiff + ambientSpec + rimCol;
+    // keep texture readable: blend with lit albedo base
+    vec3 baseLit = albedo * mix(vec3(0.45), vec3(1.0), lm);
+    shaded = mix(baseLit, shaded, 0.55);
+
+    shaded = aces(shaded * 1.02);
     color = vec4(shaded, color.a);
 
     #ifdef OIT_ACCUMULATE
@@ -155,7 +155,8 @@ void main() {
         N = -N;
     }
     vec3 V = normalize(-viewPos);
-    color *= faceVertexColor * ColorModulator;
+    // Face/vertex colors carry mesh material tint and directional shading; keep but don't over-darken
+    color *= vec4(mix(vec3(1.0), faceVertexColor.rgb, 0.5), faceVertexColor.a) * ColorModulator;
 
     #ifdef OIT_ALPHA_ONLY
     executeAlphaOnlyPhase(gl_FragCoord.z, color.a);
