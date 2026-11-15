@@ -115,14 +115,33 @@ public class WheelRenderer {
      * NOT a multiplier on the material. That is why the earlier `bright = 1 + spec` read as
      * glossy plastic: it lifted everything evenly instead of adding a tight bright fleck.
      *
-     * SPEC_POWER of 48 is a narrower lobe than the previous 16 — gives a sharp pinprick glint
-     * rather than a wide glossy sheen. SPEC_STRENGTH is the peak intensity of that fleck.
-     * No ambient headlamp underground: in pure torchlight the glint follows the sun-halfvector
+     * SPEC_POWER was 48 while the wheel was polished gold — a sharp pinprick glint. The re-authored
+     * wheel is <b>corroded</b>: its own material carries a 4K roughness map of pitted, scratched
+     * metal, and a mirror-tight lobe on that surface reads as chrome bolted onto rust. 14 is a
+     * broad sheen that matches a rough metal, and the strength came down with it so the sheen
+     * brightens the surface instead of covering it.
+     *
+     * <p>RIM is the other half of the authored material: it ends in an emissive Fresnel outline
+     * (Layer Weight → ramp 0.32..0.78 → strength 12, colour 1.0/0.85/0.35), which is what draws
+     * the bright gold edge around every sphere and beam in the reference render. An emission
+     * cannot be expressed through a vertex colour — the entity shader multiplies it with the
+     * texture — so the rim is approximated as a Fresnel term added to that colour. It is dimmed
+     * with the light around it (with a floor, because the authored material glows in the dark
+     * too), and at grazing angles it brightens the silhouette to a pale gold rather than to white.
+     *
+     * <p>No ambient headlamp underground: in pure torchlight the glint follows the sun-halfvector
      * dimmed down, which reads as torchlight catching edges rather than as even plastic shine.
      */
     private static final float METAL_AMBIENT = 0.18f;
-    private static final float SPEC_STRENGTH = 0.95f;
-    private static final float SPEC_POWER = 48.0f;
+    private static final float SPEC_STRENGTH = 0.55f;
+    private static final float SPEC_POWER = 14.0f;
+
+    /** Fresnel rim, see the block above. {@code RIM_POWER} shapes the falloff towards the edge. */
+    private static final float RIM_STRENGTH = 0.45f;
+    private static final float RIM_POWER = 3.0f;
+    private static final float RIM_R = 1.00f;
+    private static final float RIM_G = 0.85f;
+    private static final float RIM_B = 0.35f;
 
     @SubscribeEvent
     public static void registerReloadListener(RegisterClientReloadListenersEvent event) {
@@ -415,9 +434,16 @@ public class WheelRenderer {
                 } else {
                     specR = 1.00f; specG = 0.95f; specB = 0.82f;
                 }
-                float cr = Math.min(1.0f, baseR + spec * specR);
-                float cg = Math.min(1.0f, baseG + spec * specG);
-                float cb = Math.min(1.0f, baseB + spec * specB);
+                // --- RIM: the authored material ends in an emissive Fresnel outline, which is what
+                // draws the bright gold edge in the reference render. Added to the colour, so it
+                // brightens the sampled metal at grazing angles instead of painting over it.
+                float nDotV = Math.min(1.0f, Math.abs(NORMAL_SCRATCH.dot(VIEW_SCRATCH)));
+                float rim = (float)Math.pow(1.0f - nDotV, RIM_POWER) * RIM_STRENGTH;
+                rim *= 0.35f + 0.65f * Math.max(skyAmount, blockAmount);
+
+                float cr = Math.min(1.0f, baseR + spec * specR + rim * RIM_R);
+                float cg = Math.min(1.0f, baseG + spec * specG + rim * RIM_G);
+                float cb = Math.min(1.0f, baseB + spec * specB + rim * RIM_B);
 
                 consumer.addVertex(pose, corners[o], corners[o + 1], corners[o + 2])
                         .setColor(cr, cg, cb, alpha)

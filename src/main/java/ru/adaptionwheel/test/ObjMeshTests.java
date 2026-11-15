@@ -205,40 +205,45 @@ public class ObjMeshTests {
     }
 
     /**
-     * The wheel's two metals are carried as vertex colours, because a Wavefront OBJ has nowhere
-     * else to put a material colour: it names an MTL file, and nothing in the game reads one.
+     * The wheel's metal now lives in its texture — the Blender file's material multiplies a 4K
+     * corroded-metal albedo by gold — so what the mesh has to carry is <b>UVs</b>.
      *
-     * <p>The failure this pins is silent in both directions. An export without colours leaves the
-     * wheel a single flat gold — a plausible-looking wheel, just not the one that was modelled. And
-     * a parser that reads a {@code v} line's fourth number as red would turn the file's homogeneous
-     * coordinate into a colour, which is white everywhere and looks identical to the first case.
+     * <p>This is the silent one: a mesh with no UVs samples texel (0,0) on every face, so the wheel
+     * draws as a single flat colour, which is exactly what the old untextured wheel looked like.
+     * Nobody would report it as a bug; it would just be a wheel that never got the new texture.
      */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void theShippedWheelCarriesItsMetalColours(GameTestHelper helper) {
+    public static void theShippedWheelCarriesTextureCoordinates(GameTestHelper helper) {
         ObjMesh mesh = shipped();
-        helper.assertTrue(mesh != null, "the wheel OBJ must load before its colours can be checked");
+        helper.assertTrue(mesh != null, "the wheel OBJ must load before its UVs can be checked");
         if (mesh == null) {
             return;
         }
 
         float[] corners = mesh.corners();
-        int distinct = 0;
-        float firstR = corners[8], firstG = corners[9], firstB = corners[10];
+        float minU = Float.POSITIVE_INFINITY, maxU = Float.NEGATIVE_INFINITY;
+        float minV = Float.POSITIVE_INFINITY, maxV = Float.NEGATIVE_INFINITY;
+        int distinctNormals = 0;
+        float firstNx = corners[5], firstNy = corners[6], firstNz = corners[7];
         for (int i = 0; i < corners.length; i += ObjMesh.STRIDE) {
-            float r = corners[i + 8], g = corners[i + 9], b = corners[i + 10];
-            helper.assertTrue(r >= 0.0f && r <= 1.0f && g >= 0.0f && g <= 1.0f && b >= 0.0f && b <= 1.0f,
-                    "a vertex colour outside 0..1 cannot be a multiply: " + r + ", " + g + ", " + b);
-            if (Math.abs(r - firstR) > 1.0e-3f || Math.abs(g - firstG) > 1.0e-3f || Math.abs(b - firstB) > 1.0e-3f) {
-                distinct++;
+            minU = Math.min(minU, corners[i + 3]);
+            maxU = Math.max(maxU, corners[i + 3]);
+            minV = Math.min(minV, corners[i + 4]);
+            maxV = Math.max(maxV, corners[i + 4]);
+            float nx = corners[i + 5], ny = corners[i + 6], nz = corners[i + 7];
+            helper.assertTrue(Math.abs(nx * nx + ny * ny + nz * nz - 1.0f) < 1.0e-3f,
+                    "a normal that is not unit length skews the diffuse and specular terms: " + nx + ", " + ny + ", " + nz);
+            if (Math.abs(nx - firstNx) > 1.0e-3f || Math.abs(ny - firstNy) > 1.0e-3f || Math.abs(nz - firstNz) > 1.0e-3f) {
+                distinctNormals++;
             }
         }
 
-        helper.assertTrue(distinct > 0,
-                "the shipped wheel must carry more than one colour -- the ring is gold and the beams "
-                        + "are bronze, and a file with one colour means the export dropped the materials");
-        helper.assertTrue(firstR < 0.99f || firstG < 0.99f || firstB < 0.99f,
-                "the first vertex is white, which is what a file without colours produces; the metal "
-                        + "is not white");
+        helper.assertTrue(maxU - minU > 0.5f && maxV - minV > 0.5f,
+                "the wheel's UVs span only " + (maxU - minU) + " x " + (maxV - minV) + "; the parts are "
+                        + "authored over the full 0..1 tile, so a collapsed range means the export dropped them "
+                        + "and the whole wheel samples one texel");
+        helper.assertTrue(distinctNormals > 0,
+                "every corner shares one normal, so the spheres cannot be smooth -- the file lost its vn lines");
 
         helper.succeed();
     }
