@@ -22,8 +22,8 @@ public final class LavaSwimming {
                 && SurfaceAdaptations.swimsInLava(player);
     }
 
-    /** The horizontal share of water pace, from the server config. */
+    /** The horizontal share of water pace (26.3 smoke default: config key absent in this branch). */
     public static double horizontalScale() {
-        return ru.adaptionwheel.config.AdaptionConfig.LAVA_SWIM_SPEED_SCALE.get();
+        return 1.0;
     }
 }
