@@ -38,9 +38,10 @@ public final class FlyingSlashRenderer {
     public static void render(PoseStack poseStack, SubmitNodeCollector collector, Vec3 direction,
                               float roll, float age, float span, float glowHalf, float coreHalf,
                               int tintArgb, int glowArgb, float opacity) {
-        if (direction.lengthSqr() < 1.0e-8 || opacity <= 0.01f || span <= 0f || glowHalf <= 0f) {
+        if (opacity <= 0.01f || span <= 0f || glowHalf <= 0f) {
             return;
         }
+        Vec3 dir = direction.lengthSqr() < 1.0e-8 ? new Vec3(0, 0, 1) : direction.normalize();
 
         float fade = Mth.clamp(opacity, 0f, 1f);
         float growth = Mth.clamp(age / GROWTH_TICKS, MIN_GROWTH, 1f);
@@ -50,9 +51,9 @@ public final class FlyingSlashRenderer {
         int effectiveTint = withOpacity(tintArgb, fade);
         int effectiveGlow = withOpacity(glowArgb, fade * 0.85f);
 
-        double horizontal = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
-        float yaw = (float) Mth.atan2(direction.x, direction.z);
-        float pitch = (float) Mth.atan2(-direction.y, horizontal);
+        double horizontal = Math.sqrt(dir.x * dir.x + dir.z * dir.z);
+        float yaw = (float) Mth.atan2(dir.x, dir.z);
+        float pitch = (float) Mth.atan2(-dir.y, horizontal);
         float clampedRoll = Mth.clamp(roll, -MAX_ROLL, MAX_ROLL);
 
         poseStack.pushPose();
