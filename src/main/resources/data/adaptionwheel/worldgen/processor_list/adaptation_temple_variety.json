@@ -6,112 +6,152 @@
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:stone_bricks",
+            "block_state": {
+              "id": "minecraft:stone_bricks"
+            },
             "probability": 0.45
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:mossy_stone_bricks"
+          "output_state": {
+            "id": "minecraft:mossy_stone_bricks"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:stone_bricks",
+            "block_state": {
+              "id": "minecraft:stone_bricks"
+            },
             "probability": 0.3
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:cracked_stone_bricks"
+          "output_state": {
+            "id": "minecraft:cracked_stone_bricks"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:stone_bricks",
+            "block_state": {
+              "id": "minecraft:stone_bricks"
+            },
             "probability": 0.08
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:chiseled_stone_bricks"
+          "output_state": {
+            "id": "minecraft:chiseled_stone_bricks"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:stone_bricks",
+            "block_state": {
+              "id": "minecraft:stone_bricks"
+            },
             "probability": 0.08
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:infested_stone_bricks"
+          "output_state": {
+            "id": "minecraft:infested_stone_bricks"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:mossy_cobblestone",
+            "block_state": {
+              "id": "minecraft:mossy_cobblestone"
+            },
             "probability": 0.22
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:cobblestone"
+          "output_state": {
+            "id": "minecraft:cobblestone"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:mossy_stone_bricks",
+            "block_state": {
+              "id": "minecraft:mossy_stone_bricks"
+            },
             "probability": 0.2
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:stone_bricks"
+          "output_state": {
+            "id": "minecraft:stone_bricks"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:mossy_stone_bricks",
+            "block_state": {
+              "id": "minecraft:mossy_stone_bricks"
+            },
             "probability": 0.08
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:infested_mossy_stone_bricks"
+          "output_state": {
+            "id": "minecraft:infested_mossy_stone_bricks"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:cracked_stone_bricks",
+            "block_state": {
+              "id": "minecraft:cracked_stone_bricks"
+            },
             "probability": 0.18
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:mossy_stone_bricks"
+          "output_state": {
+            "id": "minecraft:mossy_stone_bricks"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:cracked_stone_bricks",
+            "block_state": {
+              "id": "minecraft:cracked_stone_bricks"
+            },
             "probability": 0.08
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:infested_cracked_stone_bricks"
+          "output_state": {
+            "id": "minecraft:infested_cracked_stone_bricks"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:cracked_stone_bricks",
+            "block_state": {
+              "id": "minecraft:cracked_stone_bricks"
+            },
             "probability": 0.06
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:chiseled_stone_bricks"
+          "output_state": {
+            "id": "minecraft:chiseled_stone_bricks"
+          }
         },
         {
           "input_predicate": {
@@ -162,46 +202,62 @@
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:chiseled_stone_bricks",
+            "block_state": {
+              "id": "minecraft:chiseled_stone_bricks"
+            },
             "probability": 0.25
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:stone_bricks"
+          "output_state": {
+            "id": "minecraft:stone_bricks"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:chiseled_stone_bricks",
+            "block_state": {
+              "id": "minecraft:chiseled_stone_bricks"
+            },
             "probability": 0.15
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:mossy_stone_bricks"
+          "output_state": {
+            "id": "minecraft:mossy_stone_bricks"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:cobblestone",
+            "block_state": {
+              "id": "minecraft:cobblestone"
+            },
             "probability": 0.5
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:mossy_cobblestone"
+          "output_state": {
+            "id": "minecraft:mossy_cobblestone"
+          }
         },
         {
           "input_predicate": {
             "predicate_type": "minecraft:random_blockstate_match",
-            "block_state": "minecraft:cobblestone",
+            "block_state": {
+              "id": "minecraft:cobblestone"
+            },
             "probability": 0.08
           },
           "location_predicate": {
             "predicate_type": "minecraft:always_true"
           },
-          "output_state": "minecraft:infested_cobblestone"
+          "output_state": {
+            "id": "minecraft:infested_cobblestone"
+          }
         },
         {
           "input_predicate": {
