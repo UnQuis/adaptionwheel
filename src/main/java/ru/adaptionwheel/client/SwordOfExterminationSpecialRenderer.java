@@ -104,7 +104,7 @@ public final class SwordOfExterminationSpecialRenderer implements NoDataSpecialM
             float scale = BLADE_LENGTH * FIRST_PERSON_SCALE / mesh.height();
             // -Z is forward in view space, so XP(-90) lays the blade down the view axis; the
             // tilt lifts the tip towards the centre of the screen.
-            poseStack.mulPose(Axis.XP.rotationDegrees(-90.0F + FIRST_PERSON_TILT));
+            poseStack.rotate(Axis.XP, (float) Math.toRadians(-90.0F + FIRST_PERSON_TILT));
             poseStack.translate(0.0F, -FIRST_PERSON_SINK, 0.0F);
             poseStack.scale(scale, scale, scale);
         } else {
@@ -112,8 +112,8 @@ public final class SwordOfExterminationSpecialRenderer implements NoDataSpecialM
             // -Z is down the arm in the layer's frame, so XP(-90) puts the blade on the arm's
             // own axis; BLADE_ROLL then turns its flat face from the player's front onto the
             // arm's outer face.
-            poseStack.mulPose(Axis.XP.rotationDegrees(-90.0F + ARM_TILT));
-            poseStack.mulPose(Axis.YP.rotationDegrees(BLADE_ROLL));
+            poseStack.rotate(Axis.XP, (float) Math.toRadians(-90.0F + ARM_TILT));
+            poseStack.rotate(Axis.YP, (float) Math.toRadians(BLADE_ROLL));
             // A roll alone leaves the plate centred on the arm's axis, buried in it: ObjMesh
             // centres the mesh, and the origin it is centred on is the arm's centre line and
             // front face. After the roll local X -> frame -Y (depth) and local Z -> frame +X
