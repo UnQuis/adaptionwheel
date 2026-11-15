@@ -69,7 +69,10 @@ public final class SynergyEffects {
         STRENGTH.remove(id);
         CHAINED.remove(id);
         LAST_ON_FIRE.remove(id);
-        player.getAttribute(NeoForgeMod.SWIM_SPEED).removeModifier(WALTZ_SWIM_SPEED);
+        var swimSpeed = player.getAttribute(NeoForgeMod.SWIM_SPEED);
+        if (swimSpeed != null) {
+            swimSpeed.removeModifier(WALTZ_SWIM_SPEED);
+        }
     }
 
     public static void refresh(ServerPlayer player, PlayerAdaption data) {
