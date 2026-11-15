@@ -231,6 +231,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> HUD_OPACITY;
     public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_ABOVE_HEAD;
     public static final ModConfigSpec.ConfigValue<Double> WHEEL_SIZE;
+    public static final ModConfigSpec.ConfigValue<Boolean> WHEEL_SHADER_ENABLED;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_WHEEL_PARTICLES;
 
     public static final ModConfigSpec SERVER_SPEC;
@@ -819,6 +820,14 @@ public final class AdaptionConfig {
         HUD_OPACITY = c.defineInRange("hudOpacity", 100, 5, 100);
         WHEEL_ABOVE_HEAD = c.define("renderWheelAboveHead", true);
         WHEEL_SIZE = c.defineInRange("wheelModelScale", 0.45, 0.1, 2.0);
+        WHEEL_SHADER_ENABLED = c.comment(
+                        "Draw the wheel with its own PBR metal shader, which reflects the sky, the sun",
+                        "and the glowing blocks around it. Off falls back to the old per-vertex",
+                        "lighting: the wheel still lights and still glows when adapted to darkness,",
+                        "but it cannot reflect anything. Takes effect on the next frame.",
+                        "The shader is one draw call per wheel with the environment evaluated per",
+                        "pixel, so this is also the switch to reach for on a very weak GPU.")
+                .define("wheelMetalShader", true);
 
         c.comment("--- Adaptation to Darkness (Env_Darkness) ---").push("darkness");
         DARKNESS_LIGHTMAP_ENABLED = c.comment("Light the wearer's surroundings by lifting the light map.",

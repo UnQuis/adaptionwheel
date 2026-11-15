@@ -14,6 +14,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.phys.Vec3;
 
 import net.minecraft.client.renderer.LightTexture;
@@ -264,15 +266,22 @@ public class WheelRenderer {
         float time = player.level().getGameTime() + partialTick;
         float bob = Mth.sin(time * BOB_SPEED) * BOB_AMPLITUDE;
 
-        // Real light from the world: sky (sun/moon) + block (torches, glowstone, etc.) at the
-        // entity's position, so the wheel responds to night, caves, torches and beacons the way
-        // every other entity in the game does.
-        // Packed light coordinates, 4 bits block | 4 bits sky in each short. The block term is
-        // measured at the entity's feet the way every living renderer samples it; the sky term is
-        // derived from the level-dependent magic value (0..1) so darkness/bad-omen/darkness effects
-        // darken the wheel the same way they darken the entity.
-        int blockI = entity.level().getMaxLocalRawBrightness(entity.blockPosition());
-        int skyI = (int)(entity.getLightLevelDependentMagicValue() * 15.0f);
+        // Real light from the world, sampled the way vanilla samples an entity's: the block and the
+        // sky LAYER, packed 4 bits each, at the wheel's own block rather than at the feet — the
+        // wheel is the surface being lit, and a torch above the player's head is exactly the torch
+        // its metal reflects.
+        //
+        // The sky term must be the sky layer and not `getLightLevelDependentMagicValue()`, which is
+        // what it used to be. That value is the COMBINED block+sky brightness through the gamma
+        // curve (`getMaxLocalRawBrightness`, then `f / (4 - 3f)`, then lerped towards the
+        // dimension's ambient light), so a torch-lit cave scores close to 1.0 in it. The shader
+        // reads the sky slot to decide how much sky there is to reflect, and with the combined
+        // value in that slot the wheel mirrored a full daylight sky underground — the one place the
+        // reflection was supposed to hand over to the torches. The raw layers answer the question
+        // the shader is actually asking: how much sky reaches this block.
+        BlockPos lightPos = BlockPos.containing(entity.getX(), entity.getY() + height, entity.getZ());
+        int blockI = entity.level().getBrightness(LightLayer.BLOCK, lightPos);
+        int skyI = entity.level().getBrightness(LightLayer.SKY, lightPos);
         int packedLight = LightTexture.pack(blockI, skyI);
 
         poseStack.pushPose();
@@ -291,10 +300,10 @@ public class WheelRenderer {
         poseStack.scale(scale, scale, scale);
 
         if (mesh != null) {
-            if (wheelShader != null) {
+            if (wheelShader != null && AdaptionConfig.WHEEL_SHADER_ENABLED.get()) {
                 drawMeshShader(mesh, poseStack, tint, packedLight, entity, partialTick);
             } else {
-                if (!shaderMissingLogged) {
+                if (wheelShader == null && !shaderMissingLogged) {
                     shaderMissingLogged = true;
                     LOGGER.warn("[{}] The wheel metal shader {} is not loaded; drawing the wheel with "
                             + "the old per-vertex lighting", AdaptionWheel.MODID, WHEEL_SHADER);
