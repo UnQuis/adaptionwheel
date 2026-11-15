@@ -361,5 +361,7 @@
   "adaptionwheel.gui.menu_footer_short": "K / ESC TO CLOSE",
   "adaptionwheel.gui.menu_footer_stats": "%s ADAPTATIONS  ·  %s ACTIVE",
   "adaptionwheel.gui.menu_footer_matches": "%s MATCHES",
-  "adaptionwheel.gui.menu_synergies": "SYNERGIES"
+  "adaptionwheel.gui.menu_synergies": "SYNERGIES",
+  "adaptionwheel.cmd.unknown_entity": "Unknown mob: %s",
+  "adaptionwheel.cmd.unknown_effect": "Unknown effect: %s"
 }
