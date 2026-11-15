@@ -41,8 +41,20 @@ public final class AbilityAvailability {
         return available.isEmpty() ? null : available.get(0);
     }
 
-    /** Live key label when a dedicated keybind exists, else the ability's configured label. */
+    /**
+     * The key shown on the card. A definition only knows its default label; the live binding is the
+     * truth, so the HUD and the menu both ask here rather than drawing a key that no longer does
+     * anything after the player rebinds it.
+     */
     public static String keyLabel(ActiveAbility ability) {
+        if (ru.adaptionwheel.server.DiveAbility.ID.equals(ability.id())) {
+            if (AdaptionKeybinds.DIVE_KEY != null) {
+                String bound = AdaptionKeybinds.DIVE_KEY.getTranslatedKeyMessage().getString();
+                if (bound != null && !bound.isBlank()) {
+                    return bound;
+                }
+            }
+        }
         return ability.keyLabel() == null ? "" : ability.keyLabel();
     }
 }
