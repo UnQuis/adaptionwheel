@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(AbstractContainerScreen.class)
 public abstract class CachePanelClickMixin {
 
-    @Inject(method = "hasClickedOutside", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "hasClickedOutside", at = @At("HEAD"), cancellable = true, require = 0)
     private void adaptionwheel$keepCacheInside(double mouseX, double mouseY, int guiLeft, int guiTop,
                                                CallbackInfoReturnable<Boolean> cir) {
         if (ru.adaptionwheel.client.CacheOverlay.blocksOutsideClick(
