@@ -60,7 +60,7 @@ public final class ModRenderPipelines {
             .withBindGroupLayout(BindGroupLayouts.SAMPLER1)
             .withBindGroupLayout(BindGroupLayouts.SAMPLER2)
             .withShaderDefine("ALPHA_CUTOUT", 0.1F)
-            .withShaderDefine("PER_FACE_LIGHTING")
+            .withShaderDefine("NO_CARDINAL_LIGHTING")
             .withVertexBinding(0, DefaultVertexFormat.ENTITY)
             .withPrimitiveTopology(PrimitiveTopology.QUADS)
             .withColorTargetState(ColorTargetState.DEFAULT)
