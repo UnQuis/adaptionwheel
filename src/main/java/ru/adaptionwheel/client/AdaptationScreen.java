@@ -268,11 +268,11 @@ public class AdaptationScreen extends Screen {
             moveSelection(-1);
             return true;
         }
-        if (keyCode == InputConstants.KEY_PAGE_DOWN) {
+        if (keyCode == 267 /* GLFW_KEY_PAGE_DOWN */) {
             scrollTarget = Math.max(0, Math.min(maxScroll(), scrollTarget + Math.max(ENTRY_H, listH - ENTRY_H)));
             return true;
         }
-        if (keyCode == InputConstants.KEY_PAGE_UP) {
+        if (keyCode == 266 /* GLFW_KEY_PAGE_UP */) {
             scrollTarget = Math.max(0, Math.min(maxScroll(), scrollTarget - Math.max(ENTRY_H, listH - ENTRY_H)));
             return true;
         }

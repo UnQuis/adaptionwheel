@@ -16,6 +16,6 @@ public class CacheMenuProvider implements MenuProvider {
 
     @Override
     public @Nullable AbstractContainerMenu createMenu(int windowId, Inventory inventory, Player player) {
-        return new CacheMenu(windowId, player);
+        return new CacheMenu(windowId, inventory, player);
     }
 }

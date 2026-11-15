@@ -22,7 +22,7 @@ public final class ModMenus {
 
     public static final DeferredHolder<MenuType<?>, MenuType<CacheMenu>> CACHE =
             MENUS.register("cache", () -> IMenuTypeExtension.create(
-                    (windowId, inventory, extra) -> new CacheMenu(windowId, inventory.player)));
+                    (windowId, inventory, extra) -> new CacheMenu(windowId, inventory, inventory.player)));
 
     public static void register(IEventBus modEventBus) {
         MENUS.register(modEventBus);

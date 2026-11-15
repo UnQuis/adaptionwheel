@@ -68,7 +68,7 @@ public class AdaptionHud {
 
         // The Instabreak state is a permanent readout, not an analysis row. Draw it near the hotbar
         // independently of the analysis HUD toggle and of whether anything is currently being analysed.
-        if (ClientAdaption.instabreakUnlocked && mc.screen == null) {
+        if (ClientAdaption.instabreakUnlocked && mc.gui.screen() == null) {
             drawInstabreakState(graphics, mc);
         }
 

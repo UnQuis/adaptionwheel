@@ -20,9 +20,11 @@ public final class ClientCache {
     }
 
     public static void set(List<ItemStack> incoming) {
-        List<ItemStack> copy = new ArrayList<>(incoming.size());
-        for (ItemStack stack : incoming) {
-            copy.add(stack == null ? ItemStack.EMPTY : stack.copy());
+        List<ItemStack> copy = new ArrayList<>(incoming == null ? 0 : incoming.size());
+        if (incoming != null) {
+            for (ItemStack stack : incoming) {
+                copy.add(stack == null ? ItemStack.EMPTY : stack.copy());
+            }
         }
         stacks = copy;
     }
