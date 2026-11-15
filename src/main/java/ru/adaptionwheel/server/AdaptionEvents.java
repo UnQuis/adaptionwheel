@@ -1547,15 +1547,33 @@ public class AdaptionEvents {
             player.clearFire();
         }
 
-        if (data.active(Concepts.ENV_DARKNESS)
-                && player.tickCount % 40 == 0) {
-            player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 2400, 0, false, false));
+        if (data.active(Concepts.ENV_DARKNESS)) {
+            if (player.tickCount % 40 == 0) {
+                player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 2400, 0, false, false));
+            }
+        } else {
+            removeAdaptationNightVision(player);
         }
         if (data.active(Concepts.ENV_STARVE)
                 && player.tickCount % 20 == 0) {
             player.getFoodData().setFoodLevel(20);
             player.getFoodData().setSaturation(20f);
             resetExhaustion(player.getFoodData());
+        }
+    }
+
+    /**
+     * Removes the long, hidden night vision granted by Env_Darkness when the adaptation is off.
+     * Leaves other sources (potions, beacons) alone by matching the signature we apply.
+     */
+    private static void removeAdaptationNightVision(ServerPlayer player) {
+        var effect = player.getEffect(MobEffects.NIGHT_VISION);
+        if (effect == null) {
+            return;
+        }
+        if (!effect.isVisible() && !effect.isAmbient() && effect.getAmplifier() == 0
+                && effect.getDuration() > 20 * 30) {
+            player.removeEffect(MobEffects.NIGHT_VISION);
         }
     }
 
