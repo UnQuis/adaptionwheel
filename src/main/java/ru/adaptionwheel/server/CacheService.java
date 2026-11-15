@@ -72,4 +72,9 @@ public final class CacheService {
         }
         return HOTBAR_Y;
     }
+
+    /** Handles cache slot clicks from the container overlay (26.3 integration placeholder). */
+    public static void click(Player player, int index, int button, boolean shift) {
+        // TODO(port-26.3): port cache click/move logic and menu carried-stack handling.
+    }
 }

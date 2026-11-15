@@ -31,6 +31,10 @@ public class AdaptionNetworking {
                 (payload, context) -> context.enqueueWork(() -> DimensionImpactFX.trigger(0.5f, 0.5f)));
         registrar.playToClient(DiveImpactPayload.TYPE, DiveImpactPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> DiveImpactPayload.apply(payload)));
+        registrar.playToClient(AbilityCooldownPayload.TYPE, AbilityCooldownPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> AbilityCooldownPayload.apply(payload)));
+        registrar.playToClient(CacheSyncPayload.TYPE, CacheSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> CacheSyncPayload.apply(payload)));
         registrar.playToServer(TradeActionPayload.TYPE, TradeActionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         TradeActionPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
@@ -46,5 +50,11 @@ public class AdaptionNetworking {
         registrar.playToServer(ToggleAdaptationPayload.TYPE, ToggleAdaptationPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         ToggleAdaptationPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
+        registrar.playToServer(DivePayload.TYPE, DivePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        DivePayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
+        registrar.playToServer(CacheClickPayload.TYPE, CacheClickPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        CacheClickPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
     }
 }
