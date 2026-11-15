@@ -12,6 +12,15 @@ public final class ModRenderTypes {
                     .setOutline(RenderSetup.OutlineProperty.NONE)
                     .createRenderSetup());
 
+    private static final RenderType WHEEL_METAL = RenderType.create("adaptionwheel_wheel_metal",
+            RenderSetup.builder(ModRenderPipelines.WHEEL_METAL)
+                    .withTexture("Sampler0", net.minecraft.resources.Identifier.fromNamespaceAndPath(
+                            ru.adaptionwheel.AdaptionWheel.MODID, "textures/entity/dharma_chakra.png"))
+                    .useLightmap()
+                    .useOverlay()
+                    .setOutline(RenderSetup.OutlineProperty.AFFECTS_OUTLINE)
+                    .createRenderSetup());
+
     private ModRenderTypes() {
     }
 
@@ -21,5 +30,10 @@ public final class ModRenderTypes {
      */
     public static RenderType slash() {
         return SLASH;
+    }
+
+    /** Wheel metal render type (ported/adapted wheel_metal shader for Dharma Chakra mesh). */
+    public static RenderType wheelMetal() {
+        return WHEEL_METAL;
     }
 }

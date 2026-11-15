@@ -67,13 +67,13 @@ public final class SwordOfExterminationSpecialRenderer implements NoDataSpecialM
     private static volatile ObjMesh bladeMesh;
 
     private static final float BLADE_LENGTH = 1.25F;
-    private static final float ARM_SINK = 0.30F;
-    private static final float ARM_TILT = 0.0F;
+    private static final float ARM_SINK = 0.04F;
+    private static final float ARM_TILT = 18.0F;
     private static final float BLADE_ROLL = 90.0F;
-    private static final float ARM_RADIUS = 0.125F;
-    private static final float FIRST_PERSON_SCALE = 0.85F;
-    private static final float FIRST_PERSON_TILT = 30.0F;
-    private static final float FIRST_PERSON_SINK = 0.18F;
+    private static final float ARM_RADIUS = 0.06F;
+    private static final float FIRST_PERSON_SCALE = 0.82F;
+    private static final float FIRST_PERSON_TILT = 22.0F;
+    private static final float FIRST_PERSON_SINK = 0.10F;
 
     private static final Vector3f LIGHT = new Vector3f(0.30F, 0.70F, 0.65F).normalize();
     private static final Vector3f NORMAL_SCRATCH = new Vector3f();
@@ -102,24 +102,20 @@ public final class SwordOfExterminationSpecialRenderer implements NoDataSpecialM
 
         if (firstPerson) {
             float scale = BLADE_LENGTH * FIRST_PERSON_SCALE / mesh.height();
-            // -Z is forward in view space, so XP(-90) lays the blade down the view axis; the
-            // tilt lifts the tip towards the centre of the screen.
-            poseStack.rotate(Axis.XP, (float) Math.toRadians(-90.0F + FIRST_PERSON_TILT));
-            poseStack.translate(0.0F, -FIRST_PERSON_SINK, 0.0F);
+            // First-person: extend the blade from the hand forward and slightly toward screen centre.
+            poseStack.rotate(Axis.XP, (float) Math.toRadians(-82.0F + FIRST_PERSON_TILT));
+            poseStack.rotate(Axis.YP, (float) Math.toRadians(leftHand ? 8.0F : -8.0F));
+            poseStack.rotate(Axis.ZP, (float) Math.toRadians(leftHand ? -10.0F : 10.0F));
+            poseStack.translate(leftHand ? -0.04F : 0.04F, -FIRST_PERSON_SINK, -0.05F);
             poseStack.scale(scale, scale, scale);
         } else {
             float scale = BLADE_LENGTH / mesh.height();
-            // -Z is down the arm in the layer's frame, so XP(-90) puts the blade on the arm's
-            // own axis; BLADE_ROLL then turns its flat face from the player's front onto the
-            // arm's outer face.
-            poseStack.rotate(Axis.XP, (float) Math.toRadians(-90.0F + ARM_TILT));
-            poseStack.rotate(Axis.YP, (float) Math.toRadians(BLADE_ROLL));
-            // A roll alone leaves the plate centred on the arm's axis, buried in it: ObjMesh
-            // centres the mesh, and the origin it is centred on is the arm's centre line and
-            // front face. After the roll local X -> frame -Y (depth) and local Z -> frame +X
-            // (sideways), so these two moves put the blade's long axis in the outer face.
-            poseStack.translate(ARM_RADIUS, 0.0F, leftHand ? -ARM_RADIUS : ARM_RADIUS);
-            poseStack.translate(0.0F, -ARM_SINK, 0.0F);
+            // Third-person: orient the blade so it emerges from the hand/fist and points forward-down
+            // in a natural way instead of lying flat/crooked along the forearm.
+            poseStack.rotate(Axis.XP, (float) Math.toRadians(-72.0F - ARM_TILT));
+            poseStack.rotate(Axis.YP, (float) Math.toRadians(leftHand ? 10.0F : -10.0F));
+            poseStack.rotate(Axis.ZP, (float) Math.toRadians(leftHand ? -18.0F : 18.0F));
+            poseStack.translate(leftHand ? -0.02F : 0.02F, -ARM_SINK, -0.02F);
             poseStack.scale(scale, scale, scale);
         }
 

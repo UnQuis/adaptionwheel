@@ -198,7 +198,7 @@ public class WheelRenderer {
 
     private static void drawMesh(ObjMesh mesh, PoseStack poseStack, SubmitNodeCollector collector,
                                  int adaptCount, int tintRgb, LivingEntityRenderState state) {
-        RenderType renderType = entityCutoutNoCull(DharmaChakraModel.TEXTURE);
+        RenderType renderType = ru.adaptionwheel.client.render.ModRenderTypes.wheelMetal();
         float[] corners = mesh.quadCorners();
 
         int blockI = orDefault(state.getRenderData(BLOCK_LIGHT), 0);
@@ -209,50 +209,26 @@ public class WheelRenderer {
         float tg = ((tintRgb >> 8) & 0xFF) / 255.0F;
         float tb = (tintRgb & 0xFF) / 255.0F;
 
-        // Simple CPU-ish shading approximation in local/pose space: gives depth and metal-ish feel
-        // without needing full world-space environment reconstruction in render-state pass.
-        float ambientBase = METAL_AMBIENT + 0.55f * (blockI / 15.0f) + 0.35f * (skyI / 15.0f);
-        float ambient = Mth.clamp(ambientBase, 0.25f, 1.25f);
-        Vector3f lightDir = new Vector3f(0.35f, 0.9f, 0.25f).normalize();
-        Vector3f viewDir = new Vector3f(0.0f, 0.35f, 1.0f).normalize();
-
         collector.submitCustomGeometry(poseStack, renderType, (pose, consumer) -> {
-            Matrix3f normalMat = pose.normal();
             for (int i = 0; i < corners.length; i += ObjMesh.STRIDE * 4) {
                 for (int corner = 0; corner < 4; corner++) {
                     int o = i + corner * ObjMesh.STRIDE;
                     float x = corners[o], y = corners[o + 1], z = corners[o + 2];
                     float u = corners[o + 3], v = corners[o + 4];
-                    NORMAL_SCRATCH.set(corners[o + 5], corners[o + 6], corners[o + 7]).mul(normalMat).normalize();
-                    float diffuse = Math.max(0.0f, NORMAL_SCRATCH.dot(lightDir));
-                    HALF_SCRATCH.set(lightDir).add(viewDir).normalize();
-                    float spec = (float) Math.pow(Math.max(0.0f, NORMAL_SCRATCH.dot(HALF_SCRATCH)), SPEC_POWER) * SPEC_STRENGTH;
-                    float rim = (float) Math.pow(1.0f - Math.max(0.0f, NORMAL_SCRATCH.dot(viewDir)), RIM_POWER) * RIM_STRENGTH;
-                    float baseShade = ambient + diffuse * 0.55f;
-                    float vr = Mth.clamp(corners[o + 8] * tr * baseShade + spec + rim * RIM_R, 0.0f, 1.25f);
-                    float vg = Mth.clamp(corners[o + 9] * tg * baseShade + spec + rim * RIM_G, 0.0f, 1.25f);
-                    float vb = Mth.clamp(corners[o + 10] * tb * baseShade + spec + rim * RIM_B, 0.0f, 1.25f);
-                    // keep in valid range for vertex color
-                    vr = Math.min(vr, 1.0f); vg = Math.min(vg, 1.0f); vb = Math.min(vb, 1.0f);
+                    float nx = corners[o + 5], ny = corners[o + 6], nz = corners[o + 7];
+                    // Mesh vertex colors carry material tint from the source OBJ; apply adaptation tint.
+                    float vr = Mth.clamp(corners[o + 8] * tr, 0.0f, 1.0f);
+                    float vg = Mth.clamp(corners[o + 9] * tg, 0.0f, 1.0f);
+                    float vb = Mth.clamp(corners[o + 10] * tb, 0.0f, 1.0f);
                     consumer.addVertex(pose, x, y, z)
-                            .setColor(vr, vg, vb, 0.95f)
+                            .setColor(vr, vg, vb, 1.0f)
                             .setUv(u, v)
                             .setOverlay(OverlayTexture.NO_OVERLAY)
                             .setLight(packedLight)
-                            .setNormal(NORMAL_SCRATCH.x(), NORMAL_SCRATCH.y(), NORMAL_SCRATCH.z());
+                            .setNormal(nx, ny, nz);
                 }
             }
         });
-    }
-
-    private static RenderType entityCutoutNoCull(Identifier texture) {
-        return RenderType.create("adaptionwheel_wheel_cutout_no_cull",
-                RenderSetup.builder(net.minecraft.client.renderer.RenderPipelines.ENTITY_CUTOUT)
-                        .withTexture("Sampler0", texture)
-                        .useLightmap()
-                        .useOverlay()
-                        .setOutline(RenderSetup.OutlineProperty.AFFECTS_OUTLINE)
-                        .createRenderSetup());
     }
 
     private static int orDefault(Integer value, int def) {
