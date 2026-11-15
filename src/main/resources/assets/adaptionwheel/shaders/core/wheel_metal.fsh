@@ -144,19 +144,14 @@ void main() {
     }
     #endif
 
-    #ifdef PER_FACE_LIGHTING
-    vec4 faceVertexColor = gl_FrontFacing ? vertexPerFaceColorFront : vertexPerFaceColorBack;
-    #else
-    vec4 faceVertexColor = vertexColor;
-    #endif
-
     vec3 N = normalize(viewNormal);
     if (!gl_FrontFacing) {
         N = -N;
     }
     vec3 V = normalize(-viewPos);
-    // Face/vertex colors carry mesh material tint and directional shading; keep but don't over-darken
-    color *= vec4(mix(vec3(1.0), faceVertexColor.rgb, 0.5), faceVertexColor.a) * ColorModulator;
+    // The OBJ vertex color is the authored material tint (gold vs. bronze), not a
+    // lighting result. The original 1.21.1 shader used it directly as the albedo multiplier.
+    color *= vertexColor * ColorModulator;
 
     #ifdef OIT_ALPHA_ONLY
     executeAlphaOnlyPhase(gl_FragCoord.z, color.a);
