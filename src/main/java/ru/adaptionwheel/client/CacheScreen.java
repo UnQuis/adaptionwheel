@@ -43,6 +43,7 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
     private boolean widthTooNarrow;
     private float xMouse;
     private float yMouse;
+    private net.minecraft.client.gui.components.Button curiosButton;
 
     public CacheScreen(CacheMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title,
@@ -71,7 +72,15 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
         this.recipeBookComponent.init(this.width, this.height, this.minecraft, this.widthTooNarrow);
         this.leftPos = this.recipeBookComponent.updateScreenPosition(this.width, this.imageWidth);
         initRecipeBookButton();
+        initCuriosButton();
         this.addWidget(this.recipeBookComponent);
+    }
+
+    private void initCuriosButton() {
+        this.curiosButton = CuriosCompat.addInventoryButton(this, this.leftPos, this.topPos, this.recipeBookComponent.isVisible());
+        if (this.curiosButton != null) {
+            this.addRenderableWidget(this.curiosButton);
+        }
     }
 
     private void initRecipeBookButton() {
@@ -82,7 +91,16 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
             this.leftPos = this.recipeBookComponent.updateScreenPosition(this.width, this.imageWidth);
             ScreenPosition updatedButtonPos = getRecipeBookButtonPosition();
             button.setPosition(updatedButtonPos.x(), updatedButtonPos.y());
+            repositionCuriosButton();
         }));
+    }
+
+    private void repositionCuriosButton() {
+        if (this.curiosButton != null) {
+            this.curiosButton.setPosition(
+                    CuriosCompat.buttonX(this.leftPos, this.recipeBookComponent.isVisible()),
+                    CuriosCompat.buttonY(this.topPos));
+        }
     }
 
     protected ScreenPosition getRecipeBookButtonPosition() {
