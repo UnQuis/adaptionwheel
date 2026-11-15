@@ -220,12 +220,13 @@ public class WheelRenderer {
                     float vr = Mth.clamp(corners[o + 8] * tr, 0.0f, 1.0f);
                     float vg = Mth.clamp(corners[o + 9] * tg, 0.0f, 1.0f);
                     float vb = Mth.clamp(corners[o + 10] * tb, 0.0f, 1.0f);
+                    // Pass model-space normals; the wheel_metal vertex shader transforms by ModelViewMat.
                     consumer.addVertex(pose, x, y, z)
                             .setColor(vr, vg, vb, 1.0f)
                             .setUv(u, v)
                             .setOverlay(OverlayTexture.NO_OVERLAY)
                             .setLight(packedLight)
-                            .setNormal(pose, nx, ny, nz);
+                            .setNormal(nx, ny, nz);
                 }
             }
         });

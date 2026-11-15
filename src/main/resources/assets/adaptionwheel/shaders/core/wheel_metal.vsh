@@ -41,6 +41,7 @@ layout(location = 5) out vec4 overlayColor;
 layout(location = 6) out vec2 texCoord0;
 layout(location = 7) out vec3 viewNormal;
 layout(location = 8) out vec3 viewPos;
+layout(location = 9) out vec3 localPos;
 
 void main() {
     vec4 viewPosition = ModelViewMat * vec4(Position, 1.0);
@@ -49,8 +50,7 @@ void main() {
     sphericalVertexDistance = fog_spherical_distance(Position);
     cylindricalVertexDistance = fog_cylindrical_distance(Position);
 
-// Lighting directions are in view space. Transform the world-space normal once and use
-    // that same normal for both cardinal lighting and the fragment BRDF.
+    // Transform the model-space normal into view space for lighting/BRDF.
     vec3 transformedNormal = normalize(mat3(ModelViewMat) * Normal);
 
 #ifdef PER_FACE_LIGHTING
@@ -58,6 +58,7 @@ void main() {
     vertexPerFaceColorBack = minecraft_mix_light_separate(-light, Color);
     vertexPerFaceColorFront = minecraft_mix_light_separate(light, Color);
 #elif defined(NO_CARDINAL_LIGHTING)
+    // Preserve authored OBJ material tint (gold/bronze) instead of baking cardinal lighting in.
     vertexColor = Color;
 #else
     vertexColor = minecraft_mix_light(Light0_Direction, Light1_Direction, transformedNormal, Color);
@@ -74,4 +75,6 @@ void main() {
     texCoord0 = UV0;
     viewNormal = transformedNormal;
     viewPos = viewPosition.xyz;
+    // Model-space position (mesh is centered in ObjMesh); stable anchor for corrosion/detail noise.
+    localPos = Position;
 }
