@@ -39,6 +39,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.slf4j.Logger;
 import ru.adaptionwheel.AdaptionWheel;
+import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.item.ModItems;
@@ -167,6 +168,26 @@ public class WheelRenderer {
     private static final ResourceLocation WHEEL_SHADER = ResourceLocation.fromNamespaceAndPath(
             AdaptionWheel.MODID, "wheel_metal");
 
+    /**
+     * The reflected light sources, as individual uniforms.
+     *
+     * <p><b>Eight separate vec4s and not a {@code vec4[8]} array.</b> A shader uniform declared in
+     * the JSON is uploaded by {@code Uniform.uploadAsFloat}, which picks its {@code glUniform}
+     * variant from the declared {@code count} and accepts only 1..4 — a {@code count} of 32 for an
+     * array is rejected at load ("count value is not in the range of 1 to 4") and the whole shader
+     * fails with it. So the array is flattened into named uniforms and the fragment stage sums
+     * eight calls instead of looping. Ugly, and the only thing that works through this API.
+     */
+    private static final String[] LIGHT_POS_UNIFORMS = new String[WheelLights.MAX];
+    private static final String[] LIGHT_COL_UNIFORMS = new String[WheelLights.MAX];
+
+    static {
+        for (int i = 0; i < WheelLights.MAX; i++) {
+            LIGHT_POS_UNIFORMS[i] = "WheelLightPos" + i;
+            LIGHT_COL_UNIFORMS[i] = "WheelLightCol" + i;
+        }
+    }
+
     /** Null until {@link #registerShaders} has compiled it; the old CPU-lit path covers that. */
     private static volatile ShaderInstance wheelShader;
 
@@ -202,6 +223,7 @@ public class WheelRenderer {
     public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         WEARING_CACHE.clear();
         SPIN.clear();
+        WheelLights.clear();
     }
 
     @SubscribeEvent
@@ -418,14 +440,40 @@ public class WheelRenderer {
         // uses it to keep the corrosion noise anchored to the wheel instead of to the world.
         POS_SCRATCH.set(0.0F, 0.0F, 0.0F);
         poseMatrix.transformPosition(POS_SCRATCH);
-        shader.safeGetUniform("WheelCentre").set(
-                POS_SCRATCH.x + eyeX, POS_SCRATCH.y + eyeY, POS_SCRATCH.z + eyeZ);
+        float centreX = POS_SCRATCH.x + eyeX;
+        float centreY = POS_SCRATCH.y + eyeY;
+        float centreZ = POS_SCRATCH.z + eyeZ;
+        shader.safeGetUniform("WheelCentre").set(centreX, centreY, centreZ);
         shader.safeGetUniform("WheelSun").set(-Mth.sin(celestialAngle), night ? -sunY : sunY, 0.0f);
         shader.safeGetUniform("WheelSky").set((float)skyColor.x, (float)skyColor.y, (float)skyColor.z, skyAmount);
         shader.safeGetUniform("WheelParams").set(METAL_ROUGHNESS, night ? 1.0f : 0.0f, blockAmount, 1.0f);
         float groundLight = 0.35f + 0.65f * Math.max(skyAmount, blockAmount);
         shader.safeGetUniform("WheelGround").set(
                 0.20f * groundLight, 0.17f * groundLight, 0.13f * groundLight, 1.0f);
+
+        // The wheel's own light, once the wearer has adapted to darkness. Modulated by how dark it
+        // is where the wheel is: an emissive gold wheel in full noon sunlight is not a light, it is
+        // a bug report, while in the dark it is the one thing in the scene that is not lit by
+        // something else. The lightmap lift and this are two halves of one adaptation -- the lift
+        // makes the world visible, this makes the wheel a source in it.
+        float glow = (entity instanceof Player wearer ? darknessGlowFor(wearer) : 0.0F)
+                * (0.35f + 0.65f * (1.0f - Math.max(skyAmount, blockAmount)));
+        shader.safeGetUniform("WheelGlow").set(glow);
+
+        // Reflected light sources: the glowing blocks within eight blocks, so the metal has
+        // something to show indoors. Missing slots are handed over as intensity zero, which the
+        // shader early-outs on.
+        WheelLights.Source[] lights = WheelLights.around(level, centreX, centreY, centreZ);
+        for (int i = 0; i < WheelLights.MAX; i++) {
+            if (i < lights.length) {
+                WheelLights.Source light = lights[i];
+                shader.safeGetUniform(LIGHT_POS_UNIFORMS[i]).set(light.x(), light.y(), light.z(), light.intensity());
+                shader.safeGetUniform(LIGHT_COL_UNIFORMS[i]).set(light.red(), light.green(), light.blue(), light.radius());
+            } else {
+                shader.safeGetUniform(LIGHT_POS_UNIFORMS[i]).set(0.0F, 0.0F, 0.0F, 0.0F);
+                shader.safeGetUniform(LIGHT_COL_UNIFORMS[i]).set(0.0F, 0.0F, 0.0F, 0.0F);
+            }
+        }
 
         float red = ((tint >> 16) & 0xFF) / 255.0F;
         float green = ((tint >> 8) & 0xFF) / 255.0F;
@@ -684,6 +732,32 @@ public class WheelRenderer {
                 .map(stack -> stack.get(ModDataComponents.WHEEL_DATA.get()))
                 .map(ru.adaptionwheel.data.WheelData::adaptCount)
                 .orElse(0);
+    }
+
+    /**
+     * Whether this wearer's wheel carries its own light: 1 when they have adapted to darkness, 0
+     * otherwise.
+     *
+     * <p>The local player is asked through {@link ClientAdaption#active}, which is the mirror that
+     * knows about the panel's off switch — reading the raw adapted set is the mistake that made
+     * every other client-side effect ignore the switch. Anyone else on screen is read off the wheel
+     * item they are wearing, because that is the only per-player state a client has for them; the
+     * switch lives in the player attachment, which is not synced for other players, so a wheel
+     * turned off still glows for an observer. That is a smaller wrong than not glowing at all.
+     */
+    private static float darknessGlowFor(Player player) {
+        if (player.isLocalPlayer()) {
+            return ClientAdaption.active(Concepts.ENV_DARKNESS) ? 1.0F : 0.0F;
+        }
+
+        boolean adapted = CuriosApi.getCuriosInventory(player)
+                .flatMap(handler -> handler.findFirstCurio(ModItems.MAHORAGA_WHEEL.get()))
+                .map(top.theillusivec4.curios.api.SlotResult::stack)
+                .map(stack -> stack.get(ModDataComponents.WHEEL_DATA.get()))
+                .map(ru.adaptionwheel.data.WheelData::adapted)
+                .map(adaptedKeys -> adaptedKeys.contains(Concepts.ENV_DARKNESS))
+                .orElse(false);
+        return adapted ? 1.0F : 0.0F;
     }
 
     /** Cool grey at nothing adapted, warming towards gold as the wheel fills out. */
