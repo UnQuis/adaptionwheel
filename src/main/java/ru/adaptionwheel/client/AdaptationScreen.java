@@ -277,7 +277,7 @@ public class AdaptationScreen extends Screen {
             return true;
         }
         if (keyCode == GLFW_KEY_ENTER || keyCode == GLFW_KEY_KP_ENTER || keyCode == InputConstants.KEY_SPACE) {
-            if (selectedConcept != null && ClientAdaption.isAdapted(selectedConcept)) {
+            if (selectedConcept != null && canToggle(selectedConcept)) {
                 ToggleAdaptationPayload.send(selectedConcept);
                 return true;
             }
@@ -418,6 +418,10 @@ public class AdaptationScreen extends Screen {
         return sb.toString();
     }
 
+    private boolean canToggle(String concept) {
+        return ClientAdaption.isAdapted(concept) || ClientAdaption.level(concept) > 0;
+    }
+
     private double maxScroll() {
         return Math.max(0, visibleEntries.size() * ENTRY_H - 2 - listH);
     }
@@ -513,7 +517,7 @@ public class AdaptationScreen extends Screen {
                 }
                 if (mouseX >= hit[0] && mouseX < hit[0] + hit[2] && mouseY >= hit[1] && mouseY < hit[1] + hit[3]) {
                     selectedConcept = concept;
-                    if (ClientAdaption.isAdapted(concept)) {
+                    if (canToggle(concept)) {
                         ToggleAdaptationPayload.send(concept);
                     }
                     return true;
