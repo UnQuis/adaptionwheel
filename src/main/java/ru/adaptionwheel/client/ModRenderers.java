@@ -39,5 +39,9 @@ public final class ModRenderers {
                 Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "sword_of_extermination_mesh"),
                 new SwordOfExterminationSpecialRenderer.MeshReloadListener()
         );
+        event.addListener(
+                Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "dharma_chakra_mesh"),
+                new WheelRenderer.MeshReloadListener()
+        );
     }
 }

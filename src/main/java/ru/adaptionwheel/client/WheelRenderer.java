@@ -1,20 +1,32 @@
 package ru.adaptionwheel.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.logging.LogUtils;
 import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.ClientAvatarEntity;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
+import net.minecraft.client.renderer.rendertype.RenderSetup;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.util.Mth;
 import net.minecraft.util.context.ContextKey;
+import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.Avatar;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -22,58 +34,81 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RenderLivingEvent;
 import net.neoforged.neoforge.client.renderstate.AvatarRenderStateModifier;
 import net.neoforged.neoforge.client.renderstate.RegisterRenderStateModifiersEvent;
+import org.joml.Matrix3f;
+import org.joml.Vector3f;
+import org.slf4j.Logger;
 import ru.adaptionwheel.AdaptionWheel;
+import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.compat.WheelSlots;
 import ru.adaptionwheel.config.AdaptionConfig;
+import ru.adaptionwheel.data.ModDataComponents;
 
+import java.io.BufferedReader;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public class WheelRenderer {
+
+    private static final Logger LOGGER = LogUtils.getLogger();
+
+    private static final Identifier WHEEL_MODEL = Identifier.fromNamespaceAndPath(
+            AdaptionWheel.MODID, "models/entity/dharma_chakra.obj");
+
+    private static volatile ObjMesh wheelMesh;
+    private static boolean fallbackLogged;
 
     private static final float MODEL_RADIUS_PX = 4.5f;
     private static final float PX_PER_BLOCK = 16.0f;
     private static final float BOB_AMPLITUDE = 0.06f;
     private static final float BOB_SPEED = 0.08f;
 
-    /**
-     * One completed adaptation advances the wheel by one spoke — an eighth of a turn. The wheel
-     * does not spin on its own: it holds still between completions, and the bob is the only
-     * continuous motion left. Ported from 1.21.1 to restore the detent/"click" behaviour.
-     */
     private static final float STEP_RADIANS = (float) (Math.PI / 4.0);
-
-    /** How long one spoke takes to click round, in ticks. */
     private static final float STEP_TICKS = 6.0f;
-
-    /**
-     * Ease-out-back constant: the click turns a little past the spoke and settles back, like a
-     * detent. At 1.9 the overshoot is about 12% of a step (~5° on a 45° turn).
-     */
     private static final float BACK_C1 = 1.9f;
-
-    /**
-     * A count change larger than this is a load/grant/reset rather than a real adaptation; it
-     * snaps because animating dozens of steps would whirl the wheel. The mesh is eight-fold
-     * symmetric, so the phase modulo 45° does not matter.
-     */
     private static final int MAX_ANIMATED_STEPS = 8;
+
+    private static final int WHEEL_GROWTH_REFERENCE = 60;
+    private static final float MAX_GROWTH = 1.55F;
 
     private static final ContextKey<Boolean> WEARING_WHEEL =
             new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "wearing_wheel"));
-
     private static final ContextKey<Integer> ADAPT_COUNT =
             new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "adapt_count"));
-
     private static final ContextKey<Float> WORLD_TIME =
             new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "world_time"));
-
-    /** Stable per-entity key for the client-side click animation state. */
     private static final ContextKey<Integer> ENTITY_ID =
             new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "wheel_entity_id"));
+    private static final ContextKey<Integer> BLOCK_LIGHT =
+            new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "wheel_block_light"));
+    private static final ContextKey<Integer> SKY_LIGHT =
+            new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "wheel_sky_light"));
+    private static final ContextKey<Integer> POS_X =
+            new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "wheel_x"));
+    private static final ContextKey<Integer> POS_Y =
+            new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "wheel_y"));
+    private static final ContextKey<Integer> POS_Z =
+            new ContextKey<>(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "wheel_z"));
 
     private static final Map<Integer, SpinState> SPIN = new HashMap<>();
+    private static final Map<java.util.UUID, long[]> WEARING_CACHE = new HashMap<>();
+    private static final long CACHE_TTL_TICKS = 10;
+
+    // CPU-lit helpers (ported/adapted from 1.21.1)
+    private static final Vector3f NORMAL_SCRATCH = new Vector3f();
+    private static final Vector3f LIGHT_SCRATCH = new Vector3f();
+    private static final Vector3f VIEW_SCRATCH = new Vector3f();
+    private static final Vector3f HALF_SCRATCH = new Vector3f();
+    private static final float METAL_AMBIENT = 0.18f;
+    private static final float SPEC_STRENGTH = 0.55f;
+    private static final float SPEC_POWER = 14.0f;
+    private static final float RIM_STRENGTH = 0.45f;
+    private static final float RIM_POWER = 3.0f;
+    private static final float RIM_R = 1.00f;
+    private static final float RIM_G = 0.85f;
+    private static final float RIM_B = 0.35f;
 
     @SubscribeEvent
     public static void registerRenderStateModifiers(RegisterRenderStateModifiersEvent event) {
@@ -85,11 +120,20 @@ public class WheelRenderer {
                 }
                 boolean wearing = AdaptionConfig.WHEEL_ABOVE_HEAD.get() && isWearingWheel(player);
                 state.setRenderData(WEARING_WHEEL, wearing ? Boolean.TRUE : null);
-                if (wearing) {
-                    state.setRenderData(WORLD_TIME, player.level().getGameTime() + state.partialTick);
-                    state.setRenderData(ADAPT_COUNT, adaptCountFor(player));
-                    state.setRenderData(ENTITY_ID, player.getId());
+                if (!wearing) {
+                    return;
                 }
+                state.setRenderData(WORLD_TIME, player.level().getGameTime() + state.partialTick);
+                state.setRenderData(ADAPT_COUNT, adaptCountFor(player));
+                state.setRenderData(ENTITY_ID, player.getId());
+
+                float height = state.boundingBoxHeight + 0.45f;
+                BlockPos lightPos = BlockPos.containing(player.getX(), player.getY() + height, player.getZ());
+                state.setRenderData(BLOCK_LIGHT, player.level().getBrightness(LightLayer.BLOCK, lightPos));
+                state.setRenderData(SKY_LIGHT, player.level().getBrightness(LightLayer.SKY, lightPos));
+                state.setRenderData(POS_X, Mth.floor(player.getX() * 64.0));
+                state.setRenderData(POS_Y, Mth.floor((player.getY() + height) * 64.0));
+                state.setRenderData(POS_Z, Mth.floor(player.getZ() * 64.0));
             }
         });
     }
@@ -98,97 +142,140 @@ public class WheelRenderer {
     public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         WEARING_CACHE.clear();
         SPIN.clear();
+        WheelLights.clear();
     }
 
     @SubscribeEvent
     public static void render(RenderLivingEvent.Post<?, ?, ?> event) {
         LivingEntityRenderState state = event.getRenderState();
-
         if (!(state instanceof AvatarRenderState) || !Boolean.TRUE.equals(state.getRenderData(WEARING_WHEEL))) {
             return;
         }
+
         Float storedTime = state.getRenderData(WORLD_TIME);
         float time = storedTime != null ? storedTime : state.ageInTicks;
+        Integer storedCount = state.getRenderData(ADAPT_COUNT);
+        int adaptCount = storedCount != null ? storedCount : 0;
+        Integer entityIdObj = state.getRenderData(ENTITY_ID);
+        int spinKey = entityIdObj != null ? entityIdObj : 0;
 
-        ModelPart rootPart = DharmaChakraModel.getBakedRoot();
         PoseStack poseStack = event.getPoseStack();
         SubmitNodeCollector collector = event.getSubmitNodeCollector();
 
         float height = state.boundingBoxHeight + 0.45f;
         float wheelSize = (float) (double) AdaptionConfig.WHEEL_SIZE.get();
-        float scale = wheelSize * PX_PER_BLOCK / MODEL_RADIUS_PX;
-
-        // Growth is a smooth function of the adaptation count rather than a step per named tier:
-        // the wheel visibly fills out as the player adapts, with no thresholds to cross and nothing
-        // to be told about. Capped so a very late wheel cannot grow off the screen.
-        Integer storedCount = state.getRenderData(ADAPT_COUNT);
-        int adaptCount = storedCount != null ? storedCount : 0;
-        float growth = 1.0F + 0.55F * (adaptCount / (float) WHEEL_GROWTH_REFERENCE);
-        scale *= Math.min(growth, MAX_GROWTH);
+        float growth = Math.min(1.0F + 0.55F * (adaptCount / (float) WHEEL_GROWTH_REFERENCE), MAX_GROWTH);
         int tint = tintFor(adaptCount);
-
         float bob = Mth.sin(time * BOB_SPEED) * BOB_AMPLITUDE;
-        Integer entityId = state.getRenderData(ENTITY_ID);
-        int spinKey = entityId != null ? entityId : 0;
         float spinAngle = wheelAngle(spinKey, adaptCount, time);
 
         poseStack.pushPose();
-
         poseStack.translate(0, height + bob, 0);
-
-        // No idle spin and no body-yaw follow: the wheel hangs in world space and only advances a
-        // spoke when an adaptation completes. The entity yaw lives inside the renderer's own push,
-        // so this cancels it back to world space (parity with 1.21.1 behaviour).
         poseStack.rotate(Axis.YP, (float) Math.toRadians(-state.bodyRot));
         poseStack.rotate(Axis.YP, spinAngle);
 
-        poseStack.scale(scale, scale, scale);
-
-        // 26.3 render-state path currently draws the fallback 25-cube model through vanilla model
-        // submission. Full wheel_metal OBJ/shader + WheelLights parity from 1.21.1 is intentionally
-        // deferred here: the 26.3 SubmitNodeCollector/render-pipeline/uniform flow differs
-        // substantially and a partial port risks breaking the wheel entirely. FULL_BRIGHT keeps the
-        // wheel readable until world-light sampling is ported safely.
-        collector.submitModelPart(rootPart, poseStack,
-                RenderTypes.entityCutout(DharmaChakraModel.TEXTURE),
-                LightCoordsUtil.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, null, 0xF3000000 | tint);
+        ObjMesh mesh = wheelMesh;
+        if (mesh != null) {
+            float scale = (wheelSize / mesh.radius()) * growth;
+            poseStack.scale(scale, scale, scale);
+            drawMesh(mesh, poseStack, collector, adaptCount, tint, state);
+        } else {
+            if (!fallbackLogged) {
+                fallbackLogged = true;
+                LOGGER.warn("[{}] No wheel mesh is loaded; drawing the fallback 25-cube model. If {} exists, "
+                        + "the mesh reload listener did not run or the file failed to parse", AdaptionWheel.MODID, WHEEL_MODEL);
+            }
+            ModelPart rootPart = DharmaChakraModel.getBakedRoot();
+            float scale = wheelSize * PX_PER_BLOCK / MODEL_RADIUS_PX * growth;
+            poseStack.scale(scale, scale, scale);
+            collector.submitModelPart(rootPart, poseStack,
+                    RenderTypes.entityCutout(DharmaChakraModel.TEXTURE),
+                    LightCoordsUtil.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, null, 0xF3000000 | tint);
+        }
 
         poseStack.popPose();
     }
 
-    /** Adaptations at which the wheel has visibly filled out. */
-    private static final int WHEEL_GROWTH_REFERENCE = 60;
-    /** Upper bound on growth, so a very late wheel stays on screen. */
-    private static final float MAX_GROWTH = 1.55F;
+    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, SubmitNodeCollector collector,
+                                 int adaptCount, int tintRgb, LivingEntityRenderState state) {
+        RenderType renderType = entityCutoutNoCull(DharmaChakraModel.TEXTURE);
+        float[] corners = mesh.quadCorners();
 
-    /**
-     * The wearer's adaptation count, read the same way for every player a client draws.
-     *
-     * <p>Goes through {@link WheelSlots#findWorn} rather than Curios directly, because this branch
-     * can run without Curios: the wheel then lives in the offhand or the inventory, and reaching for
-     * the Curios API unconditionally would draw every remote player's wheel at its base size.
-     */
+        int blockI = orDefault(state.getRenderData(BLOCK_LIGHT), 0);
+        int skyI = orDefault(state.getRenderData(SKY_LIGHT), 15);
+        int packedLight = LightCoordsUtil.pack(blockI, skyI);
+
+        float tr = ((tintRgb >> 16) & 0xFF) / 255.0F;
+        float tg = ((tintRgb >> 8) & 0xFF) / 255.0F;
+        float tb = (tintRgb & 0xFF) / 255.0F;
+
+        // Simple CPU-ish shading approximation in local/pose space: gives depth and metal-ish feel
+        // without needing full world-space environment reconstruction in render-state pass.
+        float ambientBase = METAL_AMBIENT + 0.55f * (blockI / 15.0f) + 0.35f * (skyI / 15.0f);
+        float ambient = Mth.clamp(ambientBase, 0.25f, 1.25f);
+        Vector3f lightDir = new Vector3f(0.35f, 0.9f, 0.25f).normalize();
+        Vector3f viewDir = new Vector3f(0.0f, 0.35f, 1.0f).normalize();
+
+        collector.submitCustomGeometry(poseStack, renderType, (pose, consumer) -> {
+            Matrix3f normalMat = pose.normal();
+            for (int i = 0; i < corners.length; i += ObjMesh.STRIDE * 4) {
+                for (int corner = 0; corner < 4; corner++) {
+                    int o = i + corner * ObjMesh.STRIDE;
+                    float x = corners[o], y = corners[o + 1], z = corners[o + 2];
+                    float u = corners[o + 3], v = corners[o + 4];
+                    NORMAL_SCRATCH.set(corners[o + 5], corners[o + 6], corners[o + 7]).mul(normalMat).normalize();
+                    float diffuse = Math.max(0.0f, NORMAL_SCRATCH.dot(lightDir));
+                    HALF_SCRATCH.set(lightDir).add(viewDir).normalize();
+                    float spec = (float) Math.pow(Math.max(0.0f, NORMAL_SCRATCH.dot(HALF_SCRATCH)), SPEC_POWER) * SPEC_STRENGTH;
+                    float rim = (float) Math.pow(1.0f - Math.max(0.0f, NORMAL_SCRATCH.dot(viewDir)), RIM_POWER) * RIM_STRENGTH;
+                    float baseShade = ambient + diffuse * 0.55f;
+                    float vr = Mth.clamp(corners[o + 8] * tr * baseShade + spec + rim * RIM_R, 0.0f, 1.25f);
+                    float vg = Mth.clamp(corners[o + 9] * tg * baseShade + spec + rim * RIM_G, 0.0f, 1.25f);
+                    float vb = Mth.clamp(corners[o + 10] * tb * baseShade + spec + rim * RIM_B, 0.0f, 1.25f);
+                    // keep in valid range for vertex color
+                    vr = Math.min(vr, 1.0f); vg = Math.min(vg, 1.0f); vb = Math.min(vb, 1.0f);
+                    consumer.addVertex(pose, x, y, z)
+                            .setColor(vr, vg, vb, 0.95f)
+                            .setUv(u, v)
+                            .setOverlay(OverlayTexture.NO_OVERLAY)
+                            .setLight(packedLight)
+                            .setNormal(NORMAL_SCRATCH.x(), NORMAL_SCRATCH.y(), NORMAL_SCRATCH.z());
+                }
+            }
+        });
+    }
+
+    private static RenderType entityCutoutNoCull(Identifier texture) {
+        return RenderType.create("adaptionwheel_wheel_cutout_no_cull",
+                RenderSetup.builder(net.minecraft.client.renderer.RenderPipelines.ENTITY_CUTOUT)
+                        .withTexture("Sampler0", texture)
+                        .useLightmap()
+                        .useOverlay()
+                        .setOutline(RenderSetup.OutlineProperty.AFFECTS_OUTLINE)
+                        .createRenderSetup());
+    }
+
+    private static int orDefault(Integer value, int def) {
+        return value != null ? value : def;
+    }
+
     private static int adaptCountFor(Player player) {
         if (player.isLocalPlayer()) {
             return ClientAdaption.adaptedCount;
         }
         return WheelSlots.findWorn(player)
-                .map(stack -> stack.get(ru.adaptionwheel.data.ModDataComponents.WHEEL_DATA.get()))
+                .map(stack -> stack.get(ModDataComponents.WHEEL_DATA.get()))
                 .map(ru.adaptionwheel.data.WheelData::adaptCount)
                 .orElse(0);
     }
 
-    /** Cool grey at nothing adapted, warming towards gold as the wheel fills out. */
     private static int tintFor(int adaptCount) {
         float t = Math.min(1.0F, adaptCount / (float) WHEEL_GROWTH_REFERENCE);
         int r = (int) (0x4A + (0xFF - 0x4A) * t);
         int g = (int) (0x4A + (0xD7 - 0x4A) * t);
         int b = (int) (0x4A + (0x5C - 0x4A) * t);
-        return 0xFF000000 | r << 16 | g << 8 | b;
+        return r << 16 | g << 8 | b;
     }
-
-    private static final java.util.Map<java.util.UUID, long[]> WEARING_CACHE = new java.util.HashMap<>();
-    private static final long CACHE_TTL_TICKS = 10;
 
     private static boolean isWearingWheel(Player player) {
         if (player.isLocalPlayer()) {
@@ -204,13 +291,8 @@ public class WheelRenderer {
         return wearing;
     }
 
-    /**
-     * Per-entity detent animation. The angle is a running total (symmetric mesh => phase modulo 45°
-     * is invisible) so a wheel loaded at 300 adaptations does not whirl to catch up.
-     */
     private static float wheelAngle(int entityId, int adaptCount, float time) {
         SpinState state = SPIN.computeIfAbsent(entityId, id -> new SpinState(adaptCount));
-
         if (state.count != adaptCount) {
             int delta = adaptCount - state.count;
             state.count = adaptCount;
@@ -225,7 +307,6 @@ public class WheelRenderer {
                 state.start = time;
             }
         }
-
         float progress = (time - state.start) / STEP_TICKS;
         if (progress >= 1.0F) {
             state.angle = state.to;
@@ -235,10 +316,37 @@ public class WheelRenderer {
         return state.angle;
     }
 
-    /** Ease-out-back: ends at exactly 1, but crosses it first. */
     private static float easeOutBack(float t) {
         float u = t - 1.0F;
         return 1.0F + (BACK_C1 + 1.0F) * u * u * u + BACK_C1 * u * u;
+    }
+
+    public static final class MeshReloadListener extends SimplePreparableReloadListener<ObjMesh> {
+        @Override
+        protected ObjMesh prepare(ResourceManager resources, ProfilerFiller profiler) {
+            Optional<Resource> resource = resources.getResource(WHEEL_MODEL);
+            if (resource.isEmpty()) {
+                LOGGER.warn("[{}] Wheel model {} is not in the resource manager; using fallback cube model",
+                        AdaptionWheel.MODID, WHEEL_MODEL);
+                return null;
+            }
+            try (BufferedReader reader = resource.get().openAsReader()) {
+                ObjMesh mesh = ObjMesh.parse(reader);
+                LOGGER.info("[{}] Wheel model {}: {} faces -> {} triangles, radius {} blocks",
+                        AdaptionWheel.MODID, WHEEL_MODEL, mesh.faceCount(), mesh.triangleCount(), mesh.radius());
+                return mesh;
+            } catch (IOException | RuntimeException e) {
+                LOGGER.error("[{}] Could not read wheel model {}; using fallback cube model",
+                        AdaptionWheel.MODID, WHEEL_MODEL, e);
+                return null;
+            }
+        }
+
+        @Override
+        protected void apply(ObjMesh mesh, ResourceManager resources, ProfilerFiller profiler) {
+            wheelMesh = mesh;
+            fallbackLogged = false;
+        }
     }
 
     private static final class SpinState {
