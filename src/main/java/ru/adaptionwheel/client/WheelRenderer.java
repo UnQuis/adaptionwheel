@@ -225,7 +225,7 @@ public class WheelRenderer {
                             .setUv(u, v)
                             .setOverlay(OverlayTexture.NO_OVERLAY)
                             .setLight(packedLight)
-                            .setNormal(nx, ny, nz);
+                            .setNormal(pose, nx, ny, nz);
                 }
             }
         });
