@@ -2079,6 +2079,16 @@ public class AdaptionEvents {
         event.setMaterialCost(1);
     }
 
+
+
+    private static java.util.List<String> buildAbilities(PlayerAdaption data) {
+        java.util.List<String> abilities = new java.util.ArrayList<>();
+        if (DiveAbility.unlocked(data)) {
+            abilities.add(DiveAbility.ID);
+        }
+        return abilities;
+    }
+
     public static void sync(ServerPlayer player, PlayerAdaption data, boolean wearing) {
 
         Map<String, Integer> existenceProgress = visibleBossProgress(player, data);
@@ -2102,7 +2112,7 @@ public class AdaptionEvents {
                 combatFistDone(data),
                 combatFistTotal(data),
                 new ArrayList<>(data.disabled),
-                java.util.List.of()
+                buildAbilities(data)
         );
         AdaptionSyncPayload.sendTo(player, payload);
     }

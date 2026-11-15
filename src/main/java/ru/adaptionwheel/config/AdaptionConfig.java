@@ -150,6 +150,14 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_DESTROY_ENABLED;
     public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_DESTROY_REQUIRED;
 
+    public static final ModConfigSpec.ConfigValue<Boolean> DIVE_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> DIVE_RADIUS;
+    public static final ModConfigSpec.ConfigValue<Double> DIVE_DAMAGE;
+    public static final ModConfigSpec.ConfigValue<Double> DIVE_SPEED;
+    public static final ModConfigSpec.ConfigValue<Double> DIVE_MIN_FALL;
+    public static final ModConfigSpec.ConfigValue<Integer> DIVE_COOLDOWN_TICKS;
+    public static final ModConfigSpec.ConfigValue<Integer> DIVE_MAX_BLOCKS;
+
     public static final ModConfigSpec.ConfigValue<Integer> CONTACT_IMMUNITY_LEVEL;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> CONTACT_PROTECTION_LEVELS;
 
@@ -524,6 +532,32 @@ public final class AdaptionConfig {
         DIMENSION_DESTROY_REQUIRED = s.comment("Adaptations on the wheel required to unlock Dimension Destroy.",
                         "The original gates it behind Transcendence; this mod uses the same idea.")
                 .defineInRange("adaptationsRequired", 450, 1, 1000);
+        s.pop();
+
+        s.comment("--- Dive (active ability) ---").push("dive");
+        DIVE_ENABLED = s.comment("Dive: while flying or falling, press the ability key to slam straight",
+                        "down. The landing carves a crater and damages everything around it.",
+                        "Unlocked by adapting to fall damage or by the Flight mutation.")
+                .define("enabled", true);
+        DIVE_RADIUS = s.comment("Crater radius in blocks. The ability is designed around a 5-10 block",
+                        "impact, so the default sits in the middle of that band.")
+                .defineInRange("radius", 6.0, 5.0, 10.0);
+        DIVE_DAMAGE = s.comment("Damage dealt to each living entity other than the diver inside the radius.")
+                .defineInRange("damage", 8.0, 0.0, 1000.0);
+        DIVE_SPEED = s.comment("Downward speed held for the whole dive, in blocks per tick.",
+                        "Vanilla terminal velocity is about 3.9 blocks/tick, so anything at or below",
+                        "that is not a slam at all — it is falling. The default is roughly 1.5x",
+                        "terminal velocity.")
+                .defineInRange("speed", 6.0, 0.5, 12.0);
+        DIVE_MIN_FALL = s.comment("Minimum accumulated fall distance that allows a dive when Flight is not",
+                        "active. It stops a player from triggering the crater from a one-block hop.")
+                .defineInRange("minFall", 3.0, 1.0, 64.0);
+        DIVE_COOLDOWN_TICKS = s.comment("Cooldown between dives, in ticks (20 ticks = one second).")
+                .defineInRange("cooldownTicks", 100, 0, 2400);
+        DIVE_MAX_BLOCKS = s.comment("Hard cap on blocks removed by one landing. It protects large",
+                        "radii and modded soft blocks from turning a single dive into a chunk-sized",
+                        "hole; blocks are taken nearest-first, so a capped crater stays round.")
+                .defineInRange("maxBlocks", 1500, 1, 4096);
         s.pop();
 
         s.comment("--- Contact Defense ---").push("contactDefense");

@@ -90,6 +90,9 @@ public class AdaptionWheel {
         event.enqueueWork(() -> {
             Item item = ModItems.MAHORAGA_WHEEL.get();
             CuriosCompat.registerWheel(item);
+
+            ru.adaptionwheel.ability.ActiveAbilities.register(
+                    ru.adaptionwheel.server.DiveAbility.definition());
         });
     }
 
