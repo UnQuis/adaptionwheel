@@ -60,15 +60,25 @@ public class AdaptionHud {
 
     @SubscribeEvent
     public static void render(RenderGuiEvent.Post event) {
-        if (!AdaptionConfig.HUD_ENABLED.get() || !ClientAdaption.wearingWheel) {
+        if (!ClientAdaption.wearingWheel) {
+            return;
+        }
+        GuiGraphicsExtractor graphics = event.getGuiGraphics();
+        Minecraft mc = Minecraft.getInstance();
+
+        // The Instabreak state is a permanent readout, not an analysis row. Draw it near the hotbar
+        // independently of the analysis HUD toggle and of whether anything is currently being analysed.
+        if (ClientAdaption.instabreakUnlocked && mc.screen == null) {
+            drawInstabreakState(graphics, mc);
+        }
+
+        if (!AdaptionConfig.HUD_ENABLED.get()) {
             return;
         }
         if (ClientAdaption.TASKS.isEmpty() && !ClientAdaption.adversityActive
                 && ClientAdaption.EXISTENCE_PROGRESS.isEmpty() && !hasFistRow()) {
             return;
         }
-        GuiGraphicsExtractor graphics = event.getGuiGraphics();
-        Minecraft mc = Minecraft.getInstance();
         Font font = mc.font;
         int opacity = AdaptionConfig.HUD_OPACITY.get();
         float scale = (float) (double) AdaptionConfig.HUD_SCALE.get();
@@ -125,23 +135,17 @@ public class AdaptionHud {
                     ru.adaptionwheel.category.FistTiers::color));
         }
 
-        // The row appears only once the punch is trainable -- the first bare-handed hostile kill --
-        // and then stays for good. The gate is `combatFistTier()`, derived from the synced LEVELS
-        // map, not from the per-kill progress fields: those travel on `CombatFistProgressPayload`,
-        // which is only sent when a kill lands and is cleared on logout, so gating on them would
-        // make the row vanish again on every relogin after the player had already unlocked it.
+        // Show the row only while there is a next level to earn. Once the ladder is finished the
+        // server reports total 0; the Instabreak state is carried by the hotbar readout instead.
         {
             int trained = ClientAdaption.combatFistTier();
-            if (trained >= 0) {
+            if (trained >= 0 && ClientAdaption.combatFistProgressTotal > 0) {
                 int tierCount = ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT;
                 int tier = Math.min(trained, tierCount - 1);
-                boolean maxed = ClientAdaption.combatFistProgressTotal <= 0;
                 String concept = ru.adaptionwheel.category.CombatFistTiers.concept(tier);
-                // No suffix beyond MAX: the meter already prints "0/6 kills" from blocksDone/Total,
-                // so a repeated counter suffix would just say the same number twice.
-                rows.add(buildFistTierRow(concept, maxed ? 1f : combatFistProgress(),
+                rows.add(buildFistTierRow(concept, combatFistProgress(),
                         ClientAdaption.combatFistProgressDone, ClientAdaption.combatFistProgressTotal,
-                        maxed ? "MAX" : null, ClientAdaption.level(concept), tier, tierCount,
+                        null, ClientAdaption.level(concept), tier, tierCount,
                         ru.adaptionwheel.category.CombatFistTiers::concept,
                         ru.adaptionwheel.category.CombatFistTiers::color));
             }
@@ -473,5 +477,21 @@ public class AdaptionHud {
             return 0f;
         }
         return Math.min(1f, (float) ClientAdaption.combatFistProgressDone / total);
+    }
+
+    private static void drawInstabreakState(GuiGraphicsExtractor graphics, Minecraft mc) {
+        boolean active = ClientAdaption.instabreakActive;
+        int accent = active ? 0xFF57D68D : 0xFF9A9A9A;
+        String label = Component.translatable(active
+                ? "adaptionwheel.instabreak.on"
+                : "adaptionwheel.instabreak.off").getString();
+        String key = AdaptionKeybinds.TOGGLE_INSTABREAK_KEY.getTranslatedKeyMessage().getString();
+        String text = label + " [" + key + "]";
+        int x = graphics.guiWidth() / 2 + 96;
+        int y = graphics.guiHeight() - 56;
+        int w = mc.font.width(text) + 10;
+        graphics.fill(x - 3, y - 2, x + w, y + 10, 0xAA101010);
+        graphics.fill(x - 3, y - 2, x - 1, y + 10, accent);
+        graphics.text(mc.font, text, x + 2, y, accent, false);
     }
 }
