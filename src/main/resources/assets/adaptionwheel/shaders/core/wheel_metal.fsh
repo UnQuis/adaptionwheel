@@ -4,13 +4,26 @@
 // rather than as a screen-space pass: the wheel is drawn in the middle of the world pass, where
 // the framebuffer it would have to read is the one it is writing, and that read is undefined.
 // Everything the metal reflects is therefore evaluated per pixel from the ray direction -- sky
-// gradient, sun/moon disc, a bright horizon band and a couple of studio strips -- which is what
-// the metal shaders this is modelled on do too, and it costs nothing to make it follow the game's
-// own sky colour and sun angle.
+// gradient, sun/moon disc, a bright horizon band, studio strips and a reflected studio grid --
+// which is what the metal shaders this is modelled on do too, and it costs nothing to make it
+// follow the game's own sky colour and sun angle.
+//
+// Three of those ideas are lifted from the shaders on metalshaders.com (the `shader.frag` files in
+// github.com/Archetapp/MetalShaders), which are 2D fullscreen effects and so cannot be used as a
+// surface shader directly -- what transfers is the vocabulary:
+//   * `liquid-chrome`'s Fresnel floor, `mix(0.6, 1.0, ...)`. A real metal reflects strongly at
+//     every angle; plain Schlick with f0 = albedo leaves the face-on reflection at half strength
+//     and the surface reads as painted.
+//   * `liquid-chrome`'s reflected GRID. A gradient plus a sun disc is not enough for the eye to
+//     read "reflection" -- it needs structure that slides across the surface as the surface turns.
+//   * `rust-corrosion`'s multi-octave noise driving colour, roughness and pitting. Corrosion is not
+//     a uniform roughness: it is polished plate interrupted by matte pits, and that variation is
+//     most of what makes it look corroded rather than sandblasted.
 
 uniform sampler2D Sampler0;
 
 uniform vec3 WheelCamera;   // world-space eye
+uniform vec3 WheelCentre;   // world-space centre of the wheel, so noise can be wheel-local
 uniform vec3 WheelSun;      // unit vector towards the sun, or towards the moon at night
 uniform vec4 WheelSky;      // rgb = the level's sky colour, a = how much sky light there is (0..1)
 uniform vec4 WheelParams;   // x = roughness, y = night flag, z = block light (0..1), w = exposure
@@ -26,13 +39,58 @@ out vec4 fragColor;
 const float PI = 3.14159265359;
 
 // ---------------------------------------------------------------------------------------------
+// Noise -- value noise, four octaves. Cheap, and it only has to look like corrosion, not like
+// Perlin: the pits it carves are a few centimetres across on a 1.3-block wheel.
+// ---------------------------------------------------------------------------------------------
+
+float hash13(vec3 p) {
+    p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+
+float valueNoise(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float n000 = hash13(i + vec3(0.0, 0.0, 0.0));
+    float n100 = hash13(i + vec3(1.0, 0.0, 0.0));
+    float n010 = hash13(i + vec3(0.0, 1.0, 0.0));
+    float n110 = hash13(i + vec3(1.0, 1.0, 0.0));
+    float n001 = hash13(i + vec3(0.0, 0.0, 1.0));
+    float n101 = hash13(i + vec3(1.0, 0.0, 1.0));
+    float n011 = hash13(i + vec3(0.0, 1.0, 1.0));
+    float n111 = hash13(i + vec3(1.0, 1.0, 1.0));
+    return mix(mix(mix(n000, n100, f.x), mix(n010, n110, f.x), f.y),
+               mix(mix(n001, n101, f.x), mix(n011, n111, f.x), f.y), f.z);
+}
+
+float fbm(vec3 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 4; i++) {
+        v += a * valueNoise(p);
+        p *= 2.03;
+        a *= 0.5;
+    }
+    return v;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Environment
 // ---------------------------------------------------------------------------------------------
+
+/** A line every 1/n of the way along `v`, `w` wide. Used for the reflected studio grid. */
+float gridLine(float v, float n, float w) {
+    float f = fract(v * n);
+    return smoothstep(0.5 - w, 0.5, abs(f - 0.5));
+}
 
 /**
  * The sky, seen along a reflected ray. The horizon band is the part that makes metal read as
  * metal: a smooth gradient alone gives a flat tinted blob, while a hard bright line across it is
- * what the eye recognises as a reflection of something.
+ * what the eye recognises as a reflection of something. The grid goes one step further and gives
+ * the reflection *structure*, so it slides across the wheel as the wheel turns.
  */
 vec3 environment(vec3 R, float rough) {
     float up = R.y;
@@ -58,6 +116,13 @@ vec3 environment(vec3 R, float rough) {
     float az = atan(R.x, R.z);
     float strips = pow(max(0.0, cos(az * 2.0 + 1.2)), 24.0) * smoothstep(0.0, 0.30, up);
     col += vec3(0.90, 0.95, 1.00) * strips * 0.30 * (0.25 + 0.75 * WheelSky.a);
+
+    // The reflected studio grid: meridians and parallels of a dim white cage around the wheel.
+    // `az` is divided by 2*PI so the pattern closes seamlessly at the atan seam -- with 8 meridians
+    // the value at +/-PI is exactly +/-4, whose fractional part is 0 on both sides.
+    float cage = gridLine(az * (1.0 / (2.0 * PI)), 8.0, 0.012) * 0.75
+               + gridLine(up, 6.0, 0.010) * 0.45;
+    col += vec3(0.95, 0.97, 1.00) * cage * 0.42 * (0.30 + 0.70 * WheelSky.a) * (1.0 - 0.7 * rough);
 
     // Rough surfaces average the environment out instead of mirroring it.
     vec3 average = mix(horizon, ground, 0.5);
@@ -103,17 +168,40 @@ void main() {
         N = -N;
     }
     vec3 V = normalize(WheelCamera - worldPos);
+
+    // Corrosion, in wheel-local units so it travels with the wheel instead of swimming past it as
+    // the player walks. `pit` is the large-scale field (which patches are eaten), `grit` the fine
+    // one (individual pinpricks).
+    vec3 local = (worldPos - WheelCentre) * 14.0;
+    float pit = fbm(local);
+    float grit = fbm(local * 3.7 + vec3(11.0, 5.0, 7.0));
+
+    // The pitting is what makes the surface corroded rather than sandblasted: a few percent of
+    // normal wobble, plus a roughness that swings from near-mirror plate to matte scabs.
+    vec3 grad = vec3(
+        fbm(local + vec3(0.06, 0.0, 0.0)) - fbm(local - vec3(0.06, 0.0, 0.0)),
+        fbm(local + vec3(0.0, 0.06, 0.0)) - fbm(local - vec3(0.0, 0.06, 0.0)),
+        fbm(local + vec3(0.0, 0.0, 0.06)) - fbm(local - vec3(0.0, 0.0, 0.06)));
+    N = normalize(N + grad * 0.55);
+
     float NoV = max(dot(N, V), 1.0e-3);
     vec3 R = reflect(-V, N);
 
-    float rough = clamp(WheelParams.x, 0.06, 1.0);
+    float baseRough = clamp(WheelParams.x, 0.06, 1.0);
+    float rough = clamp(baseRough + (smoothstep(0.40, 0.78, pit) - 0.15) * 0.55, 0.06, 1.0);
     float a = rough * rough;
 
     // A metal has no diffuse: its base colour is its reflectance, and it tints the reflection.
+    // Pits are also darker, which is the cheapest possible ambient occlusion and the thing that
+    // stops the noise from reading as a pattern rather than as damage.
     vec3 albedo = texture(Sampler0, texCoord).rgb * vColor.rgb;
+    albedo *= 1.0 - 0.35 * smoothstep(0.55, 0.85, pit) - 0.12 * smoothstep(0.60, 0.90, grit);
     vec3 f0 = albedo;
 
-    vec3 color = environment(R, rough) * fresnelSchlick(f0, NoV);
+    // The Fresnel floor from liquid-chrome: a metal is never 4% reflective face-on, and letting
+    // the reflection fall to f0 makes gold look like matte paint.
+    float fres = pow(1.0 - NoV, 3.0);
+    vec3 color = environment(R, rough) * fresnelSchlick(f0, NoV) * mix(1.45, 1.0, fres);
 
     // Direct light: GGX highlight from the sun or moon.
     vec3 L = WheelSun;

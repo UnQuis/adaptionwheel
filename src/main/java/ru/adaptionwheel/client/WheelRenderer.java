@@ -413,6 +413,13 @@ public class WheelRenderer {
                 .mul(RenderSystem.getModelViewMatrix());
         shader.safeGetUniform("WheelProj").set(viewProj);
         shader.safeGetUniform("WheelCamera").set(eyeX, eyeY, eyeZ);
+        // The wheel's own origin in world space: the pose stack's origin is the wheel's centre, so
+        // transforming (0,0,0) and adding the eye is where it actually sits. The fragment stage
+        // uses it to keep the corrosion noise anchored to the wheel instead of to the world.
+        POS_SCRATCH.set(0.0F, 0.0F, 0.0F);
+        poseMatrix.transformPosition(POS_SCRATCH);
+        shader.safeGetUniform("WheelCentre").set(
+                POS_SCRATCH.x + eyeX, POS_SCRATCH.y + eyeY, POS_SCRATCH.z + eyeZ);
         shader.safeGetUniform("WheelSun").set(-Mth.sin(celestialAngle), night ? -sunY : sunY, 0.0f);
         shader.safeGetUniform("WheelSky").set((float)skyColor.x, (float)skyColor.y, (float)skyColor.z, skyAmount);
         shader.safeGetUniform("WheelParams").set(METAL_ROUGHNESS, night ? 1.0f : 0.0f, blockAmount, 1.0f);
