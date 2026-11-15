@@ -49,14 +49,18 @@ void main() {
     sphericalVertexDistance = fog_spherical_distance(Position);
     cylindricalVertexDistance = fog_cylindrical_distance(Position);
 
+// Lighting directions are in view space. Transform the world-space normal once and use
+    // that same normal for both cardinal lighting and the fragment BRDF.
+    vec3 transformedNormal = normalize(mat3(ModelViewMat) * Normal);
+
 #ifdef PER_FACE_LIGHTING
-    vec2 light = minecraft_compute_light(Light0_Direction, Light1_Direction, Normal);
+    vec2 light = minecraft_compute_light(Light0_Direction, Light1_Direction, transformedNormal);
     vertexPerFaceColorBack = minecraft_mix_light_separate(-light, Color);
     vertexPerFaceColorFront = minecraft_mix_light_separate(light, Color);
 #elif defined(NO_CARDINAL_LIGHTING)
     vertexColor = Color;
 #else
-    vertexColor = minecraft_mix_light(Light0_Direction, Light1_Direction, Normal, Color);
+    vertexColor = minecraft_mix_light(Light0_Direction, Light1_Direction, transformedNormal, Color);
 #endif
 
 #if !defined(EMISSIVE) && !defined(OIT_ALPHA_ONLY)
@@ -68,6 +72,6 @@ void main() {
 #endif
 
     texCoord0 = UV0;
-    viewNormal = normalize(mat3(ModelViewMat) * Normal);
+    viewNormal = transformedNormal;
     viewPos = viewPosition.xyz;
 }
