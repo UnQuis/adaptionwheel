@@ -39,22 +39,35 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
 
     private final CraftingRecipeBookComponent recipeBookComponent;
     private final EffectsInInventory effects;
+    private final boolean sideLayout;
     private boolean widthTooNarrow;
     private float xMouse;
     private float yMouse;
 
     public CacheScreen(CacheMenu menu, Inventory inventory, Component title) {
-        super(menu, inventory, title, CacheService.PANEL_WIDTH, CacheService.PANEL_HEIGHT);
+        super(menu, inventory, title,
+                chooseSideLayout() ? CacheService.SIDE_WIDTH : CacheService.PANEL_WIDTH,
+                chooseSideLayout() ? CacheService.SIDE_HEIGHT : CacheService.PANEL_HEIGHT);
+        this.sideLayout = this.imageWidth == CacheService.SIDE_WIDTH;
         this.titleLabelX = 97;
         this.inventoryLabelY = -100;
         this.recipeBookComponent = new CraftingRecipeBookComponent(menu);
         this.effects = new EffectsInInventory(this);
+        menu.relayoutCache(this.sideLayout);
+    }
+
+    private static boolean chooseSideLayout() {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        int h = mc.getWindow() == null ? 0 : mc.getWindow().getGuiScaledHeight();
+        return h > 0 && h < CacheService.PANEL_HEIGHT + 16;
     }
 
     @Override
     protected void init() {
         super.init();
         this.widthTooNarrow = this.width < 379;
+        // Ensure slot layout matches the chosen panel shape even if init is called multiple times.
+        this.menu.relayoutCache(this.sideLayout);
         this.recipeBookComponent.init(this.width, this.height, this.minecraft, this.widthTooNarrow);
         this.leftPos = this.recipeBookComponent.updateScreenPosition(this.width, this.imageWidth);
         initRecipeBookButton();
@@ -120,7 +133,11 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
         }
 
         // The cache extension is the same art as the inventory it hangs off.
-        CachePanel.drawJoined(graphics, xo, yo + CacheService.VANILLA_HEIGHT);
+        if (sideLayout) {
+            CachePanel.draw(graphics, xo + CacheService.SIDE_CACHE_X, yo + CacheService.SIDE_CACHE_Y);
+        } else {
+            CachePanel.drawJoined(graphics, xo, yo + CacheService.VANILLA_HEIGHT);
+        }
     }
 
     /**
@@ -129,8 +146,10 @@ public class CacheScreen extends AbstractContainerScreen<CacheMenu> implements R
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int xm, int ym) {
         graphics.text(this.font, this.title, this.titleLabelX, this.titleLabelY, 0xFF404040, false);
+        int labelX = sideLayout ? CacheService.SIDE_CACHE_X + 8 : 8;
+        int labelY = sideLayout ? CacheService.SIDE_CACHE_Y + 4 : CacheService.CACHE_LABEL_Y;
         graphics.text(this.font, Component.translatable("adaptionwheel.gui.cache"),
-                8, CacheService.CACHE_LABEL_Y, 0xFF404040, false);
+                labelX, labelY, 0xFF404040, false);
     }
 
     @Override
