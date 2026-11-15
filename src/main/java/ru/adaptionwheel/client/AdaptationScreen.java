@@ -80,14 +80,13 @@ public class AdaptationScreen extends Screen {
     private AdaptationDomain selectedTab = ALL_TAB;
 
     private List<String> lastConcepts = List.of();
+    private String selectedConcept;
 
     /** Search text, matched against display names, concept keys and descriptions. */
     private String search = "";
     private boolean searchFocused;
     /** Caret position inside {@link #search}, as a character offset. */
     private int searchCaret;
-    /** Anchor for shift-click selection; null when there is none. */
-    private String selectionAnchor;
 
     private static final int SEARCH_H = 9;
     private static final int SEARCH_W = 132;
@@ -254,6 +253,35 @@ public class AdaptationScreen extends Screen {
             // also act on it. Without this the number keys and the movement keys leak through.
             return true;
         }
+
+        boolean control = (modifiers & GLFW_MOD_CONTROL) != 0;
+        if (keyCode == GLFW_KEY_SLASH || (control && keyCode == GLFW_KEY_F)) {
+            searchFocused = true;
+            searchCaret = search.length();
+            return true;
+        }
+        if (keyCode == GLFW_KEY_DOWN) {
+            moveSelection(1);
+            return true;
+        }
+        if (keyCode == GLFW_KEY_UP) {
+            moveSelection(-1);
+            return true;
+        }
+        if (keyCode == 267 /* GLFW_KEY_PAGE_DOWN */) {
+            scrollTarget = Math.max(0, Math.min(maxScroll(), scrollTarget + Math.max(ENTRY_H, listH - ENTRY_H)));
+            return true;
+        }
+        if (keyCode == 266 /* GLFW_KEY_PAGE_UP */) {
+            scrollTarget = Math.max(0, Math.min(maxScroll(), scrollTarget - Math.max(ENTRY_H, listH - ENTRY_H)));
+            return true;
+        }
+        if (keyCode == GLFW_KEY_ENTER || keyCode == GLFW_KEY_KP_ENTER || keyCode == InputConstants.KEY_SPACE) {
+            if (selectedConcept != null && ClientAdaption.isAdapted(selectedConcept)) {
+                ToggleAdaptationPayload.send(selectedConcept);
+                return true;
+            }
+        }
         return super.keyPressed(event);
     }
 
@@ -285,11 +313,19 @@ public class AdaptationScreen extends Screen {
     private static final int GLFW_KEY_HOME = InputConstants.KEY_HOME;
     private static final int GLFW_KEY_END = InputConstants.KEY_END;
     private static final int GLFW_KEY_A = InputConstants.KEY_A;
+    private static final int GLFW_KEY_F = InputConstants.KEY_F;
     private static final int GLFW_KEY_V = InputConstants.KEY_V;
+    private static final int GLFW_KEY_SLASH = 47;
+    private static final int GLFW_KEY_UP = InputConstants.KEY_UP;
+    private static final int GLFW_KEY_DOWN = InputConstants.KEY_DOWN;
 
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    public boolean isSearchFocused() {
+        return searchFocused;
     }
 
     private void refreshIfStale() {
@@ -340,6 +376,9 @@ public class AdaptationScreen extends Screen {
         visibleEntries.sort(Comparator
                 .comparingInt((String c) -> AdaptationRegistrySafe.domainOf(c).ordinal())
                 .thenComparing(c -> Concepts.displayName(c).getString(), String.CASE_INSENSITIVE_ORDER));
+        if (selectedConcept == null || !visibleEntries.contains(selectedConcept)) {
+            selectedConcept = visibleEntries.isEmpty() ? null : visibleEntries.get(0);
+        }
         clampScroll();
     }
 
@@ -394,6 +433,27 @@ public class AdaptationScreen extends Screen {
                 && my >= listY && my < listY + listH;
     }
 
+    private void moveSelection(int direction) {
+        if (visibleEntries.isEmpty()) {
+            return;
+        }
+        int index = selectedConcept == null ? -1 : visibleEntries.indexOf(selectedConcept);
+        int next = index < 0 ? 0 : Math.max(0, Math.min(visibleEntries.size() - 1, index + direction));
+        selectedConcept = visibleEntries.get(next);
+        ensureVisible(next);
+    }
+
+    private void ensureVisible(int index) {
+        int top = index * ENTRY_H;
+        int bottom = top + ENTRY_H - 2;
+        if (top < scrollTarget) {
+            scrollTarget = top;
+        } else if (bottom > scrollTarget + listH) {
+            scrollTarget = bottom - listH;
+        }
+        clampScroll();
+    }
+
     private int trackX() {
         return listX + listW + 3;
     }
@@ -429,17 +489,10 @@ public class AdaptationScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        double mx = event.x();
-        double my = event.y();
-        double mouseX = mx;
-        double mouseY = my;
-        // Buttons are numbered from 1 on this branch, so `button == 0` tests copied from 1.21.1
-        // never fire. MouseButtons.isLeft is the helper that already got this right here.
+        double mouseX = event.x();
+        double mouseY = event.y();
         boolean left = MouseButtons.isLeft(event);
 
-        // The search field takes the click before any row, so typing into it never toggles an
-        // adaptation underneath. Returning true unconditionally on failure is what the container
-        // screens do, and it is what made a dead click look like the game ate it.
         int[] box = searchHitbox();
         if (mouseX >= box[0] && mouseX < box[0] + box[2]
                 && mouseY >= box[1] && mouseY < box[1] + box[3]) {
@@ -459,17 +512,22 @@ public class AdaptationScreen extends Screen {
                     continue;
                 }
                 if (mouseX >= hit[0] && mouseX < hit[0] + hit[2] && mouseY >= hit[1] && mouseY < hit[1] + hit[3]) {
-                    ToggleAdaptationPayload.send(concept);
+                    selectedConcept = concept;
+                    if (ClientAdaption.isAdapted(concept)) {
+                        ToggleAdaptationPayload.send(concept);
+                    }
                     return true;
                 }
             }
-            for (int i = 0; i < tabHitboxes.size(); i++) {
-                int[] b = tabHitboxes.get(i);
-                if (mouseX >= b[0] && mouseX < b[0] + b[2] && mouseY >= b[1] && mouseY < b[1] + b[3]) {
-                    selectedTab = i == 0 ? ALL_TAB : tabs.get(i - 1);
-                    scrollTarget = scrollOffset = 0;
-                    refreshEntries();
-                    return true;
+            if (mouseX >= tabX && mouseX < tabX + tabW && mouseY >= tabsY && mouseY < tabsY + tabViewportH) {
+                for (int i = 0; i < tabHitboxes.size(); i++) {
+                    int[] b = tabHitboxes.get(i);
+                    if (mouseX >= b[0] && mouseX < b[0] + b[2] && mouseY >= b[1] && mouseY < b[1] + b[3]) {
+                        selectedTab = i == 0 ? ALL_TAB : tabs.get(i - 1);
+                        scrollTarget = scrollOffset = 0;
+                        refreshEntries();
+                        return true;
+                    }
                 }
             }
             if (scrollable() && mouseX >= trackX() && mouseX < trackX() + SCROLLER_W
@@ -480,6 +538,13 @@ public class AdaptationScreen extends Screen {
                 draggingThumb = true;
                 dragTo(mouseY);
                 return true;
+            }
+            if (overList(mouseX, mouseY)) {
+                int index = (int) ((mouseY - listY + scrollOffset) / ENTRY_H);
+                if (index >= 0 && index < visibleEntries.size()) {
+                    selectedConcept = visibleEntries.get(index);
+                    return true;
+                }
             }
         }
         return super.mouseClicked(event, doubleClick);
@@ -758,11 +823,15 @@ public class AdaptationScreen extends Screen {
         int x = listX;
         int w = listW;
         boolean on = ClientAdaption.isEnabled(concept);
+        boolean selected = concept.equals(selectedConcept);
         int accent = on ? onPanel(Concepts.color(concept)) : 0xFF808080;
 
         g.fill(x, y, x + w, y + CARD_H, CARD_DARK);
         g.fill(x, y, x + w - 1, y + CARD_H - 1, CARD_LIGHT);
         g.fill(x + 1, y + 1, x + w - 1, y + CARD_H - 1, hovered ? CARD_HOVER : CARD_BODY);
+        if (selected) {
+            g.fill(x + 1, y + 1, x + w - 1, y + 3, mix(accent, 0xFFFFFFFF, 0.22f));
+        }
 
         g.fill(x + 1, y + 1, x + 4, y + CARD_H - 1, accent);
         g.fill(x + 1, y + 1, x + 2, y + CARD_H - 1, mix(accent, 0xFFFFFFFF, 0.35f));

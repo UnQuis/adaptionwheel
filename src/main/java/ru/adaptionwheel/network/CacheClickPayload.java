@@ -12,6 +12,11 @@ import ru.adaptionwheel.server.CacheService;
 
 /**
  * Client -&gt; server: a click on one of the cache slots drawn inside a container screen.
+ *
+ * <p>The cache is not a real {@code Slot} in those menus, so vanilla's own click pipeline cannot
+ * reach it. The client therefore sends the intent — which cell, which button, shift or not — and the
+ * server performs the move against the menu's carried stack. The carried stack is server-owned, so
+ * this is the same authority split as every other payload here: the client asks, the server decides.
  */
 public record CacheClickPayload(int index, int button, boolean shift) implements CustomPacketPayload {
 

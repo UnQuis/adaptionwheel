@@ -6,11 +6,6 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 /**
  * Read and move a container screen's panel.
- *
- * <p>The cache is drawn beside whatever container is open, which only works if the container is
- * moved to make room. {@code leftPos}/{@code topPos} are {@code protected}, and the whole screen —
- * background, slots, labels — is positioned from them, so moving them is the one change that keeps
- * everything consistent.
  */
 @Mixin(AbstractContainerScreen.class)
 public interface AbstractContainerScreenAccess {

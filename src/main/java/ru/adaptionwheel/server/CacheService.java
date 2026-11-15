@@ -17,34 +17,33 @@ public final class CacheService {
     public static final int SLOTS = 54;
     public static final int COLUMNS = 9;
     public static final int ROWS = 6;
-    public static final int GAP = 14;
     public static final int PANEL_WIDTH = 176;
     public static final int SLOT = 18;
-
-    /** Y of the first player-inventory row (main inv). */
-    public static final int PLAYER_INV_Y = slotY(ROWS) + GAP; // 140
-
-    /** Extra pixels between main inventory and hotbar (vanilla-like). */
-    public static final int HOTBAR_GAP = 4;
-
-    /** Y of the hotbar. */
-    public static final int HOTBAR_Y = PLAYER_INV_Y + 3 * SLOT + HOTBAR_GAP; // 198
-
-    /** Total GUI height: hotbar bottom + bottom padding. */
-    public static final int PANEL_HEIGHT = HOTBAR_Y + SLOT + 7; // 223
 
     /** The vanilla inventory texture is exactly 176x166. */
     public static final int VANILLA_HEIGHT = 166;
 
     /**
-     * Additional layout constants kept for 26.3 parity/integration with screen-side layout logic.
+     * The cache extension is drawn, not blitted, by {@code client/CachePanel} using the vanilla
+     * inventory's own colours and slot sprite. These are its internal offsets: a label strip, then
+     * the grid, then the panel's bottom bevel.
      */
     public static final int CACHE_TOP_PAD = 14;
     public static final int CACHE_BOTTOM_PAD = 6;
     public static final int CACHE_TEXTURE_HEIGHT = CACHE_TOP_PAD + ROWS * SLOT + CACHE_BOTTOM_PAD;
+
+    /** First cache slot when the cache is stacked under the vanilla inventory. */
     public static final int CACHE_TOP = VANILLA_HEIGHT + CACHE_TOP_PAD;
     public static final int CACHE_LABEL_Y = VANILLA_HEIGHT + 4;
 
+    /** Total height of the vertical layout: vanilla inventory + the six-row cache extension. */
+    public static final int PANEL_HEIGHT = VANILLA_HEIGHT + CACHE_TEXTURE_HEIGHT;
+
+    /*
+     * Compact layout used when the window is not tall enough for the vertical screen. The cache
+     * keeps its nine columns and moves beside the inventory instead of under it, so both layouts
+     * show the same grid and the same texture.
+     */
     public static final int SIDE_CACHE_X = 176;
     public static final int SIDE_CACHE_Y = 0;
     public static final int SIDE_COLUMNS = COLUMNS;
@@ -169,6 +168,8 @@ public final class CacheService {
                 return false;
             }
         }
+        // 26.3: offhand is a separate slot access path; use container slot 40-equivalent via
+        // offhand item lookup to avoid version-specific field names.
         return !player.getOffhandItem().isEmpty();
     }
 
@@ -176,19 +177,12 @@ public final class CacheService {
         return 8 + column * SLOT;
     }
 
-    public static int slotY(int row) {
-        return 18 + row * SLOT;
-    }
-
     /**
-     * Y coordinate for player inventory slots.
-     * rows 0-2 → main inventory, row 3 → hotbar (with vanilla-style gap).
+     * Y of a cache slot in the vertical layout. Rows are below the vanilla inventory, so the
+     * vanilla slots (result, crafting, armour, main, hotbar, offhand) keep their own positions.
      */
-    public static int playerSlotY(int row) {
-        if (row < 3) {
-            return PLAYER_INV_Y + row * SLOT;
-        }
-        return HOTBAR_Y;
+    public static int slotY(int row) {
+        return CACHE_TOP + row * SLOT;
     }
 
     /** X of a cache slot in the compact, side-by-side layout. */

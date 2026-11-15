@@ -367,8 +367,8 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         }
         int h = LIST_ROWS * ROW_H;
         int knobH = knobHeight(h, maxScroll);
-        double my = screenY - this.topPos;
-        double ratio = (my - listTop() - knobH / 2.0) / Math.max(1, h - 2 - knobH);
+        double localY = screenY - this.topPos;
+        double ratio = (localY - listTop() - knobH / 2.0) / Math.max(1, h - 2 - knobH);
         scroll = (int) Math.round(Math.max(0, Math.min(1, ratio)) * maxScroll);
     }
 
@@ -376,13 +376,11 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         double mx = event.x() - this.leftPos;
         double my = event.y() - this.topPos;
-        int x = 0;
-        int y = 0;
 
         if (!MouseButtons.isLeft(event)) {
             return super.mouseClicked(event, doubleClick);
         }
-        if (within(mx, my, x + TradeMenu.BUTTON_X, y + TradeMenu.BUTTON_Y,
+        if (within(mx, my, TradeMenu.BUTTON_X, TradeMenu.BUTTON_Y,
                 TradeMenu.BUTTON_W, TradeMenu.BUTTON_H)) {
             if (canExchange()) {
                 click();
@@ -393,11 +391,11 @@ public class TradeScreen extends AbstractContainerScreen<ResonanceAltarMenu> {
         int maxScroll = maxScroll();
         if (maxScroll > 0 && within(mx, my, trackX(), listTop(), SCROLLER_W, LIST_ROWS * ROW_H)) {
             draggingScroller = true;
-            dragScrollerTo(my);
+            dragScrollerTo(event.y());
             return true;
         }
         int rowsW = TradeMenu.LIST_W - 8 - (maxScroll > 0 ? SCROLLER_GAP : 0);
-        if (within(mx, my, x + TradeMenu.LIST_X + 4, listTop(), rowsW, LIST_ROWS * ROW_H)) {
+        if (within(mx, my, TradeMenu.LIST_X + 4, listTop(), rowsW, LIST_ROWS * ROW_H)) {
             int row = (int) ((my - listTop()) / ROW_H) + scroll;
             if (row < menu.candidates().size()) {
                 click();
