@@ -1776,11 +1776,14 @@ public class AdaptionEvents {
         } else {
             removeAdaptationNightVision(player);
         }
-        if (data.active(Concepts.ENV_STARVE)
-                && player.tickCount % 20 == 0) {
-            player.getFoodData().setFoodLevel(20);
-            player.getFoodData().setSaturation(20f);
-            resetExhaustion(player.getFoodData());
+        if (data.active(Concepts.ENV_STARVE)) {
+            // A floor, not a refill: the bar is only lifted while it is under the floor, so any
+            // food can still be eaten for its buffs and saturation, and hunger still means
+            // something. 0 disables the floor entirely.
+            int hungerFloor = AdaptionConfig.STARVE_HUNGER_FLOOR.get();
+            if (hungerFloor > 0 && player.getFoodData().getFoodLevel() < hungerFloor) {
+                player.getFoodData().setFoodLevel(hungerFloor);
+            }
         }
     }
 
@@ -1796,26 +1799,6 @@ public class AdaptionEvents {
         if (!effect.isVisible() && !effect.isAmbient() && effect.getAmplifier() == 0
                 && effect.getDuration() > 20 * 30) {
             player.removeEffect(MobEffects.NIGHT_VISION);
-        }
-    }
-
-    private static final java.lang.reflect.Field EXHAUSTION_FIELD;
-    static {
-        java.lang.reflect.Field f = null;
-        try {
-            f = net.minecraft.world.food.FoodData.class.getDeclaredField("exhaustionLevel");
-            f.setAccessible(true);
-        } catch (NoSuchFieldException ignored) {
-        }
-        EXHAUSTION_FIELD = f;
-    }
-
-    private static void resetExhaustion(net.minecraft.world.food.FoodData foodData) {
-        if (EXHAUSTION_FIELD != null) {
-            try {
-                EXHAUSTION_FIELD.setFloat(foodData, 0f);
-            } catch (IllegalAccessException ignored) {
-            }
         }
     }
 

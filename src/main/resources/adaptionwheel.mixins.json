@@ -6,6 +6,7 @@
   "plugin": "ru.adaptionwheel.mixin.AdaptionMixinPlugin",
   "mixins": [
     "FrictionMixin",
+    "LavaSwimMixin",
     "SlimeBlockMixin",
     "SlimeBounceMixin",
     "WebBlockMixin",

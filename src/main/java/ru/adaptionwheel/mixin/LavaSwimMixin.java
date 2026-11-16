@@ -12,17 +12,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.adaptionwheel.LavaSwimming;
 
 /**
- * Lava swimming, by making the water branch of {@code travel} answer for lava.
+ * Lava swimming, by making the water branch of {@code travelInFluid} answer for lava.
  *
  * <p>Vanilla's lava branch is not water with a different colour: it multiplies motion by 0.5 and
  * then subtracts a quarter of gravity every tick, so a player holding jump reaches roughly zero
  * net rise. That is why no amount of tuning the old post-tick velocity hack could make lava feel
  * swimmable — the hack was fighting a branch that actively cancels vertical motion.
  *
- * <p>Forcing the two {@code isInWater()} checks in the patched branch is the whole trick: the
- * water branch already carries the drag, the acceleration, the slow sink and the collision
- * handling, and NeoForge's own {@code jumpInFluid} call supplies the same 0.04 jump impulse in
- * lava that it does in water. The two additions are deliberately separate:
+ * <p>26.3 moved the split out of {@code travel}: {@code travel} now only decides <em>whether</em>
+ * to be in a fluid ({@code shouldTravelInFluid}, which is true in lava), and {@code travelInFluid}
+ * holds the {@code if (isInWater()) ... else if (isInLava())} choice. Forcing that one
+ * {@code isInWater()} check is the whole trick: the water branch already carries the drag, the
+ * acceleration, the slow sink and the collision handling, and NeoForge's own {@code jumpInFluid}
+ * call supplies the same 0.04 jump impulse in lava that it does in water. The two additions are
+ * deliberately separate:
  *
  * <ul>
  *   <li>the {@code isInWater} rewrite is side-agnostic. In practice a player's {@code travel} only
@@ -43,13 +46,13 @@ import ru.adaptionwheel.LavaSwimming;
 public abstract class LavaSwimMixin {
 
     @ModifyExpressionValue(
-            method = "travel",
+            method = "travelInFluid",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;isInWater()Z"))
     private boolean adaptionwheel$lavaCountsAsWater(boolean original) {
         return original || LavaSwimming.active((LivingEntity) (Object) this);
     }
 
-    @Inject(method = "travel", at = @At("HEAD"))
+    @Inject(method = "travelInFluid", at = @At("HEAD"))
     private void adaptionwheel$sinkInLava(Vec3 input, CallbackInfo ci) {
         LivingEntity self = (LivingEntity) (Object) this;
         if (!LavaSwimming.active(self) || !self.level().isClientSide()
@@ -64,7 +67,7 @@ public abstract class LavaSwimMixin {
         self.setDeltaMovement(motion.x, motion.y - 0.04 * swimSpeed, motion.z);
     }
 
-    @Inject(method = "travel", at = @At("TAIL"))
+    @Inject(method = "travelInFluid", at = @At("TAIL"))
     private void adaptionwheel$slowLavaSwim(Vec3 input, CallbackInfo ci) {
         LivingEntity self = (LivingEntity) (Object) this;
         if (!LavaSwimming.active(self)) {

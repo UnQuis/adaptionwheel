@@ -89,6 +89,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Double> EXISTENCE_REQUIRED_SECONDS;
     public static final ModConfigSpec.ConfigValue<Double> EXISTENCE_PROXIMITY_BLOCKS;
     public static final ModConfigSpec.ConfigValue<Double> FALL_ANALYSIS_SECONDS;
+    public static final ModConfigSpec.ConfigValue<Double> LAVA_SWIM_SPEED_SCALE;
 
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DEFENSE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_OFFENSE;
@@ -162,6 +163,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> CONTACT_PROTECTION_LEVELS;
 
     public static final ModConfigSpec.ConfigValue<Boolean> INSTANT_STARVE;
+    public static final ModConfigSpec.ConfigValue<Integer> STARVE_HUNGER_FLOOR;
     public static final ModConfigSpec.ConfigValue<Boolean> RAPID_FALL_ANALYSIS;
     public static final ModConfigSpec.ConfigValue<Integer> VOICE_VOLUME;
 
@@ -276,6 +278,19 @@ public final class AdaptionConfig {
         FALL_ANALYSIS_SECONDS = s
                 .comment("Seconds of fall exposure before the fall adaptation finishes.")
                 .defineInRange("fallAnalysisTime", 3.0, 0.1, 300.0);
+
+        s.pop();
+
+        s.comment("--- Environment Adaptations ---").push("environment");
+
+        LAVA_SWIM_SPEED_SCALE = s
+                .comment("Env_Lava makes lava behave like water, only slower.",
+                        "This is the horizontal share of water pace while swimming: 0.8 means",
+                        "four fifths of the speed and the same responsiveness. Vertical control",
+                        "(holding jump to rise, sneaking to sink) is deliberately NOT scaled --",
+                        "lava previously had almost no usable rise at all, so there is nothing",
+                        "to slow down there. 1.0 would make lava exactly as fast as water.")
+                .defineInRange("lavaSwimSpeedScale", 0.8D, 0.2D, 1.0D);
 
         s.pop();
 
@@ -590,6 +605,13 @@ public final class AdaptionConfig {
         INSTANT_STARVE = s
                 .comment("Decode starvation immediately on first tick and refill hunger to full.")
                 .define("instantStarve", true);
+        STARVE_HUNGER_FLOOR = s
+                .comment("Once adapted to hunger (Env_Starve), the hunger bar never drains below",
+                        "this value (10 = half the bar, five drumsticks). Unlike the old full",
+                        "refill this does NOT block eating: the bar is only lifted while it is",
+                        "under the floor, so any food can still be eaten for its buffs and",
+                        "saturation. 0 disables the floor entirely.")
+                .defineInRange("starveHungerFloor", 10, 0, 20);
         RAPID_FALL_ANALYSIS = s
                 .comment("Use a short dedicated timer for fall analysis instead of the generic env timer.")
                 .define("rapidFall", true);
