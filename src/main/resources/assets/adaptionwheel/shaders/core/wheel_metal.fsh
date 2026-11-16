@@ -1,7 +1,6 @@
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
-#include <minecraft:light.glsl>
 #include <minecraft:fog.glsl>
 #include <minecraft:dynamictransforms.glsl>
 #include <minecraft:oit.glsl>
@@ -23,9 +22,10 @@ layout(location = 4) in vec4 lightMapColor;
 layout(location = 5) in vec4 overlayColor;
 #endif
 layout(location = 6) in vec2 texCoord0;
-layout(location = 7) in vec3 viewNormal;
-layout(location = 8) in vec3 viewPos;
-layout(location = 9) in vec3 localPos;
+layout(location = 7) in vec3 worldNormal;
+layout(location = 8) in vec3 relPos;
+layout(location = 9) in vec3 worldPos;
+layout(location = 10) in float skyLight;
 
 #ifndef OIT_ALPHA_ONLY
 layout(location = 0) out vec4 fragColor;
@@ -33,10 +33,17 @@ layout(location = 0) out vec4 fragColor;
 
 const float PI = 3.14159265;
 
+// A fixed world-space key light. The 26.3 pipeline has no uniform for the real sun angle --
+// Globals.GameTime is world AGE, not time of day, so it goes wrong after /time set or a sleep --
+// while the old view-space Light0/Light1 is a headlamp: the highlight follows the camera instead
+// of the world, which is what makes a metal look painted. One fixed direction keeps the glint
+// attached to the world and lets it sweep across the surface as the wheel turns.
+const vec3 KEY_LIGHT = vec3(-0.449, 0.808, 0.382);
+
 float saturate(float x) { return clamp(x, 0.0, 1.0); }
 vec3 saturate(vec3 x) { return clamp(x, vec3(0.0), vec3(1.0)); }
 
-// --- Noise/corrosion (ported from 1.21.1 wheel_metal; uses model-local coords for stability) ---
+// --- Noise/corrosion, anchored to world position so it does not crawl as the player walks ---
 float hash(vec3 p) {
     p = fract(p * vec3(0.1031, 0.11369, 0.13787));
     p += dot(p, p.yzx + 19.19);
@@ -75,6 +82,8 @@ float fbm(vec3 p) {
     return v;
 }
 
+// --- BRDF helpers ---
+
 vec3 fresnelSchlick(vec3 f0, float cosTheta) {
     return f0 + (1.0 - f0) * pow(1.0 - saturate(cosTheta), 5.0);
 }
@@ -102,14 +111,55 @@ vec3 aces(vec3 x) {
     return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
 }
 
-vec3 environment(vec3 R, float rough, vec3 sky, vec3 ground, float skyAmount) {
-    float up = R.y * 0.5 + 0.5;
-    float t = smoothstep(0.25, 0.75, up);
-    vec3 env = mix(ground, sky, t);
-    env += sky * pow(saturate(R.y), mix(18.0, 5.0, rough)) * (0.10 * skyAmount * (1.0 - rough * 0.6));
-    // Mip roughness: blur towards average as roughness rises.
-    vec3 avg = mix(ground, sky, 0.45);
-    return mix(env, avg, saturate(rough * rough * 0.75));
+/** A line every 1/n of the way along `v`, `w` wide. Used for the reflected studio grid. */
+float gridLine(float v, float n, float w) {
+    float f = fract(v * n);
+    return smoothstep(0.5 - w, 0.5, abs(f - 0.5));
+}
+
+/**
+ * The sky, seen along a reflected ray. `R` is in WORLD space, so the horizon stays on the world
+ * horizon instead of following the camera pitch, and `day` (daylight, not torchlight) gates the
+ * sun, the bright band and the studio strips: underground and at night the metal reflects the
+ * dark sky and nothing else.
+ */
+vec3 environment(vec3 R, float rough, vec3 sky, vec3 ground, float day, float skyAccess) {
+    float up = R.y;
+    float vis = 0.12 + 0.88 * day;
+
+    vec3 zenith = sky * 0.62;
+    vec3 horizon = mix(sky * 1.25, vec3(1.00, 0.96, 0.88), 0.28);
+    vec3 skyPart = mix(horizon, zenith, smoothstep(-0.02, 0.72, up)) * vis;
+
+    vec3 gnd = mix(ground, ground * 0.35, smoothstep(0.0, -0.55, up));
+    vec3 col = mix(gnd, skyPart, smoothstep(-0.045, 0.055, up));
+
+    // Sun disc, bloom and halo, in the same direction as the direct key light.
+    float sd = max(dot(R, KEY_LIGHT), 0.0);
+    col += vec3(1.00, 0.95, 0.86) * (pow(sd, 3000.0) * 40.0 + pow(sd, 90.0) * 0.55 + pow(sd, 8.0) * 0.08) * (day * day);
+
+    // The moon: a dim blue disc in the same direction. Without it a night sky reflects nothing
+    // and the wheel goes completely black; with it the metal catches one hard, cold glint.
+    float night = (1.0 - day) * skyAccess;
+    col += vec3(0.62, 0.72, 1.00) * (pow(sd, 3000.0) * 6.0 + pow(sd, 90.0) * 0.12) * night;
+
+    // A soft bright band just above the horizon: the thing that makes a gradient read as a sky.
+    float band = smoothstep(0.015, 0.10, up) * (1.0 - smoothstep(0.10, 0.40, up));
+    col += vec3(1.00, 0.98, 0.94) * band * 0.50 * day;
+
+    // Two vertical strips, so the reflection has structure the wheel can sweep across.
+    float az = atan(R.x, R.z);
+    float strips = pow(max(0.0, cos(az * 2.0 + 1.2)), 24.0) * smoothstep(0.0, 0.30, up);
+    col += vec3(0.90, 0.95, 1.00) * strips * 0.28 * day;
+
+    // Reflected studio grid: meridians and parallels of a dim white cage around the wheel.
+    float cage = gridLine(az * (1.0 / (2.0 * PI)), 8.0, 0.012) * 0.65
+               + gridLine(up, 6.0, 0.010) * 0.40;
+    col += vec3(0.95, 0.97, 1.00) * cage * 0.28 * day * (1.0 - 0.7 * rough);
+
+    // Rough surfaces average the environment out instead of mirroring it.
+    vec3 average = mix(horizon * vis, ground, 0.5);
+    return mix(col, average, clamp(rough * 0.75, 0.0, 0.85));
 }
 
 void main() {
@@ -121,11 +171,13 @@ void main() {
     }
     #endif
 
-    vec3 N = normalize(viewNormal);
+    // World-space normal; the CPU applied the wheel's own pose before submitting it.
+    vec3 N = normalize(worldNormal);
     if (!gl_FrontFacing) {
         N = -N;
     }
-    vec3 V = normalize(-viewPos);
+    // Eye direction: positions are camera-relative, so the camera is at the origin.
+    vec3 V = normalize(-relPos);
 
     #ifndef NO_OVERLAY
     color.rgb = mix(overlayColor.rgb, color.rgb, overlayColor.a);
@@ -134,8 +186,9 @@ void main() {
     // Authored OBJ vertex colors carry material tint (gold ring/spheres, bronze beams).
     vec3 albedo = color.rgb * vertexColor.rgb * ColorModulator.rgb;
 
-    // Corrosion anchored to model-space mesh coords (stable as wheel moves/camera moves).
-    vec3 local = localPos * 14.0;
+    // Corrosion anchored to world space: stable while the player walks, and it slides across the
+    // surface as the wheel turns, exactly as a real corroded plate would.
+    vec3 local = worldPos * 14.0;
     float pit = fbm(local);
     float grit = fbm(local * 3.7 + vec3(11.0, 5.0, 7.0));
     vec3 grad = vec3(
@@ -159,67 +212,51 @@ void main() {
     #else
     vec3 lm = vec3(1.0);
     #endif
-    float lmLum = dot(lm, vec3(0.2126, 0.7152, 0.0722));
-    float skyAmount = clamp(lmLum, 0.0, 1.0);
-    float blockAmount = clamp(lmLum * 0.7, 0.0, 1.0);
+    float lmLum = clamp(dot(lm, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
 
-    // Environment/ambient derived from lightmap brightness (view-space approximation).
-    vec3 skyCol = mix(vec3(0.10, 0.12, 0.16), vec3(0.50, 0.58, 0.72), skyAmount);
-    vec3 groundCol = vec3(0.12, 0.11, 0.10) * (0.30 + 0.70 * skyAmount);
+    // Daylight, as opposed to torchlight: the lightmap cannot tell them apart on its own, but the
+    // packed sky level can. A cave under an open sky that is dark is night, not day; a bright
+    // torch underground is not the sun.
+    float skyAccess = clamp(skyLight, 0.0, 1.0);
+    float day = smoothstep(0.22, 0.80, lmLum) * skyAccess;
 
-    vec3 F0 = albedo; // metal reflectance
+    vec3 skyCol = mix(vec3(0.012, 0.018, 0.040),
+                      mix(vec3(0.42, 0.52, 0.72), lm, 0.35),
+                      day);
+    skyCol *= mix(0.10, 1.0, skyAccess);
+    vec3 groundCol = mix(vec3(0.006, 0.005, 0.004), vec3(0.15, 0.13, 0.10), lmLum);
+
+    vec3 f0 = albedo; // metal reflectance
     float fres = pow(1.0 - NoV, 3.0);
-    vec3 env = environment(R, rough, skyCol, groundCol, skyAmount);
-    vec3 envF = fresnelSchlick(F0, NoV);
-    vec3 envSpec = env * envF * (0.55 + 0.25 * (1.0 - rough));
+    vec3 env = environment(R, rough, skyCol, groundCol, day, skyAccess);
+    vec3 envF = fresnelSchlick(f0, NoV);
+    vec3 shaded = env * envF * mix(1.35, 1.0, fres);
 
-    // Entity light directions (view space) for specular highlights.
-    vec3 L0 = normalize(Light0_Direction);
-    vec3 L1 = normalize(Light1_Direction);
+    // Direct key light: GGX highlight from the same fixed world direction as the reflected sun.
+    vec3 L = KEY_LIGHT;
+    vec3 H = normalize(V + L);
+    float NoL = max(dot(N, L), 0.0);
+    float NoH = max(dot(N, H), 0.0);
+    float VoH = max(dot(V, H), 0.0);
+    vec3 lightCol = mix(vec3(0.62, 0.72, 1.00), vec3(1.00, 0.95, 0.86), day);
+    vec3 specular = distributionGGX(NoH, a) * geometrySmithSchlickGGX(NoV, NoL, rough)
+                  * fresnelSchlick(f0, VoH) * NoL * lightCol * 1.6 * (day * day);
+    shaded += specular;
 
-    vec3 direct = vec3(0.0);
-    // Primary key light
-    {
-        vec3 L = L0;
-        vec3 H = normalize(V + L);
-        float NoL = max(dot(N, L), 0.0);
-        float NoH = max(dot(N, H), 0.0);
-        float VoH = max(dot(V, H), 0.0);
-        vec3 F = fresnelSchlick(F0, VoH);
-        float D = distributionGGX(NoH, a);
-        float G = geometrySmithSchlickGGX(NoV, NoL, rough);
-        vec3 specular = (D * G * F) / max(4.0 * NoV * NoL, 0.001);
-        vec3 lightCol = vec3(1.00, 0.97, 0.92) * (0.35 + 0.65 * skyAmount);
-        direct += specular * NoL * lightCol * 1.4;
-    }
-    // Secondary fill light
-    {
-        vec3 L = L1;
-        vec3 H = normalize(V + L);
-        float NoL = max(dot(N, L), 0.0);
-        float NoH = max(dot(N, H), 0.0);
-        float VoH = max(dot(V, H), 0.0);
-        vec3 F = fresnelSchlick(F0, VoH);
-        float D = distributionGGX(NoH, a);
-        float G = geometrySmithSchlickGGX(NoV, NoL, rough);
-        vec3 specular = (D * G * F) / max(4.0 * NoV * NoL, 0.001);
-        vec3 lightCol = vec3(0.70, 0.78, 0.95) * (0.15 + 0.35 * skyAmount);
-        direct += specular * NoL * lightCol * 0.6;
-    }
+    // A metal has no diffuse, but the wheel must still read as lit by the light it stands in.
+    // lm is the lightmap itself, so a torch-lit cave comes out warm and an unlit cave black --
+    // and there is deliberately NO constant ambient floor, which is what made the wheel glow at
+    // midnight like a fullbright entity.
+    shaded += albedo * lm * 0.45;
 
-    // Metal base response: keep albedo/texture visible (avoid white washout).
-    vec3 baseLit = albedo * mix(vec3(0.28), vec3(0.95), lm);
+    // Keep a little face-on body so a dim room does not erase the surface entirely.
+    shaded += f0 * 0.02;
 
-    // Warm torch/block contribution, modest.
-    vec3 blockWarm = vec3(1.00, 0.62, 0.30);
-    vec3 torch = albedo * blockWarm * (0.08 * blockAmount);
-
-    // Subtle rim for separation.
+    // Subtle rim for separation, also gated by light.
     float rim = pow(1.0 - NoV, 3.0);
-    vec3 rimCol = mix(albedo, vec3(1.0, 0.88, 0.55), 0.20) * rim * 0.08;
+    shaded += mix(albedo, vec3(1.00, 0.88, 0.55), 0.20) * rim * 0.06 * (0.15 + 0.85 * day);
 
-    vec3 shaded = baseLit * 0.70 + envSpec * 0.30 + direct + torch + rimCol;
-    // Prevent blowout to white while preserving color
+    // Prevent blowout to white while preserving colour.
     shaded = min(shaded, vec3(1.15));
     shaded = aces(shaded);
 

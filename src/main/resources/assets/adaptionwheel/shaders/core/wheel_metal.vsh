@@ -8,6 +8,7 @@
 #include <minecraft:dynamictransforms.glsl>
 #include <minecraft:projection.glsl>
 #include <minecraft:sample_lightmap.glsl>
+#include <minecraft:globals.glsl>
 
 layout(location = 0) in vec3 Position;
 layout(location = 1) in vec4 Color;
@@ -39,9 +40,10 @@ layout(location = 4) out vec4 lightMapColor;
 layout(location = 5) out vec4 overlayColor;
 #endif
 layout(location = 6) out vec2 texCoord0;
-layout(location = 7) out vec3 viewNormal;
-layout(location = 8) out vec3 viewPos;
-layout(location = 9) out vec3 localPos;
+layout(location = 7) out vec3 worldNormal;
+layout(location = 8) out vec3 relPos;
+layout(location = 9) out vec3 worldPos;
+layout(location = 10) out float skyLight;
 
 void main() {
     vec4 viewPosition = ModelViewMat * vec4(Position, 1.0);
@@ -50,10 +52,8 @@ void main() {
     sphericalVertexDistance = fog_spherical_distance(Position);
     cylindricalVertexDistance = fog_cylindrical_distance(Position);
 
-    // Transform the model-space normal into view space for lighting/BRDF.
-    vec3 transformedNormal = normalize(mat3(ModelViewMat) * Normal);
-
 #ifdef PER_FACE_LIGHTING
+    vec3 transformedNormal = normalize(mat3(ModelViewMat) * Normal);
     vec2 light = minecraft_compute_light(Light0_Direction, Light1_Direction, transformedNormal);
     vertexPerFaceColorBack = minecraft_mix_light_separate(-light, Color);
     vertexPerFaceColorFront = minecraft_mix_light_separate(light, Color);
@@ -61,6 +61,7 @@ void main() {
     // Preserve authored OBJ material tint (gold/bronze) instead of baking cardinal lighting in.
     vertexColor = Color;
 #else
+    vec3 transformedNormal = normalize(mat3(ModelViewMat) * Normal);
     vertexColor = minecraft_mix_light(Light0_Direction, Light1_Direction, transformedNormal, Color);
 #endif
 
@@ -73,8 +74,19 @@ void main() {
 #endif
 
     texCoord0 = UV0;
-    viewNormal = transformedNormal;
-    viewPos = viewPosition.xyz;
-    // Model-space position (mesh is centered in ObjMesh); stable anchor for corrosion/detail noise.
-    localPos = Position;
+
+    // The CPU bakes the entity pose into Position and transforms Normal by the same pose
+    // (WheelRenderer.drawMesh), so Normal is already a camera-relative WORLD direction.
+    // Decimals: keep it that way; multiplying by ModelViewMat here would rotate it a second
+    // time and the metal would be lit for a wheel pointing somewhere else.
+    worldNormal = normalize(Normal);
+    relPos = Position;
+
+    // Globals carries the camera as an integer block plus a negative fractional offset, so the
+    // world position is reconstructed exactly enough for the corrosion noise to stay put.
+    worldPos = Position + vec3(CameraBlockPos) - CameraOffset;
+
+    // Sky light LEVEL (0..15) is what tells an open sky from a cave; the lightmap colour alone
+    // cannot, because a torch is as bright as the sun in it.
+    skyLight = clamp(float(UV2.y) / 15.0, 0.0, 1.0);
 }

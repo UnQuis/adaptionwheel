@@ -220,13 +220,17 @@ public class WheelRenderer {
                     float vr = Mth.clamp(corners[o + 8] * tr, 0.0f, 1.0f);
                     float vg = Mth.clamp(corners[o + 9] * tg, 0.0f, 1.0f);
                     float vb = Mth.clamp(corners[o + 10] * tb, 0.0f, 1.0f);
-                    // Pass model-space normals; the wheel_metal vertex shader transforms by ModelViewMat.
+                    // The pose is baked into positions by addVertex, but setNormal does NOT apply it.
+                    // Transform the OBJ normal by the same pose (inverse-transpose, normalized) or the
+                    // shading stays in model space while the wheel spins and turns to face the body --
+                    // the metal then reflects a surface that is no longer where the geometry is.
+                    pose.transformNormal(nx, ny, nz, NORMAL_SCRATCH);
                     consumer.addVertex(pose, x, y, z)
                             .setColor(vr, vg, vb, 1.0f)
                             .setUv(u, v)
                             .setOverlay(OverlayTexture.NO_OVERLAY)
                             .setLight(packedLight)
-                            .setNormal(nx, ny, nz);
+                            .setNormal(NORMAL_SCRATCH.x(), NORMAL_SCRATCH.y(), NORMAL_SCRATCH.z());
                 }
             }
         });
