@@ -1,6 +1,7 @@
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
+#include <minecraft:light.glsl>
 #include <minecraft:fog.glsl>
 #include <minecraft:dynamictransforms.glsl>
 #include <minecraft:oit.glsl>
@@ -245,19 +246,37 @@ void main() {
                   * fresnelSchlick(f0, VoH) * NoL * lightCol * 1.6 * (day * day);
     shaded += specular;
 
+    // Entity shade directions (Light0/Light1) give the metal directional highlights that make it
+    // read as shaped, not as a flat matte card. They are not torch positions, but in a cave lit by
+    // a block source the lightmap is bright and without a directional lobe the wheel just looks
+    // uniformly lit; scaled by lmLum (no constant floor) this adds shine only where there is light.
+    vec3 Nv = normalize(mat3(ModelViewMat) * N);
+    vec3 Vv = normalize(mat3(ModelViewMat) * V);
+    float NoVv = max(dot(Nv, Vv), 1e-3);
+    for (int i = 0; i < 2; i++) {
+        vec3 Lv = normalize(i == 0 ? Light0_Direction : Light1_Direction);
+        vec3 Hv = normalize(Vv + Lv);
+        float NoLv = max(dot(Nv, Lv), 0.0);
+        float NoHv = max(dot(Nv, Hv), 0.0);
+        float VoHv = max(dot(Vv, Hv), 0.0);
+        vec3 Fv = fresnelSchlick(f0, VoHv);
+        float Dv = distributionGGX(NoHv, a);
+        float Gv = geometrySmithSchlickGGX(NoVv, NoLv, rough);
+        vec3 specV = (Dv * Gv * Fv) / max(4.0 * NoVv * NoLv, 0.001);
+        shaded += specV * NoLv * lm * 0.55;
+    }
+
     // A metal has no diffuse, but the wheel must still read as lit by the light it stands in.
-    // lm is the lightmap itself, so a torch-lit cave comes out warm and an unlit cave black --
-    // and there is deliberately NO constant ambient floor, which is what made the wheel glow at
-    // midnight like a fullbright entity.
-    shaded += albedo * lm * 0.45;
+    // Kept lower than the specular so a torch reads as shine, not as a flat fullbright wash.
+    shaded += albedo * lm * 0.18;
 
     // Keep a little face-on body so a dim room does not erase the surface entirely, but only
     // where there is actually light; a constant floor here would be visible in pitch darkness.
-    shaded += f0 * 0.02 * lmLum;
+    shaded += f0 * 0.015 * lmLum;
 
     // Subtle rim for separation, also gated by light.
     float rim = pow(1.0 - NoV, 3.0);
-    shaded += mix(albedo, vec3(1.00, 0.88, 0.55), 0.20) * rim * 0.06 * (0.10 + 0.90 * lmLum);
+    shaded += mix(albedo, vec3(1.00, 0.88, 0.55), 0.20) * rim * 0.05 * (0.10 + 0.90 * lmLum);
 
     // Prevent blowout to white while preserving colour.
     shaded = min(shaded, vec3(1.15));
