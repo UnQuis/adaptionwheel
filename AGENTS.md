@@ -653,8 +653,9 @@ All three are on **both** branches and configured, not hard-coded.
   APIs.
 - Build: `./gradlew build --no-daemon` (first run downloads Minecraft + runs neoForm; long). Runs/tests: `./gradlew runClient`, `./gradlew runServer`, `./gradlew runData`. No lint/test framework configured.
 - Headless server smoke test: enable RCON in `runs/server/server.properties` (`enable-rcon=true`, `rcon.port=25575`, `rcon.password=...`), start `./gradlew runServer --no-daemon &`, poll the log for `Done (`, then drive it with a minimal RCON client — Gradle does NOT forward stdin to the server console, piped commands are lost.
+- **Use the scripts in `tools/` for both of the above** (`tools/README.md` documents all of them): `./tools/run-gametests.sh` bounds wall-clock time and log size and kills the whole process tree when the known random-spawn hang hits — never run a bare `./gradlew runGameTestServer` unattended; `./tools/smoke-server.sh` boots, queries over RCON and stops a dev server, restoring `server.properties` afterwards. Static guards: `python3 tools/check-config.py`, `python3 tools/check-lang.py`, `./tools/validate-shaders.sh`, `./tools/check-jar.sh`; branch-port audits: `branch_parity.py`, `branch_audit.py`, `branch_bodies.py`.
 - Decompiled Minecraft sources for mixin/API research: `build/neoForm/neoFormJoined*/steps/decompile/output.jar` (unzip selected classes; Mojang mappings = runtime names).
-- `docs/`, `tools/`, `DEVELOPMENT_PLAN.md`, `REVIEW.md` and the `dharma_chakra.*` Blockbench sources were **removed from version control** on request; they are still in git history if a tool is ever wanted back. Everything they said is now here.
+- `docs/`, `DEVELOPMENT_PLAN.md`, `REVIEW.md` and the `dharma_chakra.*` Blockbench sources were **removed from version control** on request; they are still in git history if a file is ever wanted back. Everything they said is now here. `tools/` was later restored and expanded — see `tools/README.md`.
 - `runData` writes generated resources to `src/generated/resources`; delete that folder after use.
 
 ## Gotchas that cost real time
