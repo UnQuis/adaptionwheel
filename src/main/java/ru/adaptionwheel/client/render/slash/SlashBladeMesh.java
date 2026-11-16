@@ -60,10 +60,12 @@ public final class SlashBladeMesh {
      * @param taperPower how sharply both tips pinch to a point
      * @param tintArgb ink colour; alpha already includes the current fade
      * @param glowArgb aura colour; alpha already includes its current fade
+     * @param age ticks + partial tick, drives the travelling edge wobble
+     * @param seed entity id, so two slashes never share the same tear pattern
      */
     public static void build(VertexConsumer consumer, PoseStack.Pose pose,
                              float length, float curveAmount, float glowHalf, float coreRatio,
-                             float taperPower, int tintArgb, int glowArgb) {
+                             float taperPower, int tintArgb, int glowArgb, float age, int seed) {
         float coreHalf = glowHalf * coreRatio;
         Vector3f[] centre = new Vector3f[LENGTH_SEGMENTS];
         float[] widthRadius = new float[LENGTH_SEGMENTS];
@@ -74,7 +76,15 @@ public final class SlashBladeMesh {
             // This is the 1.21.1 sine crescent after its viewFrame/quarter-turn: X spans the
             // travel line, Z bows forward, and Y is the thin axis.
             centre[i] = new Vector3f((u - 0.5f) * length, 0f, arc * curveAmount * length);
-            widthRadius[i] = glowHalf * (float) Math.pow(arc, taperPower);
+
+            // Two travelling waves give the edge a torn, breathing silhouette, ported verbatim
+            // from the 1.21.1 mesh: frequencies are deliberately incommensurate so the teeth do
+            // not line up into a regular saw, and the amplitude is small enough that the blade
+            // still reads as one clean cut.
+            float wobble = 1f
+                    + 0.075f * Mth.sin(u * 43f + age * 7.5f + seed * 0.31f)
+                    * Mth.sin(u * 11f - age * 2.6f + seed * 0.17f);
+            widthRadius[i] = glowHalf * (float) Math.pow(arc, taperPower) * wobble;
         }
 
         Vector3f[][] ringPos = new Vector3f[LENGTH_SEGMENTS][RING_SEGMENTS];

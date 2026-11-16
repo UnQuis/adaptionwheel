@@ -11,4 +11,6 @@ public class SlashRenderState extends EntityRenderState {
     public float roll;
     /** Projectile age in ticks, including render partial tick. */
     public float age;
+    /** Stable per-entity seed so two slashes never share the same tear pattern. */
+    public int seed;
 }

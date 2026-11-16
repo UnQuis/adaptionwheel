@@ -16,8 +16,10 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile, S
     private static final float SPAN = 9.0f;
     private static final float GLOW_HALF = 0.33f;
     private static final float CORE_HALF = 0.20f;
-    private static final int TINT_VIOLET = 0xFFF2DAFF;
-    private static final int GLOW_VIOLET = 0xFF9B37FF;
+    /** 1.21.1 {@code RIFT_BLADE}: near-black violet ink. */
+    private static final int TINT_VIOLET = 0xFF180A26;
+    /** 1.21.1 {@code RIFT_GLOW}: violet aura. */
+    private static final int GLOW_VIOLET = 0xFFBC52FF;
 
     public SpatialRiftRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -34,6 +36,7 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile, S
         state.motion = entity.getDeltaMovement();
         state.roll = entity.getRoll();
         state.age = entity.tickCount + partialTick;
+        state.seed = entity.getId();
     }
 
     @Override
@@ -57,12 +60,13 @@ public class SpatialRiftRenderer extends EntityRenderer<SpatialRiftProjectile, S
             float echoAge = Math.max(0f, age - i * 1.25f);
             float echoFade = fade * (i == 1 ? 0.26f : 0.11f);
             FlyingSlashRenderer.render(poseStack, collector, motion, state.roll + i * 0.045f, echoAge,
-                    SPAN * 0.92f, GLOW_HALF * 0.78f, CORE_HALF * 0.62f, TINT_VIOLET, GLOW_VIOLET, echoFade);
+                    SPAN * 0.92f, GLOW_HALF * 0.78f, CORE_HALF * 0.62f, TINT_VIOLET, GLOW_VIOLET,
+                    echoFade, state.seed + i * 31);
             poseStack.popPose();
         }
 
         FlyingSlashRenderer.render(poseStack, collector, motion, state.roll, age,
-                SPAN, GLOW_HALF, CORE_HALF, TINT_VIOLET, GLOW_VIOLET, fade);
+                SPAN, GLOW_HALF, CORE_HALF, TINT_VIOLET, GLOW_VIOLET, fade, state.seed);
         super.submit(state, poseStack, collector, camera);
     }
 }
