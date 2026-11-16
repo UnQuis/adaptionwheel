@@ -125,7 +125,9 @@ float gridLine(float v, float n, float w) {
  */
 vec3 environment(vec3 R, float rough, vec3 sky, vec3 ground, float day, float skyAccess) {
     float up = R.y;
-    float vis = 0.12 + 0.88 * day;
+    // Daylight drives the reflected sky; at night only a faint moon glint remains (added below),
+    // so the environment must not keep a bright floor that would read as fullbright.
+    float vis = mix(0.02, 1.0, day);
 
     vec3 zenith = sky * 0.62;
     vec3 horizon = mix(sky * 1.25, vec3(1.00, 0.96, 0.88), 0.28);
@@ -249,12 +251,13 @@ void main() {
     // midnight like a fullbright entity.
     shaded += albedo * lm * 0.45;
 
-    // Keep a little face-on body so a dim room does not erase the surface entirely.
-    shaded += f0 * 0.02;
+    // Keep a little face-on body so a dim room does not erase the surface entirely, but only
+    // where there is actually light; a constant floor here would be visible in pitch darkness.
+    shaded += f0 * 0.02 * lmLum;
 
     // Subtle rim for separation, also gated by light.
     float rim = pow(1.0 - NoV, 3.0);
-    shaded += mix(albedo, vec3(1.00, 0.88, 0.55), 0.20) * rim * 0.06 * (0.15 + 0.85 * day);
+    shaded += mix(albedo, vec3(1.00, 0.88, 0.55), 0.20) * rim * 0.06 * (0.10 + 0.90 * lmLum);
 
     // Prevent blowout to white while preserving colour.
     shaded = min(shaded, vec3(1.15));
