@@ -17,17 +17,20 @@ import ru.adaptionwheel.item.SwordOfExterminationItem;
 
 
 /**
- * The punching fist: five material stages, walked by killing what you are punching.
+ * Martial Arts: five material stages, walked by killing what you are striking.
+ *
+ * <p>The stored concept keys are still {@code Combat_FistWood} … {@code Combat_FistNetherite}; the
+ * feature was renamed from Hard Fist without touching them, so a player's ladder survives the rename.
  *
  * <p>Unlock and every level are earned the same way — kill a hostile mob with a bare hand. Not a hit: a
  * kill, with the last blow landed by the hand and nothing in it that adds attack damage. That is the
  * "something no normal player does" gate, and it is also why the ladder cannot be side-stepped by
  * swinging at a cow.
  */
-public final class HardFist {
+public final class MartialArts {
 
 
-    private HardFist() {
+    private MartialArts() {
     }
 
     /**
@@ -55,6 +58,10 @@ public final class HardFist {
         return granted;
     }
 
+    public static boolean isMaxed(PlayerAdaption data, int tier) {
+        return data.levelOrZero(CombatFistTiers.concept(tier)) >= PlayerAdaption.MAX_LEVEL;
+    }
+
     /**
      * The stage the player is training <i>right now</i>, which is not always the one they reached.
      *
@@ -76,7 +83,11 @@ public final class HardFist {
         if (reached < 0) {
             return -1;
         }
-        if (data.levelOrZero(CombatFistTiers.concept(reached)) >= PlayerAdaption.MAX_LEVEL
+        // level(), not levelOrZero(): "this stage is finished" is a fact about the ladder, so
+        // switching the finished stage off must hand the kills to the next one rather than reopen
+        // the disabled stage as the training target. The switch stops what a stage pays out; it
+        // does not un-max it. (The stage actually being trained is gated on isEnabled by the caller.)
+        if (data.level(CombatFistTiers.concept(reached)) >= PlayerAdaption.MAX_LEVEL
                 && reached + 1 < CombatFistTiers.TIER_COUNT) {
             return reached + 1;
         }
@@ -156,6 +167,14 @@ public final class HardFist {
             return;
         }
         String concept = CombatFistTiers.concept(tier);
+        // A switched-off stage must not keep banking kills. levelOrZero() below reads 0 while the
+        // stage is off, so without this gate the counters kept filling and the level landed the
+        // moment it was switched back on. Worse, on a stage already at MAX the "level" looked like
+        // 0, so every N kills it re-granted level 8 and re-fired the max message, the heal and the
+        // voice. The switch stops the effect, so it has to stop the training too.
+        if (!data.isEnabled(concept)) {
+            return;
+        }
         // levelOrZero, not level(): banking kills is an effect, so a switched-off stage must stop
         // counting. The level read here decides which stage the kills train, and it is the same
         // accessor disagreement that let a disabled adaptation keep paying out.

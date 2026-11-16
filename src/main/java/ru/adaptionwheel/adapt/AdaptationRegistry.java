@@ -45,6 +45,7 @@ public final class AdaptationRegistry {
         }
 
         for (String id : new String[]{
+                ru.adaptionwheel.category.Concepts.ENV_FIRE,
                 "Env_Lava", "Env_Drowning", "Env_Thorns", "Env_Darkness",
                 "Env_Suffocate", "Env_Void", "Env_Starve", "Env_Liquid",
                 ru.adaptionwheel.category.Concepts.ENV_INVENTORY}) {
@@ -56,6 +57,13 @@ public final class AdaptationRegistry {
         }
 
         for (ru.adaptionwheel.category.AdaptionCategory category : ru.adaptionwheel.category.AdaptionCategory.values()) {
+            // Fire is the one-time Env_Fire adaptation, registered with the environment family
+            // above. Its old Type_FIRE key was the leveled half of a pair whose other half
+            // (Env_Lava) cancelled lava before it could train; there has been no fire ladder since
+            // that split, so the category loop must not reintroduce one.
+            if (category == ru.adaptionwheel.category.AdaptionCategory.FIRE) {
+                continue;
+            }
             register(AdaptationDefinition.leveled(ru.adaptionwheel.category.Concepts.type(category), AdaptationDomain.DAMAGE));
         }
 

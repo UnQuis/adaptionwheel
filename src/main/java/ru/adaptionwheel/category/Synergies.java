@@ -115,17 +115,29 @@ public final class Synergies {
     }
 
     public static boolean satisfied(ru.adaptionwheel.data.PlayerAdaption data, Synergy synergy) {
-        return satisfied(data.levels, data.adapted, synergy);
+        return satisfied(data.levels, data.adapted, data.disabled, synergy);
     }
 
+    /**
+     * The one definition of "this synergy is active", shared by the server effects, the advancement
+     * trigger and the client browser.
+     *
+     * <p>{@code disabled} is what the panel's switches write. A switched-off adaptation still counts
+     * as HELD everywhere that asks "do you have it" (the altar, shedding, the panel itself), but it
+     * must not satisfy a synergy: the switch exists to stop the effect, and a synergy lighting from
+     * a concept that is currently off is the switch leaking. The client passes its mirrored
+     * {@code DISABLED} set, so a chip disappears from the panel at the same moment its effect stops
+     * on the server.
+     */
     public static boolean satisfied(Map<String, Integer> levels, java.util.Collection<String> adapted,
-                                    Synergy synergy) {
+                                    java.util.Collection<String> disabled, Synergy synergy) {
         int max = ru.adaptionwheel.data.PlayerAdaption.MAX_LEVEL;
         for (String[] requirement : synergy.requires()) {
             String concept = requirement[0];
             Requirement how = Requirement.valueOf(requirement[1]);
-            int level = levels.getOrDefault(concept, 0);
-            boolean present = adapted.contains(concept) || level > 0;
+            boolean off = disabled.contains(concept);
+            int level = off ? 0 : levels.getOrDefault(concept, 0);
+            boolean present = !off && (adapted.contains(concept) || level > 0);
             switch (how) {
                 case MAXED -> {
                     if (level < max) {
@@ -133,7 +145,7 @@ public final class Synergies {
                     }
                 }
                 case PRESENT_OR_FAMILY -> {
-                    if (!present && !hasAnyInFamily(levels, adapted, concept)) {
+                    if (!present && !hasAnyInFamily(levels, adapted, disabled, concept)) {
                         return false;
                     }
                 }
@@ -148,14 +160,16 @@ public final class Synergies {
     }
 
     private static boolean hasAnyInFamily(Map<String, Integer> levels,
-                                          java.util.Collection<String> adapted, String prefix) {
+                                          java.util.Collection<String> adapted,
+                                          java.util.Collection<String> disabled, String prefix) {
         for (String held : adapted) {
-            if (held.startsWith(prefix)) {
+            if (!disabled.contains(held) && held.startsWith(prefix)) {
                 return true;
             }
         }
         for (Map.Entry<String, Integer> entry : levels.entrySet()) {
-            if (entry.getValue() > 0 && entry.getKey().startsWith(prefix)) {
+            if (entry.getValue() > 0 && !disabled.contains(entry.getKey())
+                    && entry.getKey().startsWith(prefix)) {
                 return true;
             }
         }

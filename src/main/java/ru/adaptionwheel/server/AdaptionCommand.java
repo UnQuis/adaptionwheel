@@ -200,6 +200,11 @@ public final class AdaptionCommand {
     private static List<AdaptionCategory> buildTypeCategories() {
         List<AdaptionCategory> out = new ArrayList<>();
         for (AdaptionCategory category : AdaptionCategory.values()) {
+            // Fire is the one-time Env_Fire under `env fire`; the others are offered only while
+            // their key is a live ladder rather than a retired legacy spelling.
+            if (category == AdaptionCategory.FIRE || Concepts.isRetired(Concepts.type(category))) {
+                continue;
+            }
             out.add(category);
         }
         return out;
@@ -207,6 +212,7 @@ public final class AdaptionCommand {
 
     private static Map<String, String> createEnvChoices() {
         Map<String, String> out = new LinkedHashMap<>();
+        out.put("fire", Concepts.ENV_FIRE);
         out.put("lava", Concepts.ENV_LAVA);
         out.put("fall", Concepts.ENV_FALL);
         out.put("drowning", Concepts.ENV_DROWN);

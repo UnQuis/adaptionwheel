@@ -25,11 +25,21 @@ import java.util.Set;
  */
 public final class LegacyConcepts {
 
+    /** The old spelling of {@link Concepts#ENV_FIRE}; it promised a level ladder fire no longer has. */
+    private static final String LEGACY_FIRE = "Type_FIRE";
+
     private LegacyConcepts() {
     }
 
     public static void migrate(PlayerAdaption data) {
         migrate(data.levels, data.adapted, data.history);
+        // The panel switch is part of the adaptation's state: a player who switched fire off must
+        // not have it switched back on by the rename.
+        if (data.disabled.remove(LEGACY_FIRE)) {
+            data.disabled.add(Concepts.ENV_FIRE);
+        }
+        data.disabled.removeAll(Concepts.RETIRED_TYPES);
+        data.progress.keySet().removeAll(Concepts.RETIRED_TYPES);
     }
 
     /**
@@ -56,7 +66,47 @@ public final class LegacyConcepts {
             mergeInto(levels, CombatFistTiers.concept(0), flat);
         }
 
+        // Fire used to be Type_FIRE. It has been a one-time adaptation since the fire/lava split,
+        // but older saves still carry the leveled spelling (and pre-split levels). Both halves are
+        // renamed, not dropped: a level above zero earned the adaptation, and an adapted/history
+        // key is the same fact under the new name. The Type_ prefix fallback would otherwise treat
+        // the old key as an eight-level ladder again on the very next load.
+        Integer fire = levels.remove(LEGACY_FIRE);
+        if (fire != null && fire > 0) {
+            adapted.add(Concepts.ENV_FIRE);
+        }
+        if (adapted.remove(LEGACY_FIRE)) {
+            adapted.add(Concepts.ENV_FIRE);
+        }
+        renameInPlace(history, LEGACY_FIRE, Concepts.ENV_FIRE);
+
+        // The five hazards below (and CONTACT) are full-protection Env_* adaptations now, so their
+        // old leveled keys are not just inert -- they would reappear in the panel as concepts that
+        // promise a reduction and never apply it. Strip them from both load paths here.
+        for (String retired : Concepts.RETIRED_TYPES) {
+            levels.remove(retired);
+            adapted.remove(retired);
+            history.remove(retired);
+        }
+
         renameDebuffs(levels, adapted, history);
+    }
+
+    /**
+     * Renames one key inside a collection, preserving its position and never duplicating the
+     * target. {@code adapted} is a Set and {@code history} a List, and {@code clear} plus
+     * {@code addAll} is the rewrite both support.
+     */
+    private static void renameInPlace(Collection<String> concepts, String from, String to) {
+        if (!concepts.contains(from)) {
+            return;
+        }
+        Set<String> rebuilt = new LinkedHashSet<>();
+        for (String concept : concepts) {
+            rebuilt.add(concept.equals(from) ? to : concept);
+        }
+        concepts.clear();
+        concepts.addAll(rebuilt);
     }
 
     private static void mergeInto(Map<String, Integer> levels, String concept, int extra) {

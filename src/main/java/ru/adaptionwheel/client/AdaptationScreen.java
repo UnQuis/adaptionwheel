@@ -276,7 +276,7 @@ public class AdaptationScreen extends Screen {
 
         activeSynergies.clear();
         for (Synergies.Synergy synergy : Synergies.ALL) {
-            if (Synergies.satisfied(ClientAdaption.LEVELS, ClientAdaption.ADAPTED, synergy)) {
+            if (Synergies.satisfied(ClientAdaption.LEVELS, ClientAdaption.ADAPTED, ClientAdaption.DISABLED, synergy)) {
                 activeSynergies.add(synergy);
             }
         }
