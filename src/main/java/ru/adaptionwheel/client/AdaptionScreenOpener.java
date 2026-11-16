@@ -7,6 +7,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.SurfaceAdaptations;
+import ru.adaptionwheel.network.DivePayload;
 import ru.adaptionwheel.network.OpenCachePayload;
 
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
@@ -46,6 +47,16 @@ public final class AdaptionScreenOpener {
             }
             if (ClientAdaption.active(ru.adaptionwheel.category.Concepts.ENV_INVENTORY)) {
                 OpenCachePayload.send();
+            }
+        }
+
+        while (AdaptionKeybinds.DIVE_KEY.consumeClick()) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.gui.screen() != null) {
+                continue;
+            }
+            if (ClientAdaption.wearingWheel) {
+                DivePayload.send();
             }
         }
     }
