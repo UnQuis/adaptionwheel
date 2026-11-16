@@ -247,7 +247,7 @@
   "adaptionwheel.cmd.use_registry": "Команда /adaptionwheel registry покажет все адаптации.",
   "adaptionwheel.cmd.looks_truncated": "'%s' похоже на концепт, обрезанный по двоеточию. Именованные концепты нужно брать в кавычки: /adaptionwheel grant \"%s\" <уровень>",
   "key.adaptionwheel.open_cache": "Открыть хранилище адаптации",
-  "key.adaptionwheel.dive": "Нырок",
+  "key.adaptionwheel.ability": "Использовать активную абилку",
   "key.categories.adaptionwheel": "Колесо Адаптации",
   "adaptionwheel.ability.dive.name": "Нырок",
   "adaptionwheel.ability.dive.desc": "Рухни вниз и расколи землю.",

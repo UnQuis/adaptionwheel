@@ -7,8 +7,9 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.SurfaceAdaptations;
+import ru.adaptionwheel.ability.ActiveAbility;
 import ru.adaptionwheel.category.Concepts;
-import ru.adaptionwheel.network.DivePayload;
+import ru.adaptionwheel.network.AbilityActivatePayload;
 import ru.adaptionwheel.network.FistInstabreakPayload;
 import ru.adaptionwheel.network.OpenCachePayload;
 
@@ -55,22 +56,18 @@ public final class AdaptionScreenOpener {
             }
         }
 
-        while (AdaptionKeybinds.DIVE_KEY.consumeClick()) {
+        while (AdaptionKeybinds.ABILITY_KEY.consumeClick()) {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player == null || mc.screen != null || !ClientAdaption.wearingWheel) {
                 continue;
             }
-            if (!ClientAdaption.active(Concepts.ENV_FALL)
-                    && !ClientAdaption.active(Concepts.MUTATION_FLIGHT)) {
+            ActiveAbility ability = AbilityAvailability.selected();
+            if (ability == null || !ClientCooldowns.ready(ability.id())) {
                 continue;
             }
-            if (mc.player.onGround() || mc.player.isInWaterOrBubble() || mc.player.isInLava()) {
-                continue;
-            }
-            if (!ClientCooldowns.ready(ru.adaptionwheel.server.DiveAbility.ID)) {
-                continue;
-            }
-            DivePayload.send();
+            // Every ability-specific gate (ground, fluid, socket state, ...) belongs on the server:
+            // the key only says "use whatever is in the slot".
+            AbilityActivatePayload.send();
         }
     }
 }

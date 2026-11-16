@@ -45,9 +45,12 @@ public class AdaptionNetworking {
         registrar.playToServer(OpenCachePayload.TYPE, OpenCachePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         OpenCachePayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
-        registrar.playToServer(DivePayload.TYPE, DivePayload.STREAM_CODEC,
+        registrar.playToServer(AbilityActivatePayload.TYPE, AbilityActivatePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
-                        DivePayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
+                        AbilityActivatePayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
+        registrar.playToServer(SelectAbilityPayload.TYPE, SelectAbilityPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        SelectAbilityPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
         registrar.playToServer(ToggleAdaptationPayload.TYPE, ToggleAdaptationPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         ToggleAdaptationPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));

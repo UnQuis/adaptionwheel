@@ -75,6 +75,12 @@ public class AdaptionWheel {
 
             ru.adaptionwheel.ability.ActiveAbilities.register(
                     ru.adaptionwheel.server.DiveAbility.definition());
+            // One slot: the definition lights up the menu/HUD, this registers the server behaviour
+            // and the gate that validates the player's choice.
+            ru.adaptionwheel.server.AbilityDispatch.register(
+                    ru.adaptionwheel.server.DiveAbility.ID,
+                    ru.adaptionwheel.server.DiveAbility::start,
+                    ru.adaptionwheel.server.DiveAbility::unlocked);
             ru.adaptionwheel.server.DomainExchange.bootstrap();
         });
     }

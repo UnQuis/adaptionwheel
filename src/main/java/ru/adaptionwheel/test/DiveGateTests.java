@@ -77,7 +77,7 @@ public class DiveGateTests {
                 new ArrayList<>(), new HashMap<>(), new ArrayList<>(), new ArrayList<>(),
                 new HashMap<>(), 100, false, false, 0, 0, 0, 0,
                 new ArrayList<>(List.of(Concepts.MUTATION_FLIGHT)),
-                new ArrayList<>(List.of(DiveAbility.ID)));
+                new ArrayList<>(List.of(DiveAbility.ID)), DiveAbility.ID);
 
         FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         AdaptionSyncPayload.STREAM_CODEC.encode(buf, original);
@@ -97,7 +97,7 @@ public class DiveGateTests {
                 true, false, 0, 0, 0, 0f,
                 new ArrayList<>(), levels, new ArrayList<>(), new ArrayList<>(),
                 new HashMap<>(), 100, false, false, 0, 0, 0, 0,
-                new ArrayList<>(), new ArrayList<>());
+                new ArrayList<>(), new ArrayList<>(), "");
 
         FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         AdaptionSyncPayload.STREAM_CODEC.encode(buf, decoded);

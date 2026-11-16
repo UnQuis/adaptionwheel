@@ -21,6 +21,7 @@ import ru.adaptionwheel.category.Synergies;
 import ru.adaptionwheel.data.AdaptionTask;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.item.ModItems;
+import ru.adaptionwheel.network.SelectAbilityPayload;
 import ru.adaptionwheel.network.ToggleAdaptationPayload;
 
 import java.util.ArrayList;
@@ -1765,7 +1766,10 @@ public final class AdaptationWheelScreen extends Screen {
 
         for (AbilityHit hit : abilityHits) {
             if (hit.rect.contains(mouseX, mouseY)) {
+                // Optimistic for a responsive highlight; the server re-checks the gate, persists the
+                // choice and syncs it back, so a stale client cannot select a locked ability.
                 ActiveAbilities.select(hit.id);
+                SelectAbilityPayload.send(hit.id);
                 return true;
             }
         }

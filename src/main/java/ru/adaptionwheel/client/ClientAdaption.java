@@ -48,6 +48,9 @@ public final class ClientAdaption {
      */
     public static final Set<String> ABILITIES = new HashSet<>();
 
+    /** The ability in the single slot, as chosen on the server. Empty until the first sync. */
+    public static String selectedAbility = "";
+
     public static int existenceThreshold;
 
     public static boolean instabreakActive;
@@ -104,6 +107,7 @@ public final class ClientAdaption {
         ClientCooldowns.clear();
         ClientCache.clear();
         ABILITIES.clear();
+        selectedAbility = "";
     }
 
     public static void onSync(AdaptionSyncPayload payload) {
@@ -130,6 +134,7 @@ public final class ClientAdaption {
         DISABLED.addAll(payload.disabled());
         ABILITIES.clear();
         ABILITIES.addAll(payload.abilities());
+        selectedAbility = payload.selectedAbility() == null ? "" : payload.selectedAbility();
         existenceThreshold = payload.existenceThreshold();
         instabreakActive = payload.instabreakActive();
         instabreakUnlocked = payload.instabreakUnlocked();

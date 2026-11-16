@@ -2542,7 +2542,8 @@ public class AdaptionEvents {
                 combatFistDone(data),
                 combatFistTotal(data),
                 new ArrayList<>(data.disabled),
-                abilities
+                abilities,
+                data.selectedAbility()
         );
         AdaptionSyncPayload.sendTo(player, payload);
     }

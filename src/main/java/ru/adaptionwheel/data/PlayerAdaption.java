@@ -35,7 +35,7 @@ public class PlayerAdaption {
             Codec.INT.optionalFieldOf("shedCount", 0).forGetter(d -> d.shedCount),
             Extras.CODEC.optionalFieldOf("extras", Extras.EMPTY)
                     .forGetter(d -> new Extras(new ArrayList<>(d.disabled), new ArrayList<>(d.cache),
-                            Map.copyOf(d.progress), d.instabreak))
+                            Map.copyOf(d.progress), d.instabreak, d.selectedAbility()))
     ).apply(inst, PlayerAdaption::new));
 
     public final Map<String, Integer> levels = new HashMap<>();
@@ -60,6 +60,22 @@ public class PlayerAdaption {
      * map: the stance is a player choice, and losing it on every rejoin is the bug this field fixes.
      */
     public boolean instabreak;
+
+    /**
+     * Which active ability the player picked in the wheel menu. Persisted with the player rather
+     * than the wheel item: it is a choice, like the off switches and the Instabreak stance, and one
+     * key must drive whichever ability is in the single slot. Empty means "no explicit pick yet",
+     * for which {@code AbilityDispatch} falls back to the first unlocked ability.
+     */
+    public String selectedAbility = "";
+
+    public String selectedAbility() {
+        return selectedAbility == null ? "" : selectedAbility;
+    }
+
+    public void selectAbility(String id) {
+        this.selectedAbility = id == null ? "" : id;
+    }
 
     public final Map<String, Integer> killCounts = new HashMap<>();
 
@@ -114,6 +130,7 @@ public class PlayerAdaption {
         this.cache.addAll(extras.cache());
         this.progress.putAll(extras.progress());
         this.instabreak = extras.instabreak();
+        this.selectedAbility = extras.selectedAbility() == null ? "" : extras.selectedAbility();
         this.healingTimer = healingTimer;
         this.adversityCooldownTimer = adversityCooldownTimer;
         this.adversityTimer = adversityTimer;
@@ -196,6 +213,7 @@ public class PlayerAdaption {
         cache.clear();
         progress.clear();
         instabreak = false;
+        selectedAbility = "";
         healingTimer = 0;
         adversityCooldownTimer = 0;
         adversityTimer = 0;
@@ -204,8 +222,8 @@ public class PlayerAdaption {
     }
 
     /**
-     * Resets the wheel-bound state for an unequip or a wheel swap, but keeps the four pieces of
-     * state that belong to the player rather than to the item.
+     * Resets the wheel-bound state for an unequip or a wheel swap, but keeps the five pieces of
+     * state that belong to the player rather than to the item (including the chosen ability slot).
      *
      * <p>{@link #reset()} is the right thing for death and for an explicit debug reset, and it was
      * the wrong thing here: {@code cache}, {@code disabled}, {@code progress} and {@code instabreak}
@@ -220,12 +238,13 @@ public class PlayerAdaption {
      */
     public void resetForUnequip() {
         Extras preserved = new Extras(new ArrayList<>(disabled), new ArrayList<>(cache),
-                new HashMap<>(progress), instabreak);
+                new HashMap<>(progress), instabreak, selectedAbility());
         reset();
         disabled.addAll(preserved.disabled());
         cache.addAll(preserved.cache());
         progress.putAll(preserved.progress());
         instabreak = preserved.instabreak();
+        selectedAbility = preserved.selectedAbility();
     }
 
 }

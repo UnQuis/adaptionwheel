@@ -18,9 +18,9 @@ import java.util.Map;
  * player can only earn by mining or killing is not something to hand back for free.
  */
 public record Extras(List<String> disabled, List<net.minecraft.world.item.ItemStack> cache,
-                     Map<String, Integer> progress, boolean instabreak) {
+                     Map<String, Integer> progress, boolean instabreak, String selectedAbility) {
 
-    public static final Extras EMPTY = new Extras(List.of(), List.of(), Map.of(), false);
+    public static final Extras EMPTY = new Extras(List.of(), List.of(), Map.of(), false, "");
 
     /**
      * Convenience constructor for callers that predate the instabreak flag. Kept so the field can
@@ -28,7 +28,13 @@ public record Extras(List<String> disabled, List<net.minecraft.world.item.ItemSt
      */
     public Extras(List<String> disabled, List<net.minecraft.world.item.ItemStack> cache,
                   Map<String, Integer> progress) {
-        this(disabled, cache, progress, false);
+        this(disabled, cache, progress, false, "");
+    }
+
+    /** Callers that predate the ability slot. */
+    public Extras(List<String> disabled, List<net.minecraft.world.item.ItemStack> cache,
+                  Map<String, Integer> progress, boolean instabreak) {
+        this(disabled, cache, progress, instabreak, "");
     }
 
     /** Key for the breaking fist's counter, per tier index. */
@@ -47,6 +53,7 @@ public record Extras(List<String> disabled, List<net.minecraft.world.item.ItemSt
                     .forGetter(Extras::cache),
             Codec.unboundedMap(Codec.STRING, Codec.INT).optionalFieldOf("progress", Map.of())
                     .forGetter(Extras::progress),
-            Codec.BOOL.optionalFieldOf("instabreak", false).forGetter(Extras::instabreak)
+            Codec.BOOL.optionalFieldOf("instabreak", false).forGetter(Extras::instabreak),
+            Codec.STRING.optionalFieldOf("selected_ability", "").forGetter(Extras::selectedAbility)
     ).apply(instance, Extras::new));
 }

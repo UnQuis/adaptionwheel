@@ -34,9 +34,20 @@ public final class AbilityAvailability {
         return result;
     }
 
-    /** The selected ability if it is unlocked, otherwise the first unlocked one. */
+    /**
+     * The ability in the single slot. The server's persisted choice wins; the local selection is a
+     * fallback for the first second before the sync arrives, and for a pick the server refused.
+     */
     @Nullable
     public static ActiveAbility selected() {
+        String chosen = ClientAdaption.selectedAbility;
+        if (chosen != null && !chosen.isBlank()) {
+            for (ActiveAbility ability : ActiveAbilities.all()) {
+                if (ability.id().equals(chosen) && unlocked(ability)) {
+                    return ability;
+                }
+            }
+        }
         ActiveAbility selected = ActiveAbilities.selected();
         if (unlocked(selected)) {
             return selected;
@@ -46,17 +57,11 @@ public final class AbilityAvailability {
     }
 
     /**
-     * The key shown on the card. A definition only knows its default label; the live binding is the
-     * truth, so the HUD and the menu both ask here rather than drawing a key that no longer does
-     * anything after the player rebinds it.
+     * The key shown on the card. There is one key for the whole slot, so every card asks for the
+     * live binding of that key rather than drawing its old per-ability label after a rebind.
      */
     public static String keyLabel(ActiveAbility ability) {
-        if (ru.adaptionwheel.server.DiveAbility.ID.equals(ability.id())) {
-            String bound = AdaptionKeybinds.DIVE_KEY.getTranslatedKeyMessage().getString();
-            if (!bound.isBlank()) {
-                return bound;
-            }
-        }
-        return ability.keyLabel();
+        String bound = AdaptionKeybinds.ABILITY_KEY.getTranslatedKeyMessage().getString();
+        return bound.isBlank() ? ability.keyLabel() : bound;
     }
 }
