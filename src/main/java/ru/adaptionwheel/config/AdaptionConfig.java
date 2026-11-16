@@ -89,6 +89,7 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Double> EXISTENCE_REQUIRED_SECONDS;
     public static final ModConfigSpec.ConfigValue<Double> EXISTENCE_PROXIMITY_BLOCKS;
     public static final ModConfigSpec.ConfigValue<Double> FALL_ANALYSIS_SECONDS;
+    public static final ModConfigSpec.ConfigValue<Double> LAVA_SWIM_SPEED_SCALE;
 
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DEFENSE;
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_OFFENSE;
@@ -148,12 +149,21 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_MAX_DISTANCE;
 
     public static final ModConfigSpec.ConfigValue<Boolean> DIMENSION_DESTROY_ENABLED;
-    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_DESTROY_REQUIRED;
+    public static final ModConfigSpec.ConfigValue<Integer> DIMENSION_DESTROY_PERCENT;
+
+    public static final ModConfigSpec.ConfigValue<Boolean> DIVE_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> DIVE_RADIUS;
+    public static final ModConfigSpec.ConfigValue<Double> DIVE_DAMAGE;
+    public static final ModConfigSpec.ConfigValue<Double> DIVE_SPEED;
+    public static final ModConfigSpec.ConfigValue<Double> DIVE_MIN_FALL;
+    public static final ModConfigSpec.ConfigValue<Integer> DIVE_COOLDOWN_TICKS;
+    public static final ModConfigSpec.ConfigValue<Integer> DIVE_MAX_BLOCKS;
 
     public static final ModConfigSpec.ConfigValue<Integer> CONTACT_IMMUNITY_LEVEL;
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> CONTACT_PROTECTION_LEVELS;
 
     public static final ModConfigSpec.ConfigValue<Boolean> INSTANT_STARVE;
+    public static final ModConfigSpec.ConfigValue<Integer> STARVE_HUNGER_FLOOR;
     public static final ModConfigSpec.ConfigValue<Boolean> RAPID_FALL_ANALYSIS;
     public static final ModConfigSpec.ConfigValue<Integer> VOICE_VOLUME;
 
@@ -162,6 +172,8 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> DEFENSE_LV8_IFRAMES_TICKS;
     public static final ModConfigSpec.ConfigValue<Integer> EXISTENCE_REFLECT_IFRAMES_TICKS;
     public static final ModConfigSpec.ConfigValue<Boolean> LV8_IFRAMES_MIGRATION_DONE;
+    public static final ModConfigSpec.ConfigValue<Boolean> FULL_IMMUNITY_AT_MAX;
+    public static final ModConfigSpec.ConfigValue<Boolean> FULL_IMMUNITY_MIGRATION_DONE;
 
     public static final ModConfigSpec.ConfigValue<List<? extends Double>> REGEN_SPEED_LEVELS;
     public static final ModConfigSpec.ConfigValue<Double> REGEN_HP_THRESHOLD;
@@ -266,6 +278,19 @@ public final class AdaptionConfig {
         FALL_ANALYSIS_SECONDS = s
                 .comment("Seconds of fall exposure before the fall adaptation finishes.")
                 .defineInRange("fallAnalysisTime", 3.0, 0.1, 300.0);
+
+        s.pop();
+
+        s.comment("--- Environment Adaptations ---").push("environment");
+
+        LAVA_SWIM_SPEED_SCALE = s
+                .comment("Env_Lava makes lava behave like water, only slower.",
+                        "This is the horizontal share of water pace while swimming: 0.8 means",
+                        "four fifths of the speed and the same responsiveness. Vertical control",
+                        "(holding jump to rise, sneaking to sink) is deliberately NOT scaled --",
+                        "lava previously had almost no usable rise at all, so there is nothing",
+                        "to slow down there. 1.0 would make lava exactly as fast as water.")
+                .defineInRange("lavaSwimSpeedScale", 0.8D, 0.2D, 1.0D);
 
         s.pop();
 
@@ -521,9 +546,42 @@ public final class AdaptionConfig {
                         "threshold, Sword of Extermination swings tear three spatial rifts that sever",
                         "up to five lives each outright. Players are never targeted.")
                 .define("enabled", true);
-        DIMENSION_DESTROY_REQUIRED = s.comment("Adaptations on the wheel required to unlock Dimension Destroy.",
-                        "The original gates it behind Transcendence; this mod uses the same idea.")
-                .defineInRange("adaptationsRequired", 450, 1, 1000);
+        DIMENSION_DESTROY_PERCENT = s.comment(
+                        "Share of all adaptations, in percent, required to unlock Dimension Destroy.",
+                        "Counted against everything the All Adaptation item can grant: the registry,",
+                        "every harmful status effect, and Contact_/Offense_NPC_/Drop_NPC_/Existence_",
+                        "for every living entity, modded ones included -- so the requirement scales",
+                        "with the world's content. 80 means four fifths of everything that exists.",
+                        "A fixed count was the old shape and vanilla 1.21.1 has 331 concepts in total,",
+                        "so its default of 450 sat above the ceiling: the feature could not unlock.",
+                        "100 requires literally everything; 1 unlocks on the first adaptation.")
+                .defineInRange("requiredPercent", 80, 1, 100);
+        s.pop();
+
+        s.comment("--- Dive (active ability) ---").push("dive");
+        DIVE_ENABLED = s.comment("Dive: while flying or falling, press the ability key to slam straight",
+                        "down. The landing carves a crater and damages everything around it.",
+                        "Unlocked by adapting to fall damage or by the Flight mutation.")
+                .define("enabled", true);
+        DIVE_RADIUS = s.comment("Crater radius in blocks. The ability is designed around a 5-10 block",
+                        "impact, so the default sits in the middle of that band.")
+                .defineInRange("radius", 6.0, 5.0, 10.0);
+        DIVE_DAMAGE = s.comment("Damage dealt to each living entity other than the diver inside the radius.")
+                .defineInRange("damage", 8.0, 0.0, 1000.0);
+        DIVE_SPEED = s.comment("Downward speed held for the whole dive, in blocks per tick.",
+                        "Vanilla terminal velocity is about 3.9 blocks/tick, so anything at or below",
+                        "that is not a slam at all — it is falling. The default is roughly 1.5x",
+                        "terminal velocity.")
+                .defineInRange("speed", 6.0, 0.5, 12.0);
+        DIVE_MIN_FALL = s.comment("Minimum accumulated fall distance that allows a dive when Flight is not",
+                        "active. It stops a player from triggering the crater from a one-block hop.")
+                .defineInRange("minFall", 3.0, 1.0, 64.0);
+        DIVE_COOLDOWN_TICKS = s.comment("Cooldown between dives, in ticks (20 ticks = one second).")
+                .defineInRange("cooldownTicks", 100, 0, 2400);
+        DIVE_MAX_BLOCKS = s.comment("Hard cap on blocks removed by one landing. It protects large",
+                        "radii and modded soft blocks from turning a single dive into a chunk-sized",
+                        "hole; blocks are taken nearest-first, so a capped crater stays round.")
+                .defineInRange("maxBlocks", 1500, 1, 4096);
         s.pop();
 
         s.comment("--- Contact Defense ---").push("contactDefense");
@@ -547,6 +605,13 @@ public final class AdaptionConfig {
         INSTANT_STARVE = s
                 .comment("Decode starvation immediately on first tick and refill hunger to full.")
                 .define("instantStarve", true);
+        STARVE_HUNGER_FLOOR = s
+                .comment("Once adapted to hunger (Env_Starve), the hunger bar never drains below",
+                        "this value (10 = half the bar, five drumsticks). Unlike the old full",
+                        "refill this does NOT block eating: the bar is only lifted while it is",
+                        "under the floor, so any food can still be eaten for its buffs and",
+                        "saturation. 0 disables the floor entirely.")
+                .defineInRange("starveHungerFloor", 10, 0, 20);
         RAPID_FALL_ANALYSIS = s
                 .comment("Use a short dedicated timer for fall analysis instead of the generic env timer.")
                 .define("rapidFall", true);
@@ -568,6 +633,32 @@ public final class AdaptionConfig {
                 .comment("At Lv5+ a fraction of incoming damage is converted to healing.",
                         "Values are % of damage absorbed.")
                 .defineList("lifestealPct", doubleList(DEFENSE_HEAL_RATIO), AdaptionConfig::isDouble);
+        FULL_IMMUNITY_AT_MAX = s
+                .comment("At Lv8 of a damage type, or of a Contact_<mob> adaptation, this switch",
+                        "nullifies the hit outright: no damage, no red flash, no knockback. It shipped",
+                        "as the default, and it made a maxed Mob Attacks (Type_MOB) an ABSOLUTE",
+                        "immunity -- no mob could ever hurt the wearer again, the Contact_<mob>",
+                        "ladders could no longer train, and progression stopped. That report is why",
+                        "the default is now false.",
+                        "With it off, level 8 is the final state of the reduction table, the Lv5+",
+                        "lifesteal still applies and every landed hit grants the short Lv8 i-frames",
+                        "(see lv8IFramesTicks). Damage still arrives, so the contact and offence",
+                        "ladders keep training past level 8.",
+                        "Set it back to true if you want the old nullification capstone.",
+                        "ALWAYS-ON exceptions, outside this switch: a completed Contact_<mob> is",
+                        "total immunity to that one mob, and completed Projectiles (Type_Projectile)",
+                        "and Miscellaneous (Type_Other) are total immunity to their whole category.",
+                        "The one-time Env_* adaptations (fire, fall, drowning, starvation,",
+                        "suffocation, void, thorns) are already full immunity and are unaffected.",
+                        "Lava is deliberately NOT covered by Env_Fire: it belongs to the one-time",
+                        "Env_Lava adaptation, and the fire/lava split is load-bearing.",
+                        "Damage that bypasses invulnerability (the /kill command) is never nullified.")
+                .define("fullImmunityAtMax", false);
+        FULL_IMMUNITY_MIGRATION_DONE = s
+                .comment("Internal. Records that the fullImmunityAtMax value an install generated",
+                        "while true was the shipped default has been corrected to false once, so a",
+                        "player who deliberately turns it back on afterwards keeps it. Do not edit.")
+                .define("fullImmunityMigrated", false);
 
         s.pop();
 

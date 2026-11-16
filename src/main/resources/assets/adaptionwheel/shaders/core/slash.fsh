@@ -29,14 +29,18 @@ void main() {
     // Screentone across the band between core and edge. It lives in the blade's own UV rather than
     // in screen space, so it stays glued to the object from every angle instead of swimming across
     // it as the camera turns -- which is the whole reason to spend a fragment shader on this.
+    // Ported from 1.21.1: the dots mix toward the near-black ink, which is what makes the slash
+    // read partly black rather than as an even cyan plate.
     float band = 1.0 - abs(coreness * 2.0 - 1.0);
-    vec2 dotSpace = mat2(0.7071, -0.7071, 0.7071, 0.7071) * (texCoord * vec2(48.0, 8.0));
-    float dots = step(length(fract(dotSpace) - 0.5), mix(0.12, 0.48, band));
-    color *= 1.0 - dots * band * 0.45;
+    vec2 dotSpace = mat2(0.7071, -0.7071, 0.7071, 0.7071) * (texCoord * vec2(40.0, 10.0));
+    float dots = step(length(fract(dotSpace) - 0.5), mix(0.10, 0.50, band));
+    color *= 1.0 - dots * band * 0.70;
 
-    // Hot strokes running tip-ward along the core, so a still frame still reads as motion.
+    // Hot strokes running tip-ward along the core, so a still frame still reads as motion. These
+    // darken toward the ink, exactly as 1.21.1 did -- brightening them toward white is what used
+    // to wash the blade out.
     float hatch = step(0.86, fract(u * 9.0 - t * 4.0)) * coreness;
-    color = mix(color, vec3(1.0), hatch * 0.55);
+    color *= 1.0 - hatch * 0.60;
 
     fragColor = vec4(color, alpha);
 }

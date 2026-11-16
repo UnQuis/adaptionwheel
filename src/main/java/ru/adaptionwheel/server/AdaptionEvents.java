@@ -9,13 +9,17 @@ import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -28,12 +32,14 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.Tags;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -61,6 +67,7 @@ import ru.adaptionwheel.network.TaskProgressPayload;
 import ru.adaptionwheel.sound.ModSounds;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -93,6 +100,14 @@ public class AdaptionEvents {
 
     private static final Map<UUID, Float> PENDING_RESPAWN_HEALTH = new HashMap<>();
     private static final Set<UUID> PENDING_RESPAWN_ARMED = new HashSet<>();
+
+    /**
+     * The categories where a maxed ladder may be made absolute without stalling another ladder:
+     * a projectile is not a direct attacker, and {@code OTHER} is the bucket for everything no
+     * category claims.
+     */
+    private static final Set<AdaptionCategory> TOTAL_IMMUNITY_CATEGORIES =
+            EnumSet.of(AdaptionCategory.PROJECTILE, AdaptionCategory.OTHER);
 
     private static final long WHEEL_GOLD_COST = 10L;
 
@@ -183,12 +198,171 @@ public class AdaptionEvents {
             case FALL -> Concepts.ENV_FALL;
             case STARVE -> Concepts.ENV_STARVE;
             case DROWN -> Concepts.ENV_DROWN;
-            case FIRE -> Concepts.ENV_LAVA;
+            // Fire is an environment adaptation now, not a damage ladder. Lava is the
+            // source-specific override in hasFullImmunity, not a second category concept.
+            case FIRE -> Concepts.ENV_FIRE;
             case SUFFOCATE -> Concepts.ENV_SUFFOCATE;
             case VOID -> Concepts.ENV_VOID;
             case CONTACT -> Concepts.ENV_THORNS;
             default -> null;
         };
+    }
+
+    /**
+     * True when a one-time adaptation makes this whole damage category harmless.
+     *
+     * <p>Only the one-time {@code Env_*} concepts answer here. Fire belongs to that family too:
+     * {@link Concepts#ENV_FIRE} is a one-time adaptation stored in {@code adapted}, not a leveled
+     * key in {@code levels}, so {@code active()} is exactly the right accessor for it. (The damage
+     * type is still called {@code FIRE}; the concept is not {@code Type_FIRE}.) Leveled
+     * {@code Type_*} concepts are the other half of the same idea and are handled by
+     * {@link #isMaxedImmunity}.
+     *
+     * <p>FIRE is the one category with two adaptations, because lava and fire are learned and
+     * should be lived through separately: {@link Concepts#ENV_LAVA} comes only from actual
+     * immersion in lava, while {@link Concepts#ENV_FIRE} comes from every other fire hit. A fire
+     * arrow must not grant lava immunity, and standing in lava must not train the fire adaptation.
+     */
+    public static boolean hasFullImmunity(PlayerAdaption data, AdaptionCategory category, DamageSource source) {
+        if (category == AdaptionCategory.FIRE && isLavaDamage(source)) {
+            return data.active(Concepts.ENV_LAVA);
+        }
+        String immunity = envImmunityConcept(category);
+        return immunity != null && data.active(immunity);
+    }
+
+    /**
+     * True when a maxed leveled adaptation makes this incoming hit harmless outright.
+     *
+     * <p>The other half of {@link #hasFullImmunity}: that one covers the one-time {@code Env_*}
+     * immunities, this one the last rung of a {@code Type_*} or {@code Contact_<mob>} ladder.
+     *
+     * <p>Three deliberate exclusions: {@code BYPASSES_INVULNERABILITY} is the {@code /kill}
+     * command, not a phenomenon to adapt to; lava belongs to the one-time {@code Env_Lava}; and the
+     * one-time families have no level eight to ask about.
+     */
+    public static boolean isMaxedImmunity(PlayerAdaption data, AdaptionCategory category, DamageSource source) {
+        if (data == null || category == null || source == null) {
+            return false;
+        }
+        if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            return false;
+        }
+        if (contactImmunityApplies(data, source)) {
+            return true;
+        }
+        switch (category) {
+            case FALL, STARVE, DROWN, FIRE, SUFFOCATE, VOID, CONTACT -> {
+                return false;
+            }
+            default -> {
+            }
+        }
+        return data.levelOrZero(Concepts.type(category)) >= PlayerAdaption.MAX_LEVEL;
+    }
+
+    /**
+     * True when a completed {@code Contact_<mob>} adaptation makes this hit harmless.
+     *
+     * <p>A completed contact ladder is ALWAYS total immunity, independent of
+     * {@code fullImmunityAtMax}. The {@code contactDefense.immunityLevel} knob still offers an
+     * EARLIER cutoff; 0 means "only the completed ladder".
+     */
+    public static boolean contactImmunityApplies(PlayerAdaption data, DamageSource source) {
+        if (data == null || source == null) {
+            return false;
+        }
+        if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            return false;
+        }
+        if (!(source.getDirectEntity() instanceof LivingEntity attacker)) {
+            return false;
+        }
+        int contactLevel = data.levelOrZero(Concepts.contact(entityPath(attacker.getType())));
+        if (contactLevel >= PlayerAdaption.MAX_LEVEL) {
+            return true;
+        }
+        int cutoff = AdaptionConfig.CONTACT_IMMUNITY_LEVEL.get();
+        return cutoff > 0 && contactLevel >= cutoff;
+    }
+
+    /**
+     * True when a completed adaptation of a category that is safe to make absolute is maxed.
+     *
+     * <p>Only {@link #TOTAL_IMMUNITY_CATEGORIES} answer here. Possible stalls only exist in the
+     * categories that are trained by being hit; a projectile is not a direct attacker, and
+     * {@code OTHER} is the residue no category claims, so their level eight stays total immunity
+     * even with {@code fullImmunityAtMax} off.
+     */
+    public static boolean categoryCapstoneApplies(PlayerAdaption data, AdaptionCategory category, DamageSource source) {
+        if (data == null || category == null || source == null) {
+            return false;
+        }
+        if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            return false;
+        }
+        if (!TOTAL_IMMUNITY_CATEGORIES.contains(category)) {
+            return false;
+        }
+        return data.levelOrZero(Concepts.type(category)) >= PlayerAdaption.MAX_LEVEL;
+    }
+
+    /** The damage type vanilla uses for lava itself; fire ticks and fireballs are not lava. */
+    private static boolean isLavaDamage(DamageSource source) {
+        return source.typeHolder().is(DamageTypes.LAVA);
+    }
+
+    /**
+     * Chorus-like rescue for {@code Env_Void}.
+     *
+     * <p>Cancelling the void damage without moving the player was a one-way trip: the immunity is
+     * permanent, so the fall never ended and there was no way back except unequipping the wheel or a
+     * command. The rescue first tries a chorus-fruit-style random spot near the player, but unlike
+     * the fruit it reads the column's surface height instead of a small vertical offset -- a random
+     * offset around Y = -100 would still be in the void.
+     */
+    private static void rescueFromVoid(ServerPlayer player, PlayerAdaption data) {
+        long now = player.level().getGameTime();
+        if (data.lastVoidRescueTick != Long.MIN_VALUE && now - data.lastVoidRescueTick < 20) {
+            return;
+        }
+        ServerLevel level = player.level();
+        var random = player.getRandom();
+        for (int attempt = 0; attempt < 16; attempt++) {
+            double x = player.getX() + (random.nextDouble() - 0.5D) * 32.0D;
+            double z = player.getZ() + (random.nextDouble() - 0.5D) * 32.0D;
+            int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Mth.floor(x), Mth.floor(z));
+            if (y <= level.getMinY() + 1) {
+                continue;
+            }
+            BlockPos pos = BlockPos.containing(x, y, z);
+            if (!level.isEmptyBlock(pos) || !level.isEmptyBlock(pos.above())) {
+                continue;
+            }
+            if (level.getBlockState(pos.below()).isAir() || !level.getFluidState(pos).isEmpty()) {
+                continue;
+            }
+            teleportRescue(player, level, x + 0.5D, y, z + 0.5D);
+            data.lastVoidRescueTick = now;
+            return;
+        }
+
+        // A void world has no surface to find. Fall back to the shared spawn, which is the one
+        // position the game guarantees to be usable (the End's obsidian platform included).
+        BlockPos spawn = level.getRespawnData().pos();
+        int y = Math.max(level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, spawn.getX(), spawn.getZ()),
+                level.getMinY() + 1);
+        teleportRescue(player, level, spawn.getX() + 0.5D, y, spawn.getZ() + 0.5D);
+        data.lastVoidRescueTick = now;
+    }
+
+    private static void teleportRescue(ServerPlayer player, ServerLevel level, double x, double y, double z) {
+        player.teleportTo(level, x, y, z, Set.of(), player.getYRot(), player.getXRot(), false);
+        player.setDeltaMovement(Vec3.ZERO);
+        player.fallDistance = 0.0F;
+        player.setAirSupply(player.getMaxAirSupply());
+        level.playSound(null, player.blockPosition(), SoundEvents.CHORUS_FRUIT_TELEPORT,
+                SoundSource.PLAYERS, 1.0F, 1.0F);
     }
 
     private static String entityPath(EntityType<?> type) {
@@ -237,24 +411,40 @@ public class AdaptionEvents {
         DamageSource source = event.getSource();
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        String immunity = envImmunityConcept(category);
-        if (immunity != null && data.active(immunity)) {
+        if (hasFullImmunity(data, category, source)) {
+            if (category == AdaptionCategory.VOID) {
+                rescueFromVoid(player, data);
+            }
             event.setCanceled(true); return;
         }
 
-        int immunityLevel = AdaptionConfig.CONTACT_IMMUNITY_LEVEL.get();
-        if (immunityLevel > 0) {
-            Entity direct = source.getDirectEntity();
-            if (direct instanceof LivingEntity livingDirect) {
-                String mobPath = entityPath(livingDirect.getType());
-                int contactLevel = data.level(Concepts.contact(mobPath));
-                if (contactLevel >= immunityLevel) {
-                    event.setCanceled(true); return;
-                }
-            }
+        String adaptedBoss = adaptedExistenceTarget(data, source);
+        if (adaptedBoss != null) {
+            reflectAttack(player, source.getDirectEntity() != null ? source.getDirectEntity() : source.getEntity(),
+                    event.getContainer().getNewDamage());
+            event.setCanceled(true);
+            return;
         }
 
-        if (adaptedExistenceTarget(data, source) != null) {
+        // Both of these come AFTER the existence reflection, for the same reason the config-gated
+        // check below is last: a hit that is about to be reflected already deals the player no
+        // damage, and cancelling it first would silently remove the only offence an existence
+        // adaptation has.
+        if (contactImmunityApplies(data, source)) {
+            event.setCanceled(true);
+            return;
+        }
+        if (categoryCapstoneApplies(data, category, source)) {
+            event.setCanceled(true);
+            return;
+        }
+
+        // Deliberately the last gate, behind the existence reflection: a maxed Type_MOB would
+        // otherwise swallow a boss hit before existence could reflect it, and the reflection is the
+        // only offence an existence adaptation has. A hit that was going to be reflected already
+        // dealt the player no damage, so skipping the immunity check for it changes nothing for the
+        // player and keeps the boss taking its own hit.
+        if (AdaptionConfig.FULL_IMMUNITY_AT_MAX.get() && isMaxedImmunity(data, category, source)) {
             event.setCanceled(true);
         }
     }
@@ -263,7 +453,6 @@ public class AdaptionEvents {
     public static void onDamage(LivingDamageEvent.Pre event) {
         if (event.getEntity().level().isClientSide()) return;
         DamageSource source = event.getSource();
-        float original = event.getOriginalDamage();
         float newDamage = event.getNewDamage();
 
         Entity attackerEntity = source.getEntity();
@@ -288,22 +477,40 @@ public class AdaptionEvents {
 
         Entity direct = source.getDirectEntity();
 
-        if (data.adversityActive || data.adversityCooldownTimer > 0) return;
+        // Only Adversity itself switches the defences off. Its cooldown is a gate on starting
+        // another Adversity (tryAdversitySurvival already checks it), not a second vulnerability
+        // window: keeping the old check here meant 30 seconds of no reduction, healing, i-frames
+        // or analysis immediately after surviving one.
+        if (data.adversityActive) return;
 
         AdaptionCategory category = AdaptionCategory.match(source);
 
-        String immunity = envImmunityConcept(category);
-        if (immunity != null && data.active(immunity)) {
+        if (hasFullImmunity(data, category, source)) {
+            if (category == AdaptionCategory.VOID) {
+                rescueFromVoid(player, data);
+            }
             event.setNewDamage(0); return;
         }
 
+        // The incoming handler already cancelled this in the ordinary path. Kept here as the same
+        // second layer the one-time immunities above have, so a future damage route that reaches
+        // Pre without passing Incoming cannot quietly keep hitting a fully adapted player.
+        if (AdaptionConfig.FULL_IMMUNITY_AT_MAX.get() && isMaxedImmunity(data, category, source)) {
+            event.setNewDamage(0); return;
+        }
+
+        boolean lavaDamage = category == AdaptionCategory.FIRE && isLavaDamage(source);
+
         List<String> concepts = new ArrayList<>();
+        // These categories are covered by a one-time Env_* immunity and no longer have a leveled
+        // Type_* counterpart. CONTACT joined them: Env_Thorns is its full-protection variant, and
+        // Contact_<mob> still trains separately below.
         boolean envCategory = category == AdaptionCategory.FALL || category == AdaptionCategory.STARVE
-                || category == AdaptionCategory.DROWN || category == AdaptionCategory.FIRE
-                || category == AdaptionCategory.CONTACT || category == AdaptionCategory.SUFFOCATE
-                || category == AdaptionCategory.VOID || category == AdaptionCategory.MOB
-                || category == AdaptionCategory.WITHER;
-        if (!envCategory) {
+                || category == AdaptionCategory.DROWN
+                || category == AdaptionCategory.SUFFOCATE
+                || category == AdaptionCategory.VOID
+                || category == AdaptionCategory.CONTACT;
+        if (!envCategory && !lavaDamage) {
             concepts.add(Concepts.type(category));
         }
 
@@ -351,7 +558,7 @@ public class AdaptionEvents {
         if (bestLevel >= 5) {
             double ratio = AdaptionConfig.defenseHealRatio(bestLevel) / 100.0;
             if (ratio > 0) {
-                player.heal(original * (float) ratio);
+                player.heal(newDamage * (float) ratio);
             }
         }
         if (bestLevel >= 8) {
@@ -365,7 +572,7 @@ public class AdaptionEvents {
         }
 
         if (AdaptionConfig.ENABLE_DEFENSE.get()) {
-            if (!envCategory) {
+            if (!envCategory && !lavaDamage) {
                 startOrAccelerate(player, data, Concepts.type(category),
                         (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
             }
@@ -387,8 +594,10 @@ public class AdaptionEvents {
                         : AdaptionConfig.ENV_ANALYSIS_SECONDS.get();
                 startTask(player, data, Concepts.ENV_FALL, (int) (fallTime * 20));
             }
-            if (category == AdaptionCategory.FIRE && source.is(net.minecraft.tags.DamageTypeTags.IS_FIRE)) {
-                startTask(player, data, Concepts.ENV_LAVA, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+            // Lava is learned only by immersion, in the tick loop. A fire hit must not grant it:
+            // the fire/lava split is what keeps a fire arrow from making lava harmless.
+            if (category == AdaptionCategory.FIRE && !lavaDamage) {
+                startTask(player, data, Concepts.ENV_FIRE, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
             if (category == AdaptionCategory.CONTACT) {
                 startTask(player, data, Concepts.ENV_THORNS, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
@@ -588,7 +797,7 @@ public class AdaptionEvents {
             return;
         }
         PlayerAdaption data = data(attacker);
-        float bonus = HardFist.bonus(attacker, data);
+        float bonus = MartialArts.bonus(attacker, data);
         if (bonus > 0f) {
             event.setNewDamage(event.getNewDamage() + bonus);
         }
@@ -646,7 +855,7 @@ public class AdaptionEvents {
         if (player == null || !wearingWheel(player)) return;
         PlayerAdaption data = data(player);
         if (dead instanceof net.minecraft.world.entity.monster.Enemy) {
-            HardFist.onFistKill(player, data, dead, event.getSource());
+            MartialArts.onFistKill(player, data, dead, event.getSource());
         }
         if (data.adversityActive || !AdaptionConfig.ENABLE_LOOT.get() || BossHelper.isBoss(dead)) return;
 
@@ -778,7 +987,7 @@ public class AdaptionEvents {
 
         SynergyEffects.forget(player);
         FistMastery.forget(id);
-        HardFist.forget(id);
+        MartialArts.forget(id);
     }
 
     @SubscribeEvent
@@ -813,25 +1022,32 @@ public class AdaptionEvents {
         boolean wearing = wearingWheel(player);
 
         if (wearing && !data.wasWearing) {
-            data.tasks.clear();
-            data.bossCombatTicks.clear();
-            data.healingTimer = 0;
-            data.adversityTimer = 0;
-            data.adversityActive = false;
-            data.adversityCooldownTimer = 0;
+            // Deliberately only a merge. This branch used to clear the running analyses, the boss
+            // counters and the Adversity state first, on the theory that an equip starts a fresh
+            // wheel — but it also runs on the first tick after a login whenever Curios reported the
+            // slot a moment late, so joining a world silently cancelled every analysis that was
+            // running. Unequipping already owns that reset; an equip has nothing to clear.
             loadFromItem(player, data);
+            applyStats(player, data);
         }
         if (!wearing && data.wasWearing) {
 
             data.tasks.clear();
             data.bossCombatTicks.clear();
+
+            ItemStack unequipped = data.equippedStack;
             data.equippedStack = null;
-            if (AdaptionConfig.KEEP_DATA_ON_UNEQUIP.get()) {
-                saveToItem(player, data);
-            } else {
-                getWheelStack(player).ifPresent(stack -> stack.set(ModDataComponents.WHEEL_DATA.get(), WheelData.EMPTY));
+            if (unequipped != null) {
+                if (AdaptionConfig.KEEP_DATA_ON_UNEQUIP.get()) {
+                    saveToStack(unequipped, data);
+                } else {
+                    unequipped.set(ModDataComponents.WHEEL_DATA, WheelData.EMPTY);
+                }
             }
-            data.reset();
+            // The cache, the per-concept switches and both fist counters are player-bound and are
+            // not stored in WheelData, so the full reset here used to destroy them with no copy
+            // on the item. Keep them across the unequip.
+            data.resetForUnequip();
             revokeWearableState(player);
             applyStats(player, data);
             sync(player, data, false);
@@ -850,7 +1066,9 @@ public class AdaptionEvents {
                                 + "adopting the data of the new one", player.getName().getString());
                     }
                     saveToStack(data.equippedStack, data);
-                    data.reset();
+                    // A swap is still a wheel transition, not a player wipe: the cache and the
+                    // switch states belong to the player and survive it.
+                    data.resetForUnequip();
                     // The new wheel may grant neither flight nor the synergies the old one did,
                     // so state living outside the attachment has to be taken back here too.
                     // Whatever the new wheel does grant is re-applied by the tick loop after.
@@ -948,7 +1166,7 @@ public class AdaptionEvents {
         applySurfaceEffects(player, data);
 
         if (!data.active(Concepts.MUTATION_THERMAL)
-                && data.level(Concepts.type(AdaptionCategory.FIRE)) >= PlayerAdaption.MAX_LEVEL
+                && data.active(Concepts.type(AdaptionCategory.FIRE))
                 && data.active(Concepts.ENV_LAVA)) {
             grantComboMutation(player, data, Concepts.MUTATION_THERMAL);
         } else if (data.active(Concepts.MUTATION_THERMAL)) {
@@ -989,7 +1207,9 @@ public class AdaptionEvents {
 
         if (AdaptionConfig.DIMENSION_DESTROY_ENABLED.get()
                 && !data.active(Concepts.DIMENSION_DESTROY)
-                && data.getAdaptCount() > AdaptionConfig.DIMENSION_DESTROY_REQUIRED.get()) {
+                && reachesDimensionDestroy(data.getAdaptCount(),
+                        adaptableConcepts(player.level()).total(),
+                        AdaptionConfig.DIMENSION_DESTROY_PERCENT.get())) {
             grantComboMutation(player, data, Concepts.DIMENSION_DESTROY);
         }
 
@@ -1223,7 +1443,9 @@ public class AdaptionEvents {
         } else if (DraconicCompat.GUARDIAN_ID.equals(bossPath)) {
             data.levels.put(Concepts.type(AdaptionCategory.EXPLOSION), PlayerAdaption.MAX_LEVEL);
             data.levels.put(Concepts.type(AdaptionCategory.PROJECTILE), PlayerAdaption.MAX_LEVEL);
-            data.levels.put(Concepts.type(AdaptionCategory.FIRE), PlayerAdaption.MAX_LEVEL);
+            // Fire is one-time now, so it lives in `adapted`, not `levels`. Writing a level
+            // here would leave the guardian reward short of the fire immunity it promises.
+            data.adapted.add(Concepts.ENV_FIRE);
         } else {
             data.levels.put(Concepts.type(AdaptionCategory.MOB), PlayerAdaption.MAX_LEVEL);
         }
@@ -1547,35 +1769,36 @@ public class AdaptionEvents {
             player.clearFire();
         }
 
-        if (data.active(Concepts.ENV_DARKNESS)
-                && player.tickCount % 40 == 0) {
-            player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 2400, 0, false, false));
-        }
-        if (data.active(Concepts.ENV_STARVE)
-                && player.tickCount % 20 == 0) {
-            player.getFoodData().setFoodLevel(20);
-            player.getFoodData().setSaturation(20f);
-            resetExhaustion(player.getFoodData());
-        }
-    }
-
-    private static final java.lang.reflect.Field EXHAUSTION_FIELD;
-    static {
-        java.lang.reflect.Field f = null;
-        try {
-            f = net.minecraft.world.food.FoodData.class.getDeclaredField("exhaustionLevel");
-            f.setAccessible(true);
-        } catch (NoSuchFieldException ignored) {
-        }
-        EXHAUSTION_FIELD = f;
-    }
-
-    private static void resetExhaustion(net.minecraft.world.food.FoodData foodData) {
-        if (EXHAUSTION_FIELD != null) {
-            try {
-                EXHAUSTION_FIELD.setFloat(foodData, 0f);
-            } catch (IllegalAccessException ignored) {
+        if (data.active(Concepts.ENV_DARKNESS)) {
+            if (player.tickCount % 40 == 0) {
+                player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 2400, 0, false, false));
             }
+        } else {
+            removeAdaptationNightVision(player);
+        }
+        if (data.active(Concepts.ENV_STARVE)) {
+            // A floor, not a refill: the bar is only lifted while it is under the floor, so any
+            // food can still be eaten for its buffs and saturation, and hunger still means
+            // something. 0 disables the floor entirely.
+            int hungerFloor = AdaptionConfig.STARVE_HUNGER_FLOOR.get();
+            if (hungerFloor > 0 && player.getFoodData().getFoodLevel() < hungerFloor) {
+                player.getFoodData().setFoodLevel(hungerFloor);
+            }
+        }
+    }
+
+    /**
+     * Removes the long, hidden night vision granted by Env_Darkness when the adaptation is off.
+     * Leaves other sources (potions, beacons) alone by matching the signature we apply.
+     */
+    private static void removeAdaptationNightVision(ServerPlayer player) {
+        var effect = player.getEffect(MobEffects.NIGHT_VISION);
+        if (effect == null) {
+            return;
+        }
+        if (!effect.isVisible() && !effect.isAmbient() && effect.getAmplifier() == 0
+                && effect.getDuration() > 20 * 30) {
+            player.removeEffect(MobEffects.NIGHT_VISION);
         }
     }
 
@@ -1727,61 +1950,21 @@ public class AdaptionEvents {
         data.adversityTimer = 0;
         data.adversityCooldownTimer = 0;
 
-        // Everything in the registry, rather than a list written out again here.
-        //
-        // A hand-written copy of the core concepts is the whole bug: it silently went stale the moment
-        // Env_Inventory, Mutation_SeaEye, Mutation_Flight and the five Combat_Fist* stages were added,
-        // and "eats the All Adaptation item and still is not adapted to it" is exactly what a stale
-        // copy looks like from the outside. The registry is the single source of truth for which
-        // concepts exist and whether they have levels, so iterating it makes the item grant everything
-        // by construction and a future concept needs no edit here at all.
-        for (ru.adaptionwheel.adapt.AdaptationDefinition def
-                : ru.adaptionwheel.adapt.AdaptationRegistry.allDefinitions()) {
-            String concept = def.concept();
-            if (def.leveled()) {
-                data.levels.put(concept, def.maxLevel());
-            } else {
-                data.adapted.add(concept);
-            }
-            data.addHistory(concept);
+        // One description of "everything", built from the live registries rather than a copy
+        // written out here. The same list is the denominator of the Dimension Destroy gate, so the
+        // two can never disagree about what "all" means.
+        AdaptableConcepts everything = adaptableConcepts(serverPlayer.level());
+        for (Map.Entry<String, Integer> entry : everything.leveled().entrySet()) {
+            data.levels.put(entry.getKey(), entry.getValue());
+            data.addHistory(entry.getKey());
         }
-
-        for (MobEffect effect : BuiltInRegistries.MOB_EFFECT) {
-            if (effect.isBeneficial()) {
-                continue;
-            }
-            Identifier key = BuiltInRegistries.MOB_EFFECT.getKey(effect);
-            if (key == null) {
-                continue;
-            }
-            String concept = Concepts.debuff(key.toString());
+        for (String concept : everything.oneTime()) {
             data.adapted.add(concept);
-            data.levels.put(concept, PlayerAdaption.MAX_LEVEL);
             data.addHistory(concept);
         }
-
-        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
-            Identifier key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-            if (key == null) {
-                continue;
-            }
-            String path = key.toString();
-            data.levels.put(Concepts.contact(path), PlayerAdaption.MAX_LEVEL);
-            data.levels.put(Concepts.offense(path), PlayerAdaption.MAX_LEVEL);
-            data.levels.put(Concepts.drop(path), PlayerAdaption.MAX_LEVEL);
-            data.addHistory(Concepts.contact(path));
-
-            if (type.builtInRegistryHolder().is(Tags.EntityTypes.BOSSES)
-                    || DraconicCompat.GUARDIAN_ID.equals(path)
-                    || path.contains("wither")
-                    || path.contains("ender_dragon")
-                    || path.contains("warden")) {
-                String existenceConcept = Concepts.existence(path);
-                data.adapted.add(existenceConcept);
-                data.existenceAdapted.add(path);
-                data.addHistory(existenceConcept);
-            }
-        }
+        // Existence is two things at once: the one-time Existence_ concept, which is in `oneTime`
+        // above, and the boss path the reflection gate reads.
+        data.existenceAdapted.addAll(everything.existence());
 
         data.targetRotation += (float) (Math.PI * 30);
         data.invalidateAdaptCount();
@@ -1794,6 +1977,167 @@ public class AdaptionEvents {
         serverPlayer.sendSystemMessage(Component.translatable("adaptionwheel.msg.all_adaption_maxed")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         sync(serverPlayer, data, true);
+    }
+
+    /**
+     * Everything the All Adaptation item grants, and therefore also the denominator of the
+     * Dimension Destroy gate.
+     *
+     * <p>{@code leveled} holds one level per concept that stores a level, {@code oneTime} the
+     * concepts that are simply present, and {@code existence} the boss paths that the existence
+     * reflection gate reads (the matching {@code Existence_} concept is in {@code oneTime}).
+     */
+    public record AdaptableConcepts(Map<String, Integer> leveled, Set<String> oneTime,
+                                    Set<String> existence) {
+
+        public int total() {
+            return leveled.size() + oneTime.size();
+        }
+    }
+
+    private static volatile AdaptableConcepts cachedAdaptableConcepts;
+
+    /**
+     * The live "everything" list, built once per server and rebuilt when tags change.
+     *
+     * <p>Rebuilding it is not free: the {@link net.minecraft.world.entity.MobCategory#MISC} probe
+     * creates an entity. That is fine for a one-off grant, but the Dimension Destroy check runs
+     * every tick, so the result is cached. The cache is dropped on {@link TagsUpdatedEvent}, because
+     * the boss tag decides which {@code Existence_} concepts exist.
+     */
+    public static AdaptableConcepts adaptableConcepts(Level level) {
+        AdaptableConcepts cached = cachedAdaptableConcepts;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (AdaptionEvents.class) {
+            if (cachedAdaptableConcepts == null) {
+                cachedAdaptableConcepts = buildAdaptableConcepts(level);
+            }
+            return cachedAdaptableConcepts;
+        }
+    }
+
+    private static AdaptableConcepts buildAdaptableConcepts(Level level) {
+        Map<String, Integer> leveled = new HashMap<>();
+        Set<String> oneTime = new HashSet<>();
+        Set<String> existence = new HashSet<>();
+
+        for (ru.adaptionwheel.adapt.AdaptationDefinition definition
+                : ru.adaptionwheel.adapt.AdaptationRegistry.allDefinitions()) {
+            if (definition.leveled()) {
+                leveled.put(definition.concept(), definition.maxLevel());
+            } else {
+                oneTime.add(definition.concept());
+            }
+        }
+
+        for (MobEffect effect : BuiltInRegistries.MOB_EFFECT) {
+            Identifier key = BuiltInRegistries.MOB_EFFECT.getKey(effect);
+            if (key == null || effect.isBeneficial()) {
+                continue;
+            }
+            // Debuffs are one-time. Putting them in levels too made adaptCount count the same
+            // adaptation twice and kept WheelData.adaptCount() disagreeing with getAdaptCount().
+            oneTime.add(Concepts.debuff(key.toString()));
+        }
+
+        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
+            Identifier key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+            if (key == null || !isLivingType(type, level)) {
+                continue;
+            }
+            String path = key.toString();
+            leveled.put(Concepts.contact(path), PlayerAdaption.MAX_LEVEL);
+            leveled.put(Concepts.offense(path), PlayerAdaption.MAX_LEVEL);
+            if (type != EntityTypes.PLAYER) {
+                leveled.put(Concepts.drop(path), PlayerAdaption.MAX_LEVEL);
+            }
+            if (isBossType(type, path)) {
+                oneTime.add(Concepts.existence(path));
+                existence.add(path);
+            }
+        }
+
+        return new AdaptableConcepts(leveled, oneTime, existence);
+    }
+
+    /**
+     * Whether this entity type produces a {@link LivingEntity}.
+     *
+     * <p>This deliberately does not ask {@code EntityType#getBaseClass()}. In 1.21.1 that method is
+     * {@code EntityTypeTest}'s default implementation and returns {@code Entity.class} for every
+     * registered type, modded ones included, so the check the entity pass used to make --
+     * {@code LivingEntity.class.isAssignableFrom(type.getBaseClass())} -- was false for all of
+     * them. The pass therefore granted nothing at all, which is exactly how All Adaptation ended up
+     * looking like it only knew the registry concepts: no {@code Contact_}, {@code Offense_NPC_} or
+     * {@code Drop_NPC_} rows for any mob, vanilla or modded, and no warning anywhere.
+     *
+     * <p>The spawn category answers the question without constructing anything, because every
+     * category other than {@link net.minecraft.world.entity.MobCategory#MISC} is a mob. MISC is the
+     * mixed bag -- the player, every projectile, item and vehicle, and also living things such as the
+     * armour stand -- so it is probed by creating one. That probe is what keeps the answer right for
+     * a modded mob that registered itself as MISC instead of picking a real category.
+     */
+    public static boolean isLivingType(EntityType<?> type, Level level) {
+        if (type == EntityTypes.PLAYER) {
+            return true;
+        }
+        if (type.getCategory() != net.minecraft.world.entity.MobCategory.MISC) {
+            return true;
+        }
+        try {
+            return type.create(level, EntitySpawnReason.COMMAND) instanceof LivingEntity;
+        } catch (RuntimeException e) {
+            // A modded entity whose constructor throws must not take the whole grant down with it:
+            // skipping one type is better than granting none.
+            return false;
+        }
+    }
+
+    /**
+     * Whether this entity type is a boss for the existence family.
+     *
+     * <p>The boss tag plus the three vanilla names, because vanilla's own boss tag is incomplete
+     * for the mobs this mod reflects. Draconic Evolution's Chaos Guardian is hardcoded here because
+     * it is not in any tag at all.
+     */
+    public static boolean isBossType(EntityType<?> type, String path) {
+        return type.builtInRegistryHolder().is(Tags.EntityTypes.BOSSES)
+                || DraconicCompat.GUARDIAN_ID.equals(path)
+                || path.contains("wither")
+                || path.contains("ender_dragon")
+                || path.contains("warden");
+    }
+
+    /**
+     * The Dimension Destroy gate: a share of everything the All Adaptation item can grant.
+     *
+     * <p>A fixed count was the bug. The old default was 450 and vanilla 1.21.1 has 331 concepts in
+     * total, so the requirement sat above the ceiling and the feature could never unlock by playing
+     * -- while looking like an ordinary endgame threshold in the config. A percentage follows the
+     * content: the same fraction of vanilla, and still "almost everything" in a modpack.
+     *
+     * @param adaptCount    the player's distinct adaptations
+     * @param totalConcepts {@link AdaptableConcepts#total()}
+     * @param percent       1..100
+     */
+    public static boolean reachesDimensionDestroy(int adaptCount, int totalConcepts, int percent) {
+        if (totalConcepts <= 0) {
+            // An empty registry must not read as "nothing left to do".
+            return false;
+        }
+        return (long) adaptCount * 100L >= (long) totalConcepts * percent;
+    }
+
+    @SubscribeEvent
+    public static void onServerStoppedResetAdaptableCache(net.neoforged.neoforge.event.server.ServerStoppedEvent event) {
+        cachedAdaptableConcepts = null;
+    }
+
+    @SubscribeEvent
+    public static void onTagsUpdatedResetAdaptableCache(net.neoforged.neoforge.event.TagsUpdatedEvent event) {
+        cachedAdaptableConcepts = null;
     }
 
     private static final Map<UUID, Long> LAST_VOICE_TICK = new HashMap<>();
@@ -1864,7 +2208,7 @@ public class AdaptionEvents {
 
         if (ru.adaptionwheel.category.Concepts.MUTATION_FIST.equals(concept)) {
             FistMastery.forget(player.getUUID());
-        HardFist.forget(player.getUUID());
+        MartialArts.forget(player.getUUID());
         }
         saveToItem(player, d);
         sync(player, d, true);
@@ -1989,7 +2333,7 @@ public class AdaptionEvents {
      * immediately -- and this is the recovery path.
      */
     private static int combatFistDone(PlayerAdaption data) {
-        int tier = ru.adaptionwheel.server.HardFist.trainingTier(data);
+        int tier = ru.adaptionwheel.server.MartialArts.trainingTier(data);
         if (tier < 0) {
             return 0;
         }
@@ -2009,7 +2353,7 @@ public class AdaptionEvents {
      * <p>Only a finished ladder still reports 0, because then there genuinely is nothing left.
      */
     private static int combatFistTotal(PlayerAdaption data) {
-        int tier = ru.adaptionwheel.server.HardFist.trainingTier(data);
+        int tier = ru.adaptionwheel.server.MartialArts.trainingTier(data);
         if (tier < 0) {
             return 0;
         }
@@ -2079,6 +2423,16 @@ public class AdaptionEvents {
         event.setMaterialCost(1);
     }
 
+
+
+    private static java.util.List<String> buildAbilities(PlayerAdaption data) {
+        java.util.List<String> abilities = new java.util.ArrayList<>();
+        if (DiveAbility.unlocked(data)) {
+            abilities.add(DiveAbility.ID);
+        }
+        return abilities;
+    }
+
     public static void sync(ServerPlayer player, PlayerAdaption data, boolean wearing) {
 
         Map<String, Integer> existenceProgress = visibleBossProgress(player, data);
@@ -2096,11 +2450,13 @@ public class AdaptionEvents {
                 existenceProgress != null ? existenceProgress : java.util.Map.of(),
                 (int) (AdaptionConfig.EXISTENCE_REQUIRED_SECONDS.get() * 20),
                 ru.adaptionwheel.server.FistMastery.instabreakStance(player),
+                ru.adaptionwheel.server.FistMastery.instabreakUnlocked(data),
                 ru.adaptionwheel.server.FistMastery.tierProgress(player.getUUID(), data),
                 ru.adaptionwheel.server.FistMastery.fistProgressTotal(data),
                 combatFistDone(data),
                 combatFistTotal(data),
-                new ArrayList<>(data.disabled)
+                new ArrayList<>(data.disabled),
+                buildAbilities(data)
         );
         AdaptionSyncPayload.sendTo(player, payload);
     }

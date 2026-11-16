@@ -1,0 +1,15 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "adaptionwheel:jetbrains_mono/jetbrainsmono-light.ttf",
+      "size": 30.0,
+      "oversample": 3.0,
+      "shift": [0.0, 0.0]
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:default"
+    }
+  ]
+}

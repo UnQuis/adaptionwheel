@@ -32,6 +32,7 @@ public final class ClientAdaption {
     public static int combatFistProgressTier = -1;
 
     public static boolean instabreakActive;
+    public static boolean instabreakUnlocked;
 
     public static boolean wearingWheel;
     public static boolean adversityActive;
@@ -47,6 +48,7 @@ public final class ClientAdaption {
     public static final Map<String, Integer> EXISTENCE_PROGRESS = new HashMap<>();
 
     public static final Set<String> DISABLED = new HashSet<>();
+    public static final Set<String> ABILITIES = new HashSet<>();
 
     public static int existenceThreshold;
 
@@ -80,8 +82,10 @@ public final class ClientAdaption {
         HISTORY.clear();
         EXISTENCE_PROGRESS.clear();
         DISABLED.clear();
+        ABILITIES.clear();
         existenceThreshold = 0;
         instabreakActive = false;
+        instabreakUnlocked = false;
         fistProgressDone = 0;
         fistProgressTotal = 0;
         combatFistProgressDone = 0;
@@ -90,6 +94,8 @@ public final class ClientAdaption {
         adversityTriggeredAtGameTime = Long.MIN_VALUE;
         syncedAtGameTime = currentGameTime();
         tasksSyncedAtGameTime = syncedAtGameTime;
+        ClientCooldowns.clear();
+        ClientCache.clear();
     }
 
     public static void onSync(AdaptionSyncPayload payload) {
@@ -114,8 +120,11 @@ public final class ClientAdaption {
         EXISTENCE_PROGRESS.putAll(payload.existenceProgress());
         DISABLED.clear();
         DISABLED.addAll(payload.disabled());
+        ABILITIES.clear();
+        ABILITIES.addAll(payload.abilities());
         existenceThreshold = payload.existenceThreshold();
         instabreakActive = payload.instabreakActive();
+        instabreakUnlocked = payload.instabreakUnlocked();
         fistProgressDone = payload.fistProgressDone();
         fistProgressTotal = payload.fistProgressTotal();
         combatFistProgressDone = payload.combatFistDone();
@@ -152,6 +161,10 @@ public final class ClientAdaption {
 
     public static int levelOrZero(String concept) {
         return isEnabled(concept) ? LEVELS.getOrDefault(concept, 0) : 0;
+    }
+
+    public static boolean hasAbility(String id) {
+        return ABILITIES.contains(id);
     }
 
     public static float taskProgress(AdaptionTask task) {
@@ -248,7 +261,7 @@ public final class ClientAdaption {
                 && level(ru.adaptionwheel.category.CombatFistTiers.concept(granted))
                         >= PlayerAdaption.MAX_LEVEL
                 && granted + 1 < ru.adaptionwheel.category.CombatFistTiers.TIER_COUNT) {
-            // The mirror of HardFist.trainingTier: a maxed stage hands the next one the kills, and
+            // The mirror of MartialArts.trainingTier: a maxed stage hands the next one the kills, and
             // the row has to name the stage the server is actually counting towards.
             return granted + 1;
         }

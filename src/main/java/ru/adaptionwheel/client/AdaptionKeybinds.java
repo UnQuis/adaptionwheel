@@ -34,6 +34,12 @@ public final class AdaptionKeybinds {
             InputConstants.KEY_V,
             CATEGORY);
 
+    public static final KeyMapping DIVE_KEY = new KeyMapping(
+            "key.adaptionwheel.dive",
+            InputConstants.Type.KEYBOARD,
+            InputConstants.KEY_R,
+            CATEGORY);
+
     private AdaptionKeybinds() {
     }
 
@@ -41,6 +47,7 @@ public final class AdaptionKeybinds {
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.registerCategory(CATEGORY);
         event.register(OPEN_CACHE_KEY);
+        event.register(DIVE_KEY);
         event.register(OPEN_SCREEN_KEY);
         event.register(TOGGLE_INSTABREAK_KEY);
     }

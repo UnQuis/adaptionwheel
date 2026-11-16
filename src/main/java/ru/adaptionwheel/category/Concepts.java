@@ -7,6 +7,8 @@ import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 
+import java.util.Set;
+
 public final class Concepts {
 
     public static final String SELF_DAMAGE = "Self_Damage";
@@ -39,6 +41,19 @@ public final class Concepts {
 
     public static final String DIMENSION_DESTROY = "Dimension_Destroy";
 
+    /**
+     * Old leveled hazard keys that are one-time {@code Env_*} adaptations on this branch.
+     *
+     * <p>They are not merely unused: the {@code Type_} prefix fallback in {@link #isLevelBased}
+     * would treat them as eight-level ladders again on the next load, and the panel would show a
+     * concept that promises a reduction and never applies one. {@code LegacyConcepts} uses this one
+     * list to strip them from both load paths.
+     */
+    public static final Set<String> RETIRED_TYPES = Set.of(
+            "Type_FALL", "Type_DROWN", "Type_STARVE", "Type_SUFFOCATE", "Type_VOID", "Type_CONTACT");
+
+    /** Ordinary fire and burning. One-time: fire is an environment, not a damage ladder. */
+    public static final String ENV_FIRE = "Env_Fire";
     public static final String ENV_FALL = "Env_FallDamage";
     public static final String ENV_LAVA = "Env_Lava";
     public static final String ENV_DROWN = "Env_Drowning";
@@ -86,8 +101,19 @@ public final class Concepts {
     private Concepts() {
     }
 
+    /**
+     * The concept that adapts a damage category.
+     *
+     * <p>Fire is the one category whose key is not {@code Type_*}: it is a one-time
+     * {@link #ENV_FIRE} environment adaptation, and the old {@code Type_FIRE} level ladder no
+     * longer exists. Keeping the mapping here means every trainer and every immunity check asks
+     * the same question instead of one of them silently using a retired key.
+     */
     public static String type(AdaptionCategory category) {
-        return "Type_" + category.name();
+        if (category == AdaptionCategory.FIRE) {
+            return ENV_FIRE;
+        }
+        return TYPE_PREFIX + category.name();
     }
 
     public static String contact(String mobPath) {
@@ -165,7 +191,14 @@ public final class Concepts {
         return EXISTENCE_PREFIX + mobPath;
     }
 
+    public static boolean isRetired(String concept) {
+        return RETIRED_TYPES.contains(concept);
+    }
+
     public static boolean isLevelBased(String concept) {
+        if (isRetired(concept)) {
+            return false;
+        }
         ru.adaptionwheel.adapt.AdaptationDefinition def = ru.adaptionwheel.adapt.AdaptationRegistry.get(concept);
         if (def != null) {
             return def.leveled();

@@ -6,6 +6,7 @@
   "plugin": "ru.adaptionwheel.mixin.AdaptionMixinPlugin",
   "mixins": [
     "FrictionMixin",
+    "LavaSwimMixin",
     "SlimeBlockMixin",
     "SlimeBounceMixin",
     "WebBlockMixin",
@@ -21,7 +22,9 @@
   "client": [
     "HurtCamMixin",
     "LightmapRenderStateExtractorMixin",
-    "FogTypeMixin"
+    "FogTypeMixin",
+    "AbstractContainerScreenAccess",
+    "CachePanelClickMixin"
   ],
   "injectors": {
     "defaultRequire": 1

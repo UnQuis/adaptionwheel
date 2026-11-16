@@ -1,6 +1,71 @@
 {
   "model": {
-    "type": "minecraft:model",
-    "model": "adaptionwheel:item/sword_of_extermination"
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui",
+          "ground",
+          "fixed",
+          "on_shelf"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "adaptionwheel:item/sword_of_extermination"
+        }
+      },
+      {
+        "when": [
+          "firstperson_lefthand",
+          "firstperson_righthand"
+        ],
+        "model": {
+          "type": "minecraft:special",
+          "base": "adaptionwheel:item/sword_of_extermination",
+          "model": {
+            "type": "adaptionwheel:sword_of_extermination",
+            "first_person": true
+          }
+        }
+      },
+      {
+        "when": [
+          "thirdperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:special",
+          "base": "adaptionwheel:item/sword_of_extermination",
+          "model": {
+            "type": "adaptionwheel:sword_of_extermination",
+            "first_person": false,
+            "left_hand": true
+          }
+        }
+      },
+      {
+        "when": [
+          "thirdperson_righthand"
+        ],
+        "model": {
+          "type": "minecraft:special",
+          "base": "adaptionwheel:item/sword_of_extermination",
+          "model": {
+            "type": "adaptionwheel:sword_of_extermination",
+            "first_person": false,
+            "left_hand": false
+          }
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:special",
+      "base": "adaptionwheel:item/sword_of_extermination",
+      "model": {
+        "type": "adaptionwheel:sword_of_extermination",
+        "first_person": false,
+        "left_hand": false
+      }
+    }
   }
 }

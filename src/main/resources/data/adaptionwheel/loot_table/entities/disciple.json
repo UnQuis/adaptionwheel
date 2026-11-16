@@ -9,12 +9,12 @@
           "name": "minecraft:amethyst_shard",
           "modifier": [
             {
+              "type": "minecraft:set_count",
               "count": {
                 "type": "minecraft:uniform",
                 "min": 1.0,
                 "max": 3.0
-              },
-              "type": "minecraft:set_count"
+              }
             },
             {
               "type": "minecraft:explosion_decay"
@@ -26,17 +26,32 @@
           "name": "minecraft:gold_ingot",
           "modifier": [
             {
+              "type": "minecraft:set_count",
               "count": {
                 "type": "minecraft:uniform",
                 "min": 0.0,
                 "max": 2.0
-              },
-              "type": "minecraft:set_count"
+              }
             },
             {
               "type": "minecraft:explosion_decay"
             }
           ]
+        }
+      ],
+      "conditions": [
+        {
+          "condition": "minecraft:random_chance",
+          "chance": 0.35
+        }
+      ]
+    },
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:amethyst_shard"
         }
       ]
     }

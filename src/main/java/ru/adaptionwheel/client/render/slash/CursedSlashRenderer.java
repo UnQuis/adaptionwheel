@@ -16,8 +16,10 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile, S
     private static final float SPAN = 6.0f;
     private static final float GLOW_HALF = 0.22f;
     private static final float CORE_HALF = 0.13f;
-    private static final int TINT_CYAN = 0xFFB9F5FF;
-    private static final int GLOW_CYAN = 0xFF269BFF;
+    /** 1.21.1 {@code CURSED_BLADE}: near-black ink, so the slash reads partly black. */
+    private static final int TINT_CYAN = 0xFF121822;
+    /** 1.21.1 {@code CURSED_GLOW}: saturated cyan aura. */
+    private static final int GLOW_CYAN = 0xFF4ADEFF;
     private static final float FADE_START = 24f;
     private static final float FADE_END = 36f;
 
@@ -36,6 +38,7 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile, S
         state.motion = entity.getDeltaMovement();
         state.roll = entity.getRoll();
         state.age = entity.tickCount + partialTick;
+        state.seed = entity.getId();
     }
 
     @Override
@@ -50,8 +53,23 @@ public class CursedSlashRenderer extends EntityRenderer<CursedSlashProjectile, S
         float age = state.age;
         float fade = age < FADE_START ? 1f : Mth.clamp(1f - (age - FADE_START) / (FADE_END - FADE_START), 0f, 1f);
 
+        // Motion echoes behind the live blade, matching the 1.21.1 SlashWorldRenderer pass so the
+        // slash reads as a travelling cut rather than a single detached plate.
+        Vec3 dir = motion.lengthSqr() < 1.0e-8 ? new Vec3(0, 0, 1) : motion.normalize();
+        for (int i = 2; i >= 1; i--) {
+            poseStack.pushPose();
+            Vec3 offset = dir.scale(-i * 0.75);
+            poseStack.translate(offset.x, offset.y, offset.z);
+            float echoAge = Math.max(0f, age - i * 1.25f);
+            float echoFade = fade * (i == 1 ? 0.26f : 0.11f);
+            FlyingSlashRenderer.render(poseStack, collector, motion, state.roll + i * 0.045f, echoAge,
+                    SPAN * 0.92f, GLOW_HALF * 0.78f, CORE_HALF * 0.62f, TINT_CYAN, GLOW_CYAN,
+                    echoFade, state.seed + i * 31);
+            poseStack.popPose();
+        }
+
         FlyingSlashRenderer.render(poseStack, collector, motion, state.roll, age,
-                SPAN, GLOW_HALF, CORE_HALF, TINT_CYAN, GLOW_CYAN, fade);
+                SPAN, GLOW_HALF, CORE_HALF, TINT_CYAN, GLOW_CYAN, fade, state.seed);
         super.submit(state, poseStack, collector, camera);
     }
 }

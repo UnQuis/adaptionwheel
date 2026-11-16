@@ -45,10 +45,12 @@ public final class FlightAbility {
      */
     public static boolean apply(Abilities abilities, boolean permitted) {
         if (abilities.mayfly != permitted) {
-            // A transition. Lift off immediately so the mutation feels like flight rather than like
-            // finding a key, and shut down cleanly when it is taken away.
+            // A transition. Grant permission, but do NOT take off: this transition is replayed on
+            // every login, and `flying = true` here is what made a player who logged out on the
+            // ground resume hovering. Clearing the flag also repairs a saved `flying` left over
+            // from the previous session.
             abilities.mayfly = permitted;
-            abilities.flying = permitted;
+            abilities.flying = false;
             return true;
         }
         // Permission already matches, so `flying` belongs to the player from here: vanilla's double-tap

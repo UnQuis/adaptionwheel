@@ -46,6 +46,28 @@ public final class ModRenderPipelines {
             .withCull(false)
             .build();
 
+    /** Wheel metal shader (26.3 port/adaptation of 1.21.1 wheel_metal concept) for Dharma Chakra OBJ. */
+    public static final RenderPipeline WHEEL_METAL = RenderPipeline.builder()
+            .withLocation(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "pipeline/wheel_metal"))
+            .withVertexShader(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "core/wheel_metal"))
+            .withFragmentShader(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "core/wheel_metal"))
+            .withBindGroupLayout(BindGroupLayouts.GLOBALS)
+            .withBindGroupLayout(BindGroupLayouts.PROJECTION)
+            .withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
+            .withBindGroupLayout(BindGroupLayouts.FOG)
+            .withBindGroupLayout(BindGroupLayouts.LIGHTING)
+            .withBindGroupLayout(BindGroupLayouts.SAMPLER0)
+            .withBindGroupLayout(BindGroupLayouts.SAMPLER1)
+            .withBindGroupLayout(BindGroupLayouts.SAMPLER2)
+            .withShaderDefine("ALPHA_CUTOUT", 0.1F)
+            .withShaderDefine("NO_CARDINAL_LIGHTING")
+            .withVertexBinding(0, DefaultVertexFormat.ENTITY)
+            .withPrimitiveTopology(PrimitiveTopology.QUADS)
+            .withColorTargetState(ColorTargetState.DEFAULT)
+            .withDepthStencilState(DepthStencilState.DEFAULT)
+            .withCull(false)
+            .build();
+
     /** Full-screen triangle pipeline for the animated impact-frame pass. */
     public static final RenderPipeline DIMENSION_IMPACT = RenderPipeline.builder()
             .withLocation(Identifier.fromNamespaceAndPath(AdaptionWheel.MODID, "pipeline/dimension_impact"))
@@ -65,5 +87,6 @@ public final class ModRenderPipelines {
     static void register(RegisterRenderPipelinesEvent event) {
         event.registerPipeline(SLASH);
         event.registerPipeline(DIMENSION_IMPACT);
+        event.registerPipeline(WHEEL_METAL);
     }
 }

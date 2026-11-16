@@ -76,6 +76,8 @@ public class PlayerAdaption {
 
     public transient final java.util.Set<String> recentlyShed = new java.util.HashSet<>();
 
+    public transient long lastVoidRescueTick = Long.MIN_VALUE;
+
     public int shedCount;
 
     public transient net.minecraft.world.item.ItemStack equippedStack;
@@ -168,6 +170,23 @@ public class PlayerAdaption {
         while (history.size() > HISTORY_LIMIT) {
             history.remove(history.size() - 1);
         }
+    }
+
+    /**
+     * Wipes the wheel-derived state while keeping what belongs to the player.
+     *
+     * <p>The cache, the per-concept switches and the fist counters are player-bound and are not
+     * stored in {@code WheelData}, so a plain {@link #reset()} on unequip destroyed them with no
+     * copy anywhere. The reward for filling all 36 slots and the switch the player set survive a
+     * swap; only the adaptations travel with the wheel.
+     */
+    public void resetForUnequip() {
+        Extras preserved = new Extras(new ArrayList<>(disabled), new ArrayList<>(cache),
+                new HashMap<>(progress));
+        reset();
+        disabled.addAll(preserved.disabled());
+        cache.addAll(preserved.cache());
+        progress.putAll(preserved.progress());
     }
 
     public void reset() {

@@ -23,6 +23,7 @@ import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.common.NeoForgeMod;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.category.AdaptionCategory;
+import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.Synergies;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.PlayerAdaption;
@@ -69,7 +70,10 @@ public final class SynergyEffects {
         STRENGTH.remove(id);
         CHAINED.remove(id);
         LAST_ON_FIRE.remove(id);
-        player.getAttribute(NeoForgeMod.SWIM_SPEED).removeModifier(WALTZ_SWIM_SPEED);
+        var swimSpeed = player.getAttribute(NeoForgeMod.SWIM_SPEED);
+        if (swimSpeed != null) {
+            swimSpeed.removeModifier(WALTZ_SWIM_SPEED);
+        }
     }
 
     public static void refresh(ServerPlayer player, PlayerAdaption data) {
@@ -90,7 +94,8 @@ public final class SynergyEffects {
             if (requirement[1].equals(Synergies.Requirement.MAXED.name())) {
                 continue;
             }
-            int level = data.levels.getOrDefault(requirement[0], 0);
+            // levelOrZero(): a switched-off requirement must not strengthen (or satisfy) a synergy.
+            int level = data.levelOrZero(requirement[0]);
             if (level <= 0) {
                 continue;
             }
@@ -124,7 +129,13 @@ public final class SynergyEffects {
 
     public static void tickPassive(ServerPlayer player) {
         double swim = 0.0;
-        if (isActive(player, Synergies.DROWNED_WALTZ) && player.isInWater()) {
+        // The air refill is gated on the Drowning adaptation as well as on the synergy. The synergy
+        // is derived from the wheel's contents, so it happily survives the player switching the
+        // adaptation off -- and a synergy that refills your air every tick is drowning immunity by
+        // another name. This is the second of two gates for that one effect; the first is the
+        // damage cancellation in AdaptionEvents.
+        if (isActive(player, Synergies.DROWNED_WALTZ) && player.isInWater()
+                && AdaptionEvents.dataOf(player).active(Concepts.ENV_DROWN)) {
             player.setAirSupply(player.getMaxAirSupply());
             swim = (AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get() + 1.5)
                     * strength(player, Synergies.DROWNED_WALTZ);
