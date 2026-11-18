@@ -192,7 +192,10 @@ public final class SwordOfExterminationRenderer extends BlockEntityWithoutLevelR
                 // -Z is forward in view space and the blade already points -Y, so XP(90) aims it
                 // down the view axis; the extra tilt lifts the tip towards the screen's centre.
                 pose.mulPose(Axis.XP.rotationDegrees(90.0F + FIRST_PERSON_TILT));
-                pose.translate(0.0F, -FIRST_PERSON_SINK, 0.0F);
+                // Translations are added in MODEL space, before the rotation above. The blade now
+                // runs -Y, so +model Y is back towards the camera; negating this would push the
+                // base forward, away from the viewer, instead of sinking it off the bottom edge.
+                pose.translate(0.0F, FIRST_PERSON_SINK, 0.0F);
                 pose.scale(scale, scale, scale);
             }
             case THIRD_PERSON_RIGHT_HAND, THIRD_PERSON_LEFT_HAND -> {
@@ -202,11 +205,15 @@ public final class SwordOfExterminationRenderer extends BlockEntityWithoutLevelR
                 // arm's own axis. No roll: the mesh is thin along X and wide along Z, so that turn
                 // also puts the broad face on the outer side of the arm, edge-on from the front.
                 pose.mulPose(Axis.XP.rotationDegrees(90.0F - ARM_TILT));
-                // ObjMesh centres the mesh, and the centre it picks is the arm's centre line in X
-                // and its front face in Y. These two moves put the blade's flat face in the outer
-                // face of the arm and sink it back into the arm's depth.
-                pose.translate(ARM_RADIUS, 0.0F, left ? -ARM_RADIUS : ARM_RADIUS);
-                pose.translate(0.0F, -ARM_SINK, 0.0F);
+                // These translations land in MODEL space, before XP(90) turns the blade down the
+                // arm, so the axes are the mesh's: model X becomes the arm's outer side, model Z
+                // its front-to-back depth, and model +Y points back up the arm towards the shoulder.
+                // That last one is the whole lift: with the old +Y-pointing mesh -ARM_SINK sank the
+                // base into the forearm, but after the flip the same sign pushed it 0.30 DOWN the
+                // arm and left the sword hanging below the hand. It must be positive now, and the
+                // left/right flip moved to model X for the same reason.
+                pose.translate(left ? -ARM_RADIUS : ARM_RADIUS, 0.0F, ARM_RADIUS);
+                pose.translate(0.0F, ARM_SINK, 0.0F);
                 pose.scale(scale, scale, scale);
             }
             case GROUND, FIXED, NONE -> {
