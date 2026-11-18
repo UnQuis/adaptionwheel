@@ -38,11 +38,13 @@ import java.util.function.Consumer;
  * <p><b>The arm's frame.</b> {@code ItemInHandLayer} places a third-person item with
  * {@code translateToHand(arm)} (origin at the shoulder, arm local +Y pointing down the arm) followed
  * by {@code XP(-90)}, {@code YP(180)} and a small offset. In the frame this renderer receives, that
- * leaves +Y pointing towards the player's front and -Z pointing down the arm, past the hand. A
- * model whose blade runs along +Y therefore only needs {@code XP(-90)} to lie parallel to the
- * arm's axis — and the placement then moves it onto the outer face, so it follows every arm
- * animation for free — and the sink constant buries the base in the forearm instead of leaving it at
- * the fist. {@link #ARM_TILT} stays at zero.
+ * leaves +Y pointing towards the player's front and -Z pointing down the arm, past the hand.
+ *
+ * <p><b>The model does the work.</b> {@code soe.obj} is authored pointing straight down: tip at -Y,
+ * handle end at +Y, flat faces along &plusmn;X, width along Z. {@code XP(90 - ARM_TILT)} lays it on
+ * the arm and puts the broad face on the arm's outer side in one turn, so there is no blade roll and
+ * no hand-tuned Y/Z tilt any more. {@link #ARM_TILT} stays at zero: tilting the blade away from the
+ * arm is what made it read as a held object rather than as part of the arm.
  *
  * <p><b>The item box is 0..1, not -0.5..0.5.</b> The pose is re-centred by {@code translate(0.5, 0.5, 0.5)}
  * first, matching the 1.21.1 contract after {@code ItemRenderer}'s pre-translate.
@@ -67,13 +69,18 @@ public final class SwordOfExterminationSpecialRenderer implements NoDataSpecialM
     private static volatile ObjMesh bladeMesh;
 
     private static final float BLADE_LENGTH = 1.25F;
-    private static final float ARM_SINK = 0.04F;
-    private static final float ARM_TILT = 18.0F;
-    private static final float BLADE_ROLL = 90.0F;
-    private static final float ARM_RADIUS = 0.06F;
-    private static final float FIRST_PERSON_SCALE = 0.82F;
-    private static final float FIRST_PERSON_TILT = 22.0F;
-    private static final float FIRST_PERSON_SINK = 0.10F;
+    /**
+     * How far the base is sunk into the forearm, in MODEL-space Y. Translations are added before
+     * the XP(90) that lays the downward blade along the arm, so +Y points back up the arm towards
+     * the shoulder. With the old +Y-pointing mesh this had to be negative; after the re-export the
+     * same sign pushed the sword 0.30 blocks DOWN the arm and it hung detached below the hand.
+     */
+    private static final float ARM_SINK = 0.30F;
+    private static final float ARM_TILT = 0.0F;
+    private static final float ARM_RADIUS = 0.125F;
+    private static final float FIRST_PERSON_SCALE = 0.85F;
+    private static final float FIRST_PERSON_TILT = 30.0F;
+    private static final float FIRST_PERSON_SINK = 0.18F;
 
     private static final Vector3f LIGHT = new Vector3f(0.30F, 0.70F, 0.65F).normalize();
     private static final Vector3f NORMAL_SCRATCH = new Vector3f();
@@ -102,25 +109,27 @@ public final class SwordOfExterminationSpecialRenderer implements NoDataSpecialM
 
         if (firstPerson) {
             float scale = BLADE_LENGTH * FIRST_PERSON_SCALE / mesh.height();
-            // First-person: extend the blade from the hand forward and slightly toward screen centre.
-            poseStack.rotate(Axis.XP, (float) Math.toRadians(-82.0F + FIRST_PERSON_TILT));
-            poseStack.rotate(Axis.YP, (float) Math.toRadians(leftHand ? 8.0F : -8.0F));
-            poseStack.rotate(Axis.ZP, (float) Math.toRadians(leftHand ? -10.0F : 10.0F));
-            poseStack.translate(leftHand ? -0.04F : 0.04F, -FIRST_PERSON_SINK, -0.05F);
+            // -Z is forward in view space and the blade points -Y, so XP(90) aims it down the view
+            // axis; the tilt lifts the tip towards the screen's centre. Translations are in model
+            // space, so +Y is back towards the camera here.
+            poseStack.rotate(Axis.XP, (float) Math.toRadians(90.0F + FIRST_PERSON_TILT));
+            poseStack.translate(0.0F, FIRST_PERSON_SINK, 0.0F);
             poseStack.scale(scale, scale, scale);
         } else {
             float scale = BLADE_LENGTH / mesh.height();
-            // Third-person: orient the blade so it emerges from the hand/fist and points forward-down
-            // in a natural way instead of lying flat/crooked along the forearm.
-            poseStack.rotate(Axis.XP, (float) Math.toRadians(-72.0F - ARM_TILT));
-            poseStack.rotate(Axis.YP, (float) Math.toRadians(leftHand ? 10.0F : -10.0F));
-            poseStack.rotate(Axis.ZP, (float) Math.toRadians(leftHand ? -18.0F : 18.0F));
-            poseStack.translate(leftHand ? -0.02F : 0.02F, -ARM_SINK, -0.02F);
+            // XP(90) lays the downward blade along the forearm and puts its flat face on the arm's
+            // outer side. The translations are in MODEL space, before that rotation: model X is the
+            // arm's outer side (flipped for the left hand), model Z its front-to-back depth, and
+            // model +Y points back up the arm towards the shoulder.
+            poseStack.rotate(Axis.XP, (float) Math.toRadians(90.0F - ARM_TILT));
+            poseStack.translate(leftHand ? -ARM_RADIUS : ARM_RADIUS, 0.0F, ARM_RADIUS);
+            poseStack.translate(0.0F, ARM_SINK, 0.0F);
             poseStack.scale(scale, scale, scale);
         }
 
-        // ObjMesh is centred on its bounding box; the blade has to hang from its base.
-        poseStack.translate(0.0F, mesh.height() * 0.5F, 0.0F);
+        // ObjMesh is centred on its bounding box. This model is authored tip-down, so the handle
+        // end is at +height/2: subtract that to hang the blade from its base at the origin.
+        poseStack.translate(0.0F, -mesh.height() * 0.5F, 0.0F);
         drawBlade(mesh, poseStack, collector, light, overlay);
         poseStack.popPose();
     }

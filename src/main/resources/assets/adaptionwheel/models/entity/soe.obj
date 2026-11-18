@@ -1,30 +1,37 @@
-# Sword of Extermination, normalised for the item renderer.
-# Source: Blender SOE.obj (22 vertices, 24 triangles). Base of the blade at the origin,
-# blade along +Y, its flat faces looking along +-Z, width along X. 1 unit = 1 source unit;
-# the blade is 9.056 units long, so the renderer scales by length / 9.056.
-o soe
-v 0.689690 8.475714 0.308018
-v 0.016839 7.030646 -0.046526
-v 0.758561 0.021130 0.206769
-v 1.451395 7.067184 0.628167
-v 1.617428 7.360603 0.746090
-v 0.659253 9.055863 0.341323
-v -0.191917 7.314520 -0.104871
-v 0.170965 0.005166 0.013368
-v 0.000000 0.000000 0.000000
-v 1.401727 0.035700 0.659253
-v 1.282338 0.033471 0.536061
-v 0.664986 8.474312 0.360622
-v 0.659253 9.055863 0.341323
-v -0.191917 7.314520 -0.104871
-v -0.007864 7.029245 0.006077
-v 0.643165 0.014576 0.452484
-v 0.119389 0.002234 0.123189
-v 0.000000 0.000000 0.000000
-v 1.401727 0.035700 0.659253
-v 1.617428 7.360603 0.746090
-v 1.426691 7.065781 0.680771
-v 1.230762 0.030540 0.645884
+# Sword of Extermination blade, exported from ~/Blender/SOE.blend (Blender 5.3).
+#
+# The model is authored pointing straight DOWN: the tip is at -Y, the handle end at +Y,
+# the blade's flat faces look along +-X and its width runs along Z. That is Blender's
+# own -Z up axis converted to OBJ's Y-up by the standard NEGATIVE_Z/Y export, so no
+# extra rotation is baked in here -- what points down in Blender points down in game.
+# Base (handle end) is +4.147, tip is -4.909, so the mesh is 9.056 units long; the
+# renderer centres it and moves it by -height/2 to hang the blade from its base.
+# UVs are the author's, occupying u 0.53..0.70, v 0.47..0.72 of soe_blade.png.
+# Normals are deliberately absent: ObjMesh derives a flat one per triangle, which is
+# what faceted steel wants, and keeps this file in the same shape it always was.
+o defaultMaterial.002
+v -0.896434 -4.328592 -0.002627
+v -0.861680 -2.883526 0.757124
+v -0.775506 4.125992 -0.021904
+v -0.862271 -2.920063 -0.828173
+v -0.898395 -3.213482 -1.028591
+v -0.939519 -4.908741 0.010756
+v -0.897647 -3.167398 0.970875
+v -0.850343 4.141956 0.592158
+v -0.910947 4.147121 0.752580
+v -0.911529 4.111420 -0.796437
+v -0.850801 4.113651 -0.635994
+v -0.954549 -4.327190 -0.002640
+v -0.939519 -4.908741 0.010756
+v -0.897647 -3.167398 0.970875
+v -0.919793 -2.882123 0.757113
+v -1.046971 4.132545 -0.021955
+v -0.971673 4.144888 0.592135
+v -0.910947 4.147121 0.752580
+v -0.911529 4.111420 -0.796437
+v -0.898395 -3.213482 -1.028591
+v -0.920388 -2.918659 -0.828183
+v -0.972133 4.116581 -0.636018
 vt 0.538472 0.684368
 vt 0.540648 0.677321
 vt 0.536295 0.657135
@@ -47,6 +54,7 @@ vt 0.622264 0.507693
 vt 0.620192 0.508339
 vt 0.677164 0.700615
 vt 0.678598 0.696331
+s 1
 f 6/1 1/2 2/3
 f 2/3 1/2 3/4
 f 3/4 1/2 4/5
