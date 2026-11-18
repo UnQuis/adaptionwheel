@@ -36,13 +36,16 @@ import java.util.Optional;
  * <p><b>The arm's frame.</b> {@code ItemInHandLayer} places a third-person item with
  * {@code translateToHand(arm)} (origin at the shoulder, arm local +Y pointing down the arm) followed
  * by {@code XP(-90)}, {@code YP(180)} and a small offset. In the frame this renderer receives, that
- * leaves +Y pointing towards the player's front and -Z pointing down the arm, past the hand. A
- * model whose blade runs along +Y therefore only needs {@code XP(-90)} to lie parallel to the
- * arm's axis — and the placement then moves it onto the outer face, so it follows every arm
- * animation for free — and the sink
- * constant buries the base in the forearm instead of leaving it at the fist. {@link #ARM_TILT} is
- * a knob that stays at zero: tilting the blade away from the arm was tried and is precisely what
- * makes it read as a held object instead of as part of the arm.
+ * leaves +Y pointing towards the player's front and -Z pointing down the arm, past the hand.
+ *
+ * <p><b>The model does the work now.</b> The blade in {@code soe.obj} is authored pointing straight
+ * down: its tip is at -Y, its flat faces look along &plusmn;X and its width runs along Z. So
+ * {@code XP(90)} alone lays it along the arm, and it lands with the broad face already parallel to
+ * the arm's outer side — the old quarter-turn roll and the axis swap that needed it are gone. The
+ * sink constant buries the base in the forearm instead of leaving it at the fist, and because every
+ * placement happens inside the arm's frame the blade follows every arm animation for free.
+ * {@link #ARM_TILT} is a knob that stays at zero: tilting the blade away from the arm was tried and
+ * is precisely what makes it read as a held object instead of as part of the arm.
  *
  * <p><b>The item box is 0..1, not -0.5..0.5.</b> {@code ItemRenderer} applies
  * {@code translate(-0.5, -0.5, -0.5)} <em>before</em> it hands the pose to a custom renderer, so
@@ -102,18 +105,13 @@ public final class SwordOfExterminationRenderer extends BlockEntityWithoutLevelR
      */
     private static final float ARM_TILT = 0.0F;
 
-    /**
-     * Roll of the blade about its own long axis, in degrees. The mesh is flat in its XY plane
-     * (width along X, thickness along Z), so {@code XP(-90)} alone turns the broad face towards the
-     * player's front — from the front the blade reads as a plate. The requirement is that the face
-     * is parallel to the arm's <b>outer</b> side, so the sword is seen edge-on from the front and
-     * broad from the side; a quarter turn about the blade's own axis is exactly that.
-     *
-     * <p>Applied <em>after</em> {@code XP(-90)}, so it turns about model +Y — the axis that
-     * {@code XP(-90)} has already laid down the arm — and not about the frame's own Y, which is the
-     * player's front.
+    /*
+     * There is no blade-roll constant any more. The old mesh was flat in its XY plane, so laying it
+     * down the arm put its broad face towards the player's front and a 90-degree turn about its own
+     * axis was needed to put that face on the arm's outer side. The updated model is already flat in
+     * the right plane — thickness along X, width along Z — so XP(90) puts the face in the right
+     * place directly. Adding a roll back would turn the sword plate-on to the camera again.
      */
-    private static final float BLADE_ROLL = 90.0F;
 
     /**
      * Half the width and half the depth of a player's arm, in blocks (the vanilla arm box is
@@ -191,31 +189,31 @@ public final class SwordOfExterminationRenderer extends BlockEntityWithoutLevelR
         switch (context) {
             case FIRST_PERSON_RIGHT_HAND, FIRST_PERSON_LEFT_HAND -> {
                 float scale = BLADE_LENGTH * FIRST_PERSON_SCALE / mesh.height();
-                // -Z is forward in view space, so XP(-90) lays the blade down the view axis; the
-                // tilt lifts the tip towards the centre of the screen.
-                pose.mulPose(Axis.XP.rotationDegrees(-90.0F + FIRST_PERSON_TILT));
+                // -Z is forward in view space and the blade already points -Y, so XP(90) aims it
+                // down the view axis; the extra tilt lifts the tip towards the screen's centre.
+                pose.mulPose(Axis.XP.rotationDegrees(90.0F + FIRST_PERSON_TILT));
                 pose.translate(0.0F, -FIRST_PERSON_SINK, 0.0F);
                 pose.scale(scale, scale, scale);
             }
             case THIRD_PERSON_RIGHT_HAND, THIRD_PERSON_LEFT_HAND -> {
                 float scale = BLADE_LENGTH / mesh.height();
                 boolean left = context == ItemDisplayContext.THIRD_PERSON_LEFT_HAND;
-                // -Z is down the arm in the layer's frame, so XP(-90) puts the blade on the arm's
-                // own axis; BLADE_ROLL then turns its flat face from the player's front onto the
-                // arm's outer face.
-                pose.mulPose(Axis.XP.rotationDegrees(-90.0F + ARM_TILT));
-                pose.mulPose(Axis.YP.rotationDegrees(BLADE_ROLL));
-                // A roll alone leaves the plate centred on the arm's axis, buried in it: ObjMesh
-                // centres the mesh, and the origin it is centred on is the arm's centre line and
-                // front face. After the roll local X -> frame -Y (depth) and local Z -> frame +X
-                // (sideways), so these two moves put the blade's long axis in the outer face.
+                // -Z is down the arm in the layer's frame, so XP(90) puts the downward blade on the
+                // arm's own axis. No roll: the mesh is thin along X and wide along Z, so that turn
+                // also puts the broad face on the outer side of the arm, edge-on from the front.
+                pose.mulPose(Axis.XP.rotationDegrees(90.0F - ARM_TILT));
+                // ObjMesh centres the mesh, and the centre it picks is the arm's centre line in X
+                // and its front face in Y. These two moves put the blade's flat face in the outer
+                // face of the arm and sink it back into the arm's depth.
                 pose.translate(ARM_RADIUS, 0.0F, left ? -ARM_RADIUS : ARM_RADIUS);
                 pose.translate(0.0F, -ARM_SINK, 0.0F);
                 pose.scale(scale, scale, scale);
             }
             case GROUND, FIXED, NONE -> {
                 float scale = LOOSE_LENGTH / mesh.height();
-                pose.translate(0.0F, -0.5F, 0.0F);
+                // The blade hangs tip-down from its base, so lifting the box by half a block stands
+                // it on its point with the handle up — no rotation needed.
+                pose.translate(0.0F, 0.5F, 0.0F);
                 pose.scale(scale, scale, scale);
             }
             default -> {
@@ -224,8 +222,11 @@ public final class SwordOfExterminationRenderer extends BlockEntityWithoutLevelR
             }
         }
 
-        // ObjMesh is centred on its bounding box; the blade has to hang from its base.
-        pose.translate(0.0F, mesh.height() * 0.5F, 0.0F);
+        // ObjMesh is centred on its bounding box. This model is authored tip-down, so the handle
+        // end is at +height/2: subtract that to hang the blade from its base at the origin. The
+        // old model pointed up and added it instead, which is why all three context transforms
+        // above are now the mirror of what they were.
+        pose.translate(0.0F, -mesh.height() * 0.5F, 0.0F);
         drawBlade(mesh, pose, buffers, light, overlay);
         pose.popPose();
     }
