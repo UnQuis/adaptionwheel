@@ -22,7 +22,7 @@
         ],
         "model": {
           "type": "minecraft:special",
-          "base": "adaptionwheel:item/sword_of_extermination",
+          "base": "adaptionwheel:item/sword_blade_special",
           "model": {
             "type": "adaptionwheel:sword_of_extermination",
             "first_person": true
@@ -35,7 +35,7 @@
         ],
         "model": {
           "type": "minecraft:special",
-          "base": "adaptionwheel:item/sword_of_extermination",
+          "base": "adaptionwheel:item/sword_blade_special",
           "model": {
             "type": "adaptionwheel:sword_of_extermination",
             "first_person": false,
@@ -49,7 +49,7 @@
         ],
         "model": {
           "type": "minecraft:special",
-          "base": "adaptionwheel:item/sword_of_extermination",
+          "base": "adaptionwheel:item/sword_blade_special",
           "model": {
             "type": "adaptionwheel:sword_of_extermination",
             "first_person": false,
@@ -60,7 +60,7 @@
     ],
     "fallback": {
       "type": "minecraft:special",
-      "base": "adaptionwheel:item/sword_of_extermination",
+      "base": "adaptionwheel:item/sword_blade_special",
       "model": {
         "type": "adaptionwheel:sword_of_extermination",
         "first_person": false,
