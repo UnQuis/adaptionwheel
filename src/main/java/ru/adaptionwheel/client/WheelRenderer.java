@@ -75,6 +75,10 @@ public class WheelRenderer {
             AdaptionWheel.MODID, "models/entity/orbital_ring.obj");
     private static final ResourceLocation ORBITAL_FABRIC = ResourceLocation.fromNamespaceAndPath(
             AdaptionWheel.MODID, "item/orbital_fabric");
+    /** Neutral 1x1 white: the CPU path multiplies texture x vertex colour, so the dark fabric
+     * albedo would crush the decoded per-shell tints to black. The shader path keeps the fabric. */
+    private static final ResourceLocation ORBITAL_FALLBACK = ResourceLocation.fromNamespaceAndPath(
+            AdaptionWheel.MODID, "item/orbital_fallback");
 
     /**
      * Both meshes are published in one write. Two separate volatile fields could be read between
@@ -584,7 +588,7 @@ public class WheelRenderer {
                                  LivingEntity entity, float wheelCenterY, float spinAngle, float partialTick, String skin) {
         boolean orbital = WheelSkins.ORBITAL.equals(skin);
         VertexConsumer consumer = buffers.getBuffer(RenderType.entityCutoutNoCull(
-                orbital ? ORBITAL_FABRIC : DharmaChakraModel.TEXTURE));
+                orbital ? ORBITAL_FALLBACK : DharmaChakraModel.TEXTURE));
         PoseStack.Pose pose = poseStack.last();
 
         float red = ((tint >> 16) & 0xFF) / 255.0F;
