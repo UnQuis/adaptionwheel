@@ -118,15 +118,32 @@ public class AdaptionEvents {
         if (cached != null && cached[0] == stamp) {
             return cached[1] != 0;
         }
-        boolean wearing = top.theillusivec4.curios.api.CuriosApi.getCuriosInventory(serverPlayer)
-                .map(handler -> handler.isEquipped(ModItems.MAHORAGA_WHEEL.get()))
-                .orElse(false);
+        // Read the slot itself, not Curios' findFirstCurio/isEquipped: those cache for the current
+        // game tick and would keep reporting the old wheel after an equip/unequip/swap in that tick.
+        boolean wearing = ru.adaptionwheel.item.MahoragaWheelItem.equippedWheel(serverPlayer) != null;
         WEARING_CACHE.put(serverPlayer.getUUID(), new long[]{stamp, wearing ? 1 : 0});
         return wearing;
     }
 
     public static boolean isWearingWheel(Player player) {
         return wearingWheel(player);
+    }
+
+    /**
+     * The wheel query for any living wearer. Players keep the tick-cached Curios lookup above; a mob
+     * carries its wheel in a Curios {@code wheel} slot too, and {@link Wearers} owns that answer so
+     * there is exactly one place that knows how a non-player is equipped.
+     */
+    public static boolean isWearingWheel(LivingEntity entity) {
+        if (entity instanceof ServerPlayer serverPlayer) {
+            return wearingWheel(serverPlayer);
+        }
+        return Wearers.isWearer(entity);
+    }
+
+    /** Common internal gate used by the generalized damage/tick paths. */
+    private static boolean wearsWheel(LivingEntity entity) {
+        return isWearingWheel(entity);
     }
 
     public static PlayerAdaption dataOf(ServerPlayer player) {
@@ -145,14 +162,34 @@ public class AdaptionEvents {
         return data(serverPlayer).levelOrZero(concept);
     }
 
+    public static int conceptLevel(LivingEntity entity, String concept) {
+        if (!wearsWheel(entity)) {
+            return 0;
+        }
+        return data(entity).levelOrZero(concept);
+    }
+
     public static Optional<ItemStack> getWheelStack(Player player) {
-        return top.theillusivec4.curios.api.CuriosApi.getCuriosInventory(player)
-                .flatMap(handler -> handler.findFirstCurio(ModItems.MAHORAGA_WHEEL.get()))
-                .map(result -> result.stack());
+        return Optional.ofNullable(ru.adaptionwheel.item.MahoragaWheelItem.equippedWheel(player));
+    }
+
+    public static Optional<ItemStack> getWheelStack(LivingEntity entity) {
+        if (entity instanceof Player player) {
+            return getWheelStack(player);
+        }
+        return Optional.ofNullable(Wearers.wheelStack(entity));
     }
 
     private static PlayerAdaption data(ServerPlayer player) {
         return player.getData(ru.adaptionwheel.data.AttachmentTypes.ADAPTION);
+    }
+
+    /** The attachment lookup shared by players and mob wearers; the mob owns it via Wearers. */
+    public static PlayerAdaption data(LivingEntity entity) {
+        if (entity instanceof ServerPlayer serverPlayer) {
+            return data(serverPlayer);
+        }
+        return Wearers.data(entity);
     }
 
     public static boolean hasAdaptation(Player player, String concept) {
@@ -165,6 +202,13 @@ public class AdaptionEvents {
         // server while the client ran vanilla physics. Every caller passes a one-time concept
         // (Move_*, Mutation_*, Combat_ShieldLock); leveled ones go through conceptLevel above.
         return data(serverPlayer).active(concept);
+    }
+
+    public static boolean hasAdaptation(LivingEntity entity, String concept) {
+        if (!wearsWheel(entity)) {
+            return false;
+        }
+        return data(entity).active(concept);
     }
 
     /**
@@ -383,16 +427,16 @@ public class AdaptionEvents {
                 SoundSource.PLAYERS, 1.0F, 1.0F);
     }
 
-    private static void saveToItem(Player player, PlayerAdaption data) {
-        getWheelStack(player).ifPresent(stack -> saveToStack(stack, data));
+    private static void saveToItem(LivingEntity entity, PlayerAdaption data) {
+        getWheelStack(entity).ifPresent(stack -> saveToStack(stack, data));
     }
 
     public static void saveToStack(ItemStack stack, PlayerAdaption data) {
         stack.set(ModDataComponents.WHEEL_DATA, WheelData.fromPlayer(data));
     }
 
-    private static void loadFromItem(Player player, PlayerAdaption data) {
-        getWheelStack(player).ifPresent(stack -> {
+    private static void loadFromItem(LivingEntity entity, PlayerAdaption data) {
+        getWheelStack(entity).ifPresent(stack -> {
             WheelData wd = stack.get(ModDataComponents.WHEEL_DATA);
             if (wd != null) wd.loadInto(data);
         });
@@ -436,20 +480,21 @@ public class AdaptionEvents {
 
     @SubscribeEvent
     public static void onAttack(LivingIncomingDamageEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide
-                && SynergyEffects.tryAbsorbVoid(player, event.getSource())) {
-
+        if (!(event.getEntity() instanceof LivingEntity entity) || entity.level().isClientSide) return;
+        ServerPlayer player = Wearers.asPlayer(entity);
+        if (player != null && SynergyEffects.tryAbsorbVoid(player, event.getSource())) {
             event.setCanceled(true);
             return;
         }
-        if (event.getEntity().level().isClientSide) return;
-        if (!(event.getEntity() instanceof ServerPlayer player) || !wearingWheel(player)) return;
-        PlayerAdaption data = data(player);
+        if (!wearsWheel(entity)) return;
+        PlayerAdaption data = data(entity);
         DamageSource source = event.getSource();
         AdaptionCategory category = AdaptionCategory.match(source);
 
         if (hasFullImmunity(data, category, source)) {
-            if (category == AdaptionCategory.VOID) {
+            // The void rescue is a teleport plus a sound and an air refill — player-only. A mob
+            // wearer keeps its immunity, it just is not relocated.
+            if (player != null && category == AdaptionCategory.VOID) {
                 rescueFromVoid(player, data);
             }
             event.setCanceled(true); return;
@@ -457,7 +502,7 @@ public class AdaptionEvents {
 
         String adaptedBoss = adaptedExistenceTarget(data, source);
         if (adaptedBoss != null) {
-            reflectAttack(player, source.getDirectEntity() != null ? source.getDirectEntity() : source.getEntity(),
+            reflectAttack(entity, source.getDirectEntity() != null ? source.getDirectEntity() : source.getEntity(),
                     event.getContainer().getNewDamage());
             event.setCanceled(true);
             return;
@@ -489,21 +534,22 @@ public class AdaptionEvents {
     @SubscribeEvent
     public static void onDamage(LivingDamageEvent.Pre event) {
         if (event.getEntity().level().isClientSide) return;
+        if (!(event.getEntity() instanceof LivingEntity living)) return;
         DamageSource source = event.getSource();
         float newDamage = event.getNewDamage();
 
         Entity attackerEntity = source.getEntity();
-        if (attackerEntity instanceof ServerPlayer attacker
-                && event.getEntity() instanceof LivingEntity target
-                && target != attacker
-                && !REFLECTING.contains(target.getUUID())
-                && wearingWheel(attacker)) {
-            applyFistDamage(attacker, target, event);
-            applyOffense(attacker, target, event);
+        if (attackerEntity instanceof LivingEntity attacker
+                && living != attacker
+                && !REFLECTING.contains(living.getUUID())
+                && wearsWheel(attacker)) {
+            applyFistDamage(attacker, living, event);
+            applyOffense(attacker, living, event);
         }
 
-        if (!(event.getEntity() instanceof ServerPlayer player) || !wearingWheel(player)) return;
-        PlayerAdaption data = data(player);
+        if (!wearsWheel(living)) return;
+        PlayerAdaption data = data(living);
+        ServerPlayer player = Wearers.asPlayer(living);
 
         if (adaptedExistenceTarget(data, source) != null) {
             event.setNewDamage(0);
@@ -521,7 +567,7 @@ public class AdaptionEvents {
         AdaptionCategory category = AdaptionCategory.match(source);
 
         if (hasFullImmunity(data, category, source)) {
-            if (category == AdaptionCategory.VOID) {
+            if (player != null && category == AdaptionCategory.VOID) {
                 rescueFromVoid(player, data);
             }
             event.setNewDamage(0); return;
@@ -556,7 +602,7 @@ public class AdaptionEvents {
             mobPath = entityPath(BossHelper.resolveLiving(livingDirect).getType());
             concepts.add(Concepts.contact(mobPath));
         }
-        if (AdaptionConfig.ENABLE_EXISTENCE.get()) {
+        if (AdaptionConfig.ENABLE_EXISTENCE.get() && player != null) {
             LivingEntity bossFromSource = BossHelper.resolveBossFromSource(source);
             if (bossFromSource != null) {
                 String bossPath = entityPath(bossFromSource.getType());
@@ -583,8 +629,10 @@ public class AdaptionEvents {
             newDamage = event.getNewDamage();
         }
 
-        SynergyEffects.onHurtTaken(player, event.getSource().getEntity() instanceof LivingEntity attacker
-                ? attacker : null, newDamage);
+        if (player != null) {
+            SynergyEffects.onHurtTaken(player, event.getSource().getEntity() instanceof LivingEntity attacker
+                    ? attacker : null, newDamage);
+        }
 
         int bestLevel = 0;
         for (String concept : concepts) {
@@ -594,7 +642,7 @@ public class AdaptionEvents {
             double ratio = AdaptionConfig.defenseHealRatio(bestLevel) / 100.0;
             if (ratio > 0) {
 
-                player.heal(newDamage * (float) ratio);
+                living.heal(newDamage * (float) ratio);
             }
         }
         if (bestLevel >= 8) {
@@ -604,23 +652,23 @@ public class AdaptionEvents {
             // immunity to that whole damage category.
             int iFrames = AdaptionConfig.DEFENSE_LV8_IFRAMES_TICKS.get();
             if (iFrames > 0) {
-                player.invulnerableTime = Math.max(player.invulnerableTime, iFrames);
+                living.invulnerableTime = Math.max(living.invulnerableTime, iFrames);
             }
         }
 
         if (AdaptionConfig.ENABLE_DEFENSE.get()) {
             if (!envCategory && !lavaDamage) {
-                startOrAccelerate(player, data, Concepts.type(category),
+                startOrAccelerate(living, data, Concepts.type(category),
                         (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
             }
             if (mobPath != null) {
-                startOrAccelerate(player, data, Concepts.contact(mobPath),
+                startOrAccelerate(living, data, Concepts.contact(mobPath),
                         (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
             }
         }
 
         if (AdaptionConfig.ENABLE_PERCEPTION.get()) {
-            startOrAccelerate(player, data, Concepts.PERCEP_STEADY_GAZE,
+            startOrAccelerate(living, data, Concepts.PERCEP_STEADY_GAZE,
                     (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
         }
 
@@ -629,60 +677,63 @@ public class AdaptionEvents {
                 double fallTime = AdaptionConfig.RAPID_FALL_ANALYSIS.get()
                         ? AdaptionConfig.FALL_ANALYSIS_SECONDS.get()
                         : AdaptionConfig.ENV_ANALYSIS_SECONDS.get();
-                startTask(player, data, Concepts.ENV_FALL, (int) (fallTime * 20));
+                startTask(living, data, Concepts.ENV_FALL, (int) (fallTime * 20));
             }
             // Lava is learned only by immersion, in the tick loop. A fire hit must not grant it:
             // the fire/lava split is what keeps a fire arrow from making lava harmless.
             if (category == AdaptionCategory.CONTACT) {
-                startTask(player, data, Concepts.ENV_THORNS, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+                startTask(living, data, Concepts.ENV_THORNS, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
             if (category == AdaptionCategory.SUFFOCATE) {
-                startTask(player, data, Concepts.ENV_SUFFOCATE, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+                startTask(living, data, Concepts.ENV_SUFFOCATE, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
             if (category == AdaptionCategory.VOID) {
-                startTask(player, data, Concepts.ENV_VOID, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+                startTask(living, data, Concepts.ENV_VOID, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
             if (category == AdaptionCategory.DROWN) {
-                startTask(player, data, Concepts.ENV_DROWN, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+                startTask(living, data, Concepts.ENV_DROWN, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
             if (category == AdaptionCategory.STARVE) {
                 if (AdaptionConfig.INSTANT_STARVE.get()) {
-                    grantOneTime(player, data, Concepts.ENV_STARVE);
-                    player.getFoodData().eat(20, 20f);
-                    playAdaptVoice(player, 0.7f, 1f);
-                    player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adapted_once",
-                                    Concepts.chatName(Concepts.ENV_STARVE))
-                            .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(Concepts.COLOR_ENV))));
+                    grantOneTime(living, data, Concepts.ENV_STARVE);
+                    if (player != null) {
+                        player.getFoodData().eat(20, 20f);
+                        playAdaptVoice(player, 0.7f, 1f);
+                        player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adapted_once",
+                                        Concepts.chatName(Concepts.ENV_STARVE))
+                                .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(Concepts.COLOR_ENV))));
+                    }
                     event.setNewDamage(0);
                     return;
                 }
-                startTask(player, data, Concepts.ENV_STARVE, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+                startTask(living, data, Concepts.ENV_STARVE, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
         }
 
-        if (tryAdversitySurvival(player, data, newDamage)) {
+        if (tryAdversitySurvival(living, data, newDamage)) {
 
             event.setNewDamage(0f);
         }
     }
 
-    private static boolean tryAdversitySurvival(ServerPlayer player, PlayerAdaption data, float damage) {
+    private static boolean tryAdversitySurvival(LivingEntity entity, PlayerAdaption data, float damage) {
+        ServerPlayer player = Wearers.asPlayer(entity);
         if (!AdaptionConfig.ENABLE_ADVERSITY.get()
-                || player.isCreative()
+                || (player != null && player.isCreative())
                 || data.adversityCooldownTimer > 0 || data.adversityActive
-                || damage < player.getHealth()) {
+                || damage < entity.getHealth()) {
             return false;
         }
 
-        player.setHealth(Math.max(1f, player.getHealth() - 30f));
+        entity.setHealth(Math.max(1f, entity.getHealth() - 30f));
         data.adversityActive = true;
         data.adversityTimer = ru.adaptionwheel.AdaptionTimings.ADVERSITY_TICKS;
 
-        player.invulnerableTime = Math.max(player.invulnerableTime, 60);
+        entity.invulnerableTime = Math.max(entity.invulnerableTime, 60);
 
-        if (player.level() instanceof ServerLevel serverLevel) {
-            var random = player.getRandom();
-            double ex = player.getX(), ey = player.getEyeY(), ez = player.getZ();
+        if (entity.level() instanceof ServerLevel serverLevel) {
+            var random = entity.getRandom();
+            double ex = entity.getX(), ey = entity.getEyeY(), ez = entity.getZ();
             for (int i = 0; i < 16; i++) {
                 double ang = i / 16.0 * Math.PI * 2;
                 double dx = Math.cos(ang), dz = Math.sin(ang);
@@ -692,24 +743,23 @@ public class AdaptionEvents {
             }
         }
 
-        sync(player, data, true);
-        player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adversity")
-                .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD));
+        if (player != null) {
+            sync(player, data, true);
+            player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adversity")
+                    .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD));
+        }
         return true;
     }
 
     public static void handleDirectHealthReduction(LivingEntity target, float newHealth) {
         float current = target.getHealth();
-        if (!(target instanceof ServerPlayer player) || player.level().isClientSide || newHealth >= current) {
-            target.setHealth(newHealth);
-            return;
-        }
-        if (!wearingWheel(player)) {
+        if (target.level().isClientSide || newHealth >= current || !wearsWheel(target)) {
             target.setHealth(newHealth);
             return;
         }
 
-        PlayerAdaption data = data(player);
+        ServerPlayer player = Wearers.asPlayer(target);
+        PlayerAdaption data = data(target);
         boolean existenceEnabled = AdaptionConfig.ENABLE_EXISTENCE.get();
 
         if (existenceEnabled && data.isEnabled(Concepts.existence(DraconicCompat.GUARDIAN_ID))
@@ -736,8 +786,8 @@ public class AdaptionEvents {
             noteBossEncounter(data, DraconicCompat.GUARDIAN_ID);
         }
         int defenseTicks = (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20);
-        startOrAccelerate(player, data, Concepts.type(AdaptionCategory.EXPLOSION), defenseTicks, true);
-        startOrAccelerate(player, data, Concepts.contact(DraconicCompat.GUARDIAN_ID), defenseTicks, true);
+        startOrAccelerate(target, data, Concepts.type(AdaptionCategory.EXPLOSION), defenseTicks, true);
+        startOrAccelerate(target, data, Concepts.contact(DraconicCompat.GUARDIAN_ID), defenseTicks, true);
 
         if (data.adversityActive) {
             target.setHealth(Math.max(current - raw, 0f));
@@ -762,24 +812,24 @@ public class AdaptionEvents {
         if (bestLevel >= 5) {
             double healRatio = AdaptionConfig.defenseHealRatio(bestLevel) / 100.0;
             if (healRatio > 0) {
-                player.heal(raw * (float) healRatio);
+                target.heal(raw * (float) healRatio);
             }
         }
 
         float resulting = current - applied;
-        if (resulting <= 0f && tryAdversitySurvival(player, data, applied)) {
+        if (resulting <= 0f && tryAdversitySurvival(target, data, applied)) {
             return;
         }
         target.setHealth(Math.max(resulting, 0f));
     }
 
-    private static void reflectAttack(ServerPlayer player, Entity direct, float damage) {
+    private static void reflectAttack(LivingEntity wearer, Entity direct, float damage) {
 
         Entity reflectTarget = direct;
         if (direct instanceof Projectile projectile && projectile.getOwner() != null) {
             reflectTarget = projectile.getOwner();
         }
-        if (!(reflectTarget instanceof LivingEntity living) || reflectTarget == player) {
+        if (!(reflectTarget instanceof LivingEntity living) || reflectTarget == wearer) {
             return;
         }
         float multiplier = (float) (double) AdaptionConfig.EXISTENCE_REFLECT_MULTIPLIER.get();
@@ -787,20 +837,27 @@ public class AdaptionEvents {
             return;
         }
 
+        ServerPlayer player = Wearers.asPlayer(wearer);
+        // A player reflection keeps the exact playerAttack source it always had. A mob wearer has
+        // no such factory, so the shared Wearers lookup supplies one from its own context.
+        DamageSource reflected = player != null
+                ? player.damageSources().playerAttack(player)
+                : Wearers.damageSource(wearer);
+
         REFLECTING.add(living.getUUID());
         try {
-            living.hurt(player.damageSources().playerAttack(player), damage * multiplier);
+            living.hurt(reflected, damage * multiplier);
         } finally {
             REFLECTING.remove(living.getUUID());
         }
 
-        living.knockback(1.2, player.getX(), player.getZ());
+        living.knockback(1.2, wearer.getX(), wearer.getZ());
         // 1 tick, not 10. The original grants max(immuneTime, 2) here -- two Terraria ticks, about
         // 33ms. Reflection is supposed to deny the boss its attack, not to give the player a shield;
         // the half-second this used to grant was standing in for a cooldown it never had.
         int reflectIFrames = AdaptionConfig.EXISTENCE_REFLECT_IFRAMES_TICKS.get();
         if (reflectIFrames > 0) {
-            player.invulnerableTime = Math.max(player.invulnerableTime, reflectIFrames);
+            wearer.invulnerableTime = Math.max(wearer.invulnerableTime, reflectIFrames);
         }
     }
 
@@ -821,7 +878,7 @@ public class AdaptionEvents {
     private static final Map<UUID, Long> DIMENSION_SLASH_LAST = new HashMap<>();
     private static final int DIMENSION_SLASH_COOLDOWN_TICKS = 20;
 
-    private static boolean claimDimensionSlash(ServerPlayer attacker) {
+    private static boolean claimDimensionSlash(LivingEntity attacker) {
         long now = attacker.level().getGameTime();
         Long last = DIMENSION_SLASH_LAST.get(attacker.getUUID());
         if (last != null && now - last < DIMENSION_SLASH_COOLDOWN_TICKS) {
@@ -831,8 +888,8 @@ public class AdaptionEvents {
         return true;
     }
 
-    private static void applyFistDamage(ServerPlayer attacker, LivingEntity target, LivingDamageEvent.Pre event) {
-        if (!wearingWheel(attacker)) {
+    private static void applyFistDamage(LivingEntity attacker, LivingEntity target, LivingDamageEvent.Pre event) {
+        if (!wearsWheel(attacker)) {
             return;
         }
         float bonus = MartialArts.bonus(data(attacker));
@@ -841,7 +898,8 @@ public class AdaptionEvents {
         }
     }
 
-    private static void applyOffense(ServerPlayer attacker, LivingEntity target, LivingDamageEvent.Pre event) {
+    private static void applyOffense(LivingEntity attacker, LivingEntity target, LivingDamageEvent.Pre event) {
+        ServerPlayer player = Wearers.asPlayer(attacker);
         PlayerAdaption data = data(attacker);
 
         String path = pathOf(target);
@@ -861,19 +919,27 @@ public class AdaptionEvents {
             base *= (float) (1.0 + data.getAdaptCount() * AdaptionConfig.BONUS_DAMAGE_PCT.get() / 100.0);
             event.setNewDamage(base);
 
-            SynergyEffects.onHit(attacker, target, event.getSource());
+            if (player != null) {
+                SynergyEffects.onHit(player, target, event.getSource());
+            }
 
             if (level >= 8 && attacker.getRandom().nextFloat() * 100f < AdaptionConfig.DIMENSION_SLASH_CHANCE.get()
                     && claimDimensionSlash(attacker)) {
                 float slashDamage = Math.max(1f, (float) (target.getMaxHealth()
                         * AdaptionConfig.DIMENSION_SLASH_HP_PERCENT.get() / 100.0));
-                attacker.server.execute(() -> {
+                DamageSource slashSource = player != null
+                        ? player.damageSources().playerAttack(player)
+                        : Wearers.damageSource(attacker);
+                ServerLevel attackerLevel = (ServerLevel) attacker.level();
+                attackerLevel.getServer().execute(() -> {
                     if (target.isAlive() && !target.isRemoved()) {
-                        target.hurt(attacker.damageSources().playerAttack(attacker), slashDamage);
+                        target.hurt(slashSource, slashDamage);
                     }
                 });
-                attacker.sendSystemMessage(Component.translatable("adaptionwheel.msg.dimension_slash")
-                        .withStyle(ChatFormatting.DARK_AQUA, ChatFormatting.BOLD));
+                if (player != null) {
+                    player.sendSystemMessage(Component.translatable("adaptionwheel.msg.dimension_slash")
+                            .withStyle(ChatFormatting.DARK_AQUA, ChatFormatting.BOLD));
+                }
                 attacker.level().playSound(null, target.blockPosition(), ModSounds.DIMENSION_CUT.get(),
                         SoundSource.PLAYERS, 1f, 1f);
             }
@@ -1102,8 +1168,17 @@ public class AdaptionEvents {
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide) return;
-        PlayerAdaption data = data(player);
-        boolean wearing = wearingWheel(player);
+        tickWearer(player, data(player), wearingWheel(player));
+    }
+
+    /**
+     * One tick of a wheel wearer, player or mob. Everything that reads or mutates {@link PlayerAdaption}
+     * is shared; everything that needs a {@link ServerPlayer} (food, abilities, messages, voice,
+     * cinematics, the HUD sync, stat modifiers, rituals and advancements) is gated on the asPlayer
+     * lookup so a mob can never reach it.
+     */
+    public static void tickWearer(LivingEntity entity, PlayerAdaption data, boolean wearing) {
+        ServerPlayer player = Wearers.asPlayer(entity);
 
         if (wearing && !data.wasWearing) {
             // Deliberately only a merge. This branch used to clear the running analyses, the boss
@@ -1111,8 +1186,8 @@ public class AdaptionEvents {
             // wheel — but it also runs on the first tick after a login whenever Curios reported the
             // slot a moment late, so joining a world silently cancelled every analysis that was
             // running. Unequipping already owns that reset; an equip has nothing to clear.
-            loadFromItem(player, data);
-            applyStats(player, data);
+            loadFromItem(entity, data);
+            if (player != null) applyStats(player, data);
         }
         if (!wearing && data.wasWearing) {
 
@@ -1132,38 +1207,50 @@ public class AdaptionEvents {
             // are player-bound and are not stored in WheelData, so the full reset here used to
             // destroy them with no copy on the item. Keep them across the unequip.
             data.resetForUnequip();
-            revokeWearableState(player);
-            MartialArts.forget(player.getUUID());
-            PENDING_RESPAWN_HEALTH.remove(player.getUUID());
-            PENDING_RESPAWN_ARMED.remove(player.getUUID());
-            applyStats(player, data);
-            sync(player, data, false);
+            if (player != null) {
+                revokeWearableState(player);
+                MartialArts.forget(player.getUUID());
+                PENDING_RESPAWN_HEALTH.remove(player.getUUID());
+                PENDING_RESPAWN_ARMED.remove(player.getUUID());
+                applyStats(player, data);
+                sync(player, data, false);
+            } else {
+                clearWearerCaches(entity.getUUID());
+            }
         }
 
-        if (wearing && !player.isDeadOrDying()) {
-            ItemStack equipped = getWheelStack(player).orElse(null);
+        if (wearing && !entity.isDeadOrDying()) {
+            ItemStack equipped = getWheelStack(entity).orElse(null);
             if (equipped != null && data.equippedStack != null && equipped != data.equippedStack) {
                 saveToStack(data.equippedStack, data);
                 // A swap is still a wheel transition, not a player wipe: the cache and the switch
-                // states belong to the player and survive it.
+                // states belong to the wearer and survive it.
                 data.resetForUnequip();
                 // The new wheel may grant neither flight nor the synergies the old one did, so the
                 // state that lives outside the attachment has to be taken back here too. Whatever
                 // the new wheel does grant is re-applied by the tick loop on its next pass.
-                revokeWearableState(player);
-                loadFromItem(player, data);
-                applyStats(player, data);
-                sync(player, data, true);
+                if (player != null) {
+                    revokeWearableState(player);
+                }
+                loadFromItem(entity, data);
+                if (player != null) {
+                    applyStats(player, data);
+                    sync(player, data, true);
+                }
             }
             data.equippedStack = equipped;
         }
         data.wasWearing = wearing;
         if (!wearing) return;
 
-        if (player.isDeadOrDying()) {
+        if (entity.isDeadOrDying()) {
             if (data.adversityActive) {
                 data.adversityActive = false;
                 data.adversityTimer = 0;
+            }
+            if (player == null) {
+                // A mob's wheel is about to be lost with it; do not lose its analyses too.
+                saveToItem(entity, data);
             }
             return;
         }
@@ -1175,22 +1262,24 @@ public class AdaptionEvents {
             if (data.adversityTimer <= 0) {
                 data.adversityActive = false;
                 data.adversityCooldownTimer = (int) (AdaptionConfig.ADVERSITY_COOLDOWN_SECONDS.get() * 20);
-                player.heal(player.getMaxHealth());
+                entity.heal(entity.getMaxHealth());
 
-                completeAllTasks(player, data);
-                grantOneTime(player, data, Concepts.ADVERSITY);
+                completeAllTasks(entity, data);
+                grantOneTime(entity, data, Concepts.ADVERSITY);
 
-                applyStats(player, data);
-                playAdaptVoice(player, 1f, 1f);
-                player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adversity_done")
-                        .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+                if (player != null) {
+                    applyStats(player, data);
+                    playAdaptVoice(player, 1f, 1f);
+                    player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adversity_done")
+                            .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+                }
                 finished = true;
             }
             data.wheelRotation += 0.2f;
-            applyEnvEffects(player, data);
-            if (!player.isDeadOrDying()) {
-
-                if (finished || player.tickCount % 20 == 0) sync(player, data, true);
+            applyEnvEffects(entity, data);
+            if (player != null && !entity.isDeadOrDying()
+                    && (finished || entity.tickCount % 20 == 0)) {
+                sync(player, data, true);
             }
             return;
         }
@@ -1201,7 +1290,7 @@ public class AdaptionEvents {
             task.timer--;
             if (task.timer <= 0) {
                 it.remove();
-                completeTask(player, data, task.concept);
+                completeTask(entity, data, task.concept);
             }
         }
 
@@ -1211,7 +1300,8 @@ public class AdaptionEvents {
         // and a completed task vanishes -- and extrapolation cannot invent a jump it was never told
         // about. So the running tasks are pushed on a short cadence while any are running, which is
         // what makes taking damage move the bar straight away instead of a beat later.
-        if (!data.tasks.isEmpty() && player.tickCount % TaskProgressPayload.PUSH_EVERY_TICKS == 0) {
+        if (player != null && !data.tasks.isEmpty()
+                && entity.tickCount % TaskProgressPayload.PUSH_EVERY_TICKS == 0) {
             // The same filtered view the full sync sends, not the raw map. Sending the raw counters
             // here is what made the existence row blink: this arrived at 4 Hz with every boss in it
             // while the 1 Hz sync arrived with only the nearby ones.
@@ -1219,52 +1309,52 @@ public class AdaptionEvents {
         }
 
         if (AdaptionConfig.ENABLE_ENVIRONMENT.get()) {
-            if (player.isInLava()) {
-                startTask(player, data, Concepts.ENV_LAVA, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+            if (entity.isInLava()) {
+                startTask(entity, data, Concepts.ENV_LAVA, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
-            if (player.isInWater()) {
-                startTask(player, data, Concepts.ENV_LIQUID, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+            if (entity.isInWater()) {
+                startTask(entity, data, Concepts.ENV_LIQUID, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
-            if (player.getAirSupply() <= 0) {
-                startTask(player, data, Concepts.ENV_DROWN, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+            if (entity.getAirSupply() <= 0) {
+                startTask(entity, data, Concepts.ENV_DROWN, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
             }
 
-            if (player.tickCount % 4 == 0) {
-                if (isInDarkness(player)) {
-                    startTask(player, data, Concepts.ENV_DARKNESS, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+            if (entity.tickCount % 4 == 0) {
+                if (isInDarkness(entity)) {
+                    startTask(entity, data, Concepts.ENV_DARKNESS, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
                 }
-                if (isOnIce(player)) {
-                    startTask(player, data, Concepts.ENV_ICE, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+                if (isOnIce(entity)) {
+                    startTask(entity, data, Concepts.ENV_ICE, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
                 }
-                if (isStandingOnSlime(player)) {
-                    startTask(player, data, Concepts.ENV_SLIME, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+                if (isStandingOnSlime(entity)) {
+                    startTask(entity, data, Concepts.ENV_SLIME, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
                 }
-                if (isInCobweb(player)) {
-                    startTask(player, data, Concepts.ENV_COBWEB, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
+                if (isInCobweb(entity)) {
+                    startTask(entity, data, Concepts.ENV_COBWEB, (int) (AdaptionConfig.ENV_ANALYSIS_SECONDS.get() * 20));
                 }
             }
         }
 
-        applyEnvEffects(player, data);
+        applyEnvEffects(entity, data);
 
         if (!data.active(Concepts.MUTATION_THERMAL)
                 && data.active(Concepts.type(AdaptionCategory.FIRE))
                 && data.active(Concepts.ENV_LAVA)) {
-            grantComboMutation(player, data, Concepts.MUTATION_THERMAL);
+            grantComboMutation(entity, data, Concepts.MUTATION_THERMAL);
         } else if (data.active(Concepts.MUTATION_THERMAL)) {
-            tickThermalRegeneration(player, data);
+            tickThermalRegeneration(entity, data);
         }
         if (AdaptionConfig.ENABLE_MUTATION_AQUATIC.get()) {
             if (!data.active(Concepts.MUTATION_AQUATIC)
                     && data.active(Concepts.ENV_LIQUID) && data.active(Concepts.ENV_DROWN)) {
-                grantComboMutation(player, data, Concepts.MUTATION_AQUATIC);
+                grantComboMutation(entity, data, Concepts.MUTATION_AQUATIC);
             }
         }
         if (AdaptionConfig.ENABLE_MUTATION_IMPACT.get()) {
             if (!data.active(Concepts.MUTATION_IMPACT)
                     && data.active(Concepts.ENV_FALL) && data.active(Concepts.ENV_KNOCKBACK)) {
-                grantComboMutation(player, data, Concepts.MUTATION_IMPACT);
-            } else if (data.active(Concepts.MUTATION_IMPACT)) {
+                grantComboMutation(entity, data, Concepts.MUTATION_IMPACT);
+            } else if (data.active(Concepts.MUTATION_IMPACT) && player != null) {
                 tickImpactStomp(player, data);
             }
         }
@@ -1274,62 +1364,62 @@ public class AdaptionEvents {
                 && data.active(Concepts.ENV_LIQUID)
                 && data.active(Concepts.ENV_DROWN)
                 && data.active(Concepts.ENV_LAVA)) {
-            grantComboMutation(player, data, Concepts.MUTATION_SEA_EYE);
+            grantComboMutation(entity, data, Concepts.MUTATION_SEA_EYE);
         }
-        if (AdaptionConfig.ENABLE_MUTATION_FLIGHT.get()) {
+        if (AdaptionConfig.ENABLE_MUTATION_FLIGHT.get() && player != null) {
             tickFlight(player, data);
         }
 
-        if (AdaptionConfig.ENABLE_INVENTORY_ADAPTATION.get()
+        if (AdaptionConfig.ENABLE_INVENTORY_ADAPTATION.get() && player != null
                 && !data.active(Concepts.ENV_INVENTORY)
                 && CacheService.inventoryIsFull(player)) {
-            startTask(player, data, Concepts.ENV_INVENTORY,
+            startTask(entity, data, Concepts.ENV_INVENTORY,
                     (int) (AdaptionConfig.INVENTORY_ADAPTATION_SECONDS.get() * 20));
         }
 
         if (AdaptionConfig.DIMENSION_DESTROY_ENABLED.get()
                 && !data.active(Concepts.DIMENSION_DESTROY)
                 && reachesDimensionDestroy(data.getAdaptCount(),
-                        adaptableConcepts(player.serverLevel()).total(),
+                        adaptableConcepts((ServerLevel) entity.level()).total(),
                         AdaptionConfig.DIMENSION_DESTROY_PERCENT.get())) {
-            grantComboMutation(player, data, Concepts.DIMENSION_DESTROY);
+            grantComboMutation(entity, data, Concepts.DIMENSION_DESTROY);
         }
 
-        if (AdaptionConfig.ENABLE_WHEEL_PARTICLES.get()) {
+        if (AdaptionConfig.ENABLE_WHEEL_PARTICLES.get() && player != null) {
             spawnWheelParticles(player, data);
         }
 
-        if (AdaptionConfig.ENABLE_DEBUFF.get() && !player.getActiveEffects().isEmpty()) {
-            for (MobEffectInstance effect : new ArrayList<>(player.getActiveEffects())) {
+        if (AdaptionConfig.ENABLE_DEBUFF.get() && !entity.getActiveEffects().isEmpty()) {
+            for (MobEffectInstance effect : new ArrayList<>(entity.getActiveEffects())) {
                 MobEffect mobEffect = effect.getEffect().value();
                 if (mobEffect.isBeneficial()) continue;
                 String path = effectKey(effect);
                 String concept = Concepts.debuff(path);
                 if (data.active(concept)) {
-                    player.removeEffect(effect.getEffect());
+                    entity.removeEffect(effect.getEffect());
                 } else {
-                    startTask(player, data, concept, (int) (AdaptionConfig.DEBUFF_ANALYSIS_SECONDS.get() * 20));
+                    startTask(entity, data, concept, (int) (AdaptionConfig.DEBUFF_ANALYSIS_SECONDS.get() * 20));
                 }
             }
         }
 
         double hpPct = AdaptionConfig.REGEN_HP_THRESHOLD.get() / 100.0;
         int injureLevel = data.levelOrZero(Concepts.SELF_DAMAGE);
-        if (player.getHealth() <= player.getMaxHealth() * hpPct) {
+        if (entity.getHealth() <= entity.getMaxHealth() * hpPct) {
             if (injureLevel < PlayerAdaption.MAX_LEVEL) {
-                startTask(player, data, Concepts.SELF_DAMAGE, (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20));
+                startTask(entity, data, Concepts.SELF_DAMAGE, (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20));
             }
         }
-        if (injureLevel > 0 && player.getHealth() < player.getMaxHealth()) {
+        if (injureLevel > 0 && entity.getHealth() < entity.getMaxHealth()) {
             data.healingTimer++;
 
             if (data.healingTimer >= 20) {
                 data.healingTimer = 0;
-                player.heal(Math.max(1f, (float) AdaptionConfig.regenSpeed(injureLevel)));
+                entity.heal(Math.max(1f, (float) AdaptionConfig.regenSpeed(injureLevel)));
             }
         }
 
-        if (AdaptionConfig.ENABLE_EXISTENCE.get()) {
+        if (AdaptionConfig.ENABLE_EXISTENCE.get() && player != null) {
             accumulateBossCombat(player, data);
         }
 
@@ -1341,27 +1431,48 @@ public class AdaptionEvents {
             data.wheelRotation += 0.2f;
         }
 
-        if (player.tickCount % 20 == 0) {
-            applyStats(player, data);
-        }
-        restorePendingRespawnHealth(player);
-
-        SynergyEffects.refresh(player, data);
-        SynergyEffects.tickPassive(player);
-
-        if (player.tickCount % 20 == 0) {
-
-            RitualAuras.Auras auras = RitualAuras.scan(player);
-            if (auras.any()) {
-                RitualAuras.apply(player, data, auras);
+        if (player != null) {
+            if (entity.tickCount % 20 == 0) {
+                applyStats(player, data);
             }
-            Resonance.tick(player, auras);
+            restorePendingRespawnHealth(player);
 
-            ru.adaptionwheel.advancement.AdaptationTrigger.evaluate(player, data);
+            SynergyEffects.refresh(player, data);
+            SynergyEffects.tickPassive(player);
 
-            saveToItem(player, data);
-            sync(player, data, wearing);
+            if (entity.tickCount % 20 == 0) {
+
+                RitualAuras.Auras auras = RitualAuras.scan(player);
+                if (auras.any()) {
+                    RitualAuras.apply(player, data, auras);
+                }
+                Resonance.tick(player, auras);
+
+                ru.adaptionwheel.advancement.AdaptationTrigger.evaluate(player, data);
+
+                sync(player, data, wearing);
+            }
         }
+
+        // The 1 Hz copy is the recovery path for item data travelling with a wheel that a mob can
+        // drop at any moment; the swap/unequip branches write immediately as well.
+        if (entity.tickCount % 20 == 0) {
+            saveToItem(entity, data);
+        }
+    }
+
+    /** Drop every per-entity cache this class keeps, so a despawned mob cannot leak them. */
+    public static void clearWearerCaches(java.util.UUID id) {
+        PENDING_RESPAWN_HEALTH.remove(id);
+        PENDING_RESPAWN_ARMED.remove(id);
+        WEARING_CACHE.remove(id);
+        PROXIMITY_HEAT_CACHE.remove(id);
+        NEARBY_BOSS_CACHE.remove(id);
+        LAST_VOICE_TICK.remove(id);
+        REFLECTING.remove(id);
+        DIMENSION_SLASH_LAST.remove(id);
+        MartialArts.forget(id);
+        ru.adaptionwheel.server.DiveAbility.forget(id);
     }
 
     private static void restorePendingRespawnHealth(ServerPlayer player) {
@@ -1603,26 +1714,29 @@ public class AdaptionEvents {
         startExistenceCinematic(player, bossPath);
     }
 
-    private static boolean isInDarkness(Player player) {
-        return player.level().getMaxLocalRawBrightness(player.blockPosition()) <= 4;
+    private static boolean isInDarkness(LivingEntity entity) {
+        return entity.level().getMaxLocalRawBrightness(entity.blockPosition()) <= 4;
     }
 
     private static final int THERMAL_REGEN_INTERVAL_TICKS = 40;
 
     private static final Map<UUID, Float> PROXIMITY_HEAT_CACHE = new HashMap<>();
 
-    public static void grantComboMutation(ServerPlayer player, PlayerAdaption data, String concept) {
+    public static void grantComboMutation(LivingEntity entity, PlayerAdaption data, String concept) {
         if (data.isAdapted(concept)) {
             return;
         }
-        grantOneTime(player, data, concept);
-        player.sendSystemMessage(Component.translatable("adaptionwheel.msg.mutation_unlocked",
-                        Concepts.chatName(concept))
-                .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(Concepts.color(concept)))
-                        .withBold(true)));
-        playMaxVoice(player);
-        spawnMutationBurst(player, concept);
-        sync(player, data, true);
+        grantOneTime(entity, data, concept);
+        ServerPlayer player = Wearers.asPlayer(entity);
+        if (player != null) {
+            player.sendSystemMessage(Component.translatable("adaptionwheel.msg.mutation_unlocked",
+                            Concepts.chatName(concept))
+                    .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(Concepts.color(concept)))
+                            .withBold(true)));
+            playMaxVoice(player);
+            spawnMutationBurst(player, concept);
+            sync(player, data, true);
+        }
     }
 
     private static void tickFlight(ServerPlayer player, PlayerAdaption data) {
@@ -1672,37 +1786,38 @@ public class AdaptionEvents {
         }
     }
 
-    private static void tickThermalRegeneration(ServerPlayer player, PlayerAdaption data) {
+    private static void tickThermalRegeneration(LivingEntity entity, PlayerAdaption data) {
         if (!AdaptionConfig.THERMAL_REGEN_ENABLED.get()) return;
-        float factor = thermalFactor(player);
+        float factor = thermalFactor(entity);
         if (factor > 0f) {
-            spawnThermalParticles(player, factor);
+            ServerPlayer player = Wearers.asPlayer(entity);
+            if (player != null) spawnThermalParticles(player, factor);
         }
-        if (factor <= 0f || player.getHealth() >= player.getMaxHealth()) {
+        if (factor <= 0f || entity.getHealth() >= entity.getMaxHealth()) {
             data.thermalHealingTimer = 0;
             return;
         }
         if (++data.thermalHealingTimer < THERMAL_REGEN_INTERVAL_TICKS) return;
         data.thermalHealingTimer = 0;
-        player.heal((float) (AdaptionConfig.THERMAL_REGEN_HP_PER_SECOND.get()
+        entity.heal((float) (AdaptionConfig.THERMAL_REGEN_HP_PER_SECOND.get()
                 * factor * (THERMAL_REGEN_INTERVAL_TICKS / 20.0)));
     }
 
-    private static float thermalFactor(Player player) {
-        if (player.isInLava()) return 1.0f;
+    private static float thermalFactor(LivingEntity entity) {
+        if (entity.isInLava()) return 1.0f;
 
         float factor = 0f;
-        if (player.isOnFire()) {
+        if (entity.isOnFire()) {
             factor = 0.7f;
         } else {
-            boolean recompute = player.tickCount % 15 == 0 || !PROXIMITY_HEAT_CACHE.containsKey(player.getUUID());
+            boolean recompute = entity.tickCount % 15 == 0 || !PROXIMITY_HEAT_CACHE.containsKey(entity.getUUID());
             if (recompute) {
-                PROXIMITY_HEAT_CACHE.put(player.getUUID(), scanProximityHeat(player));
+                PROXIMITY_HEAT_CACHE.put(entity.getUUID(), scanProximityHeat(entity));
             }
 
-            float proximity = PROXIMITY_HEAT_CACHE.getOrDefault(player.getUUID(), 0f);
+            float proximity = PROXIMITY_HEAT_CACHE.getOrDefault(entity.getUUID(), 0f);
             factor = proximity > 0f ? 0.35f : 0f;
-            if (factor <= 0f && player.level().getBiome(player.blockPosition()).value().getBaseTemperature() >= 1.5f) {
+            if (factor <= 0f && entity.level().getBiome(entity.blockPosition()).value().getBaseTemperature() >= 1.5f) {
                 factor = 0.15f;
             }
         }
@@ -1768,10 +1883,10 @@ public class AdaptionEvents {
                 SoundSource.PLAYERS, 0.7f, 0.6f);
     }
 
-    private static float scanProximityHeat(Player player) {
-        BlockPos base = player.blockPosition();
+    private static float scanProximityHeat(LivingEntity entity) {
+        BlockPos base = entity.blockPosition();
         for (BlockPos pos : BlockPos.betweenClosed(base.offset(-2, -1, -2), base.offset(2, 2, 2))) {
-            BlockState state = player.level().getBlockState(pos);
+            BlockState state = entity.level().getBlockState(pos);
             if (state.is(BlockTags.FIRE) || state.is(net.minecraft.world.level.block.Blocks.MAGMA_BLOCK)
                     || state.getFluidState().is(net.minecraft.tags.FluidTags.LAVA)) {
                 return 1f;
@@ -1831,40 +1946,42 @@ public class AdaptionEvents {
         }
     }
 
-    private static boolean isOnIce(Player player) {
-        var blockState = player.level().getBlockState(player.blockPosition().below());
+    private static boolean isOnIce(LivingEntity entity) {
+        var blockState = entity.level().getBlockState(entity.blockPosition().below());
         return blockState.is(net.minecraft.tags.BlockTags.ICE);
     }
 
-    private static boolean isStandingOnSlime(Player player) {
-        return player.onGround()
-                && player.level().getBlockState(player.getBlockPosBelowThatAffectsMyMovement()).is(net.minecraft.world.level.block.Blocks.SLIME_BLOCK);
+    private static boolean isStandingOnSlime(LivingEntity entity) {
+        return entity.onGround()
+                && entity.level().getBlockState(entity.getBlockPosBelowThatAffectsMyMovement()).is(net.minecraft.world.level.block.Blocks.SLIME_BLOCK);
     }
 
-    private static boolean isInCobweb(Player player) {
-        net.minecraft.world.phys.AABB bb = player.getBoundingBox();
+    private static boolean isInCobweb(LivingEntity entity) {
+        net.minecraft.world.phys.AABB bb = entity.getBoundingBox();
         for (BlockPos pos : BlockPos.betweenClosed(
                 Mth.floor(bb.minX + 1.0E-7), Mth.floor(bb.minY + 1.0E-7), Mth.floor(bb.minZ + 1.0E-7),
                 Mth.floor(bb.maxX - 1.0E-7), Mth.floor(bb.maxY - 1.0E-7), Mth.floor(bb.maxZ - 1.0E-7))) {
-            if (player.level().getBlockState(pos).is(net.minecraft.world.level.block.Blocks.COBWEB)) {
+            if (entity.level().getBlockState(pos).is(net.minecraft.world.level.block.Blocks.COBWEB)) {
                 return true;
             }
         }
         return false;
     }
 
-    private static void applyEnvEffects(ServerPlayer player, PlayerAdaption data) {
+    private static void applyEnvEffects(LivingEntity entity, PlayerAdaption data) {
         if (data.isEnabled(Concepts.ENV_DROWN) && data.active(Concepts.ENV_DROWN)) {
-            player.setAirSupply(player.getMaxAirSupply());
+            entity.setAirSupply(entity.getMaxAirSupply());
         }
         // Only while actually in lava. Extinguishing every fire tick made Env_Lava a second,
         // silent immunity to fire arrows and burning, which is exactly what the fire/lava split
         // is meant to prevent.
-        if (data.active(Concepts.ENV_LAVA) && player.isInLava()) {
-            player.clearFire();
+        if (data.active(Concepts.ENV_LAVA) && entity.isInLava()) {
+            entity.clearFire();
         }
+        // Food is a player concept; a mob has no FoodData and must not gain one.
+        ServerPlayer player = Wearers.asPlayer(entity);
         int hungerFloor = AdaptionConfig.STARVE_HUNGER_FLOOR.get();
-        if (data.isEnabled(Concepts.ENV_STARVE) && data.active(Concepts.ENV_STARVE)
+        if (player != null && data.isEnabled(Concepts.ENV_STARVE) && data.active(Concepts.ENV_STARVE)
                 && hungerFloor > 0 && player.getFoodData().getFoodLevel() < hungerFloor) {
             player.getFoodData().setFoodLevel(hungerFloor);
         }
@@ -1879,7 +1996,7 @@ public class AdaptionEvents {
         return concept.startsWith("Mine_") || concept.startsWith("Combat_") ? 60 : 180;
     }
 
-    public static void startTask(ServerPlayer player, PlayerAdaption data, String concept, int timer) {
+    public static void startTask(LivingEntity entity, PlayerAdaption data, String concept, int timer) {
 
         if (data.adversityActive || !data.isEnabled(concept) || data.isAdapted(concept)
                 || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
@@ -1894,17 +2011,20 @@ public class AdaptionEvents {
             timer = timer + data.level(concept) * levelPenaltyTicks(concept);
         }
         data.tasks.add(new AdaptionTask(concept, Math.max(1, timer), Math.max(1, timer)));
-        player.sendSystemMessage(Component.translatable("adaptionwheel.msg.analyzing", Concepts.chatName(concept))
-                .withStyle(ChatFormatting.GOLD));
-        sync(player, data, true);
+        ServerPlayer player = Wearers.asPlayer(entity);
+        if (player != null) {
+            player.sendSystemMessage(Component.translatable("adaptionwheel.msg.analyzing", Concepts.chatName(concept))
+                    .withStyle(ChatFormatting.GOLD));
+            sync(player, data, true);
+        }
     }
 
-    public static void startOrAccelerate(ServerPlayer player, PlayerAdaption data, String concept, int baseTicks, boolean accelerate) {
-        startOrAccelerate(player, data, concept, baseTicks, accelerate,
+    public static void startOrAccelerate(LivingEntity entity, PlayerAdaption data, String concept, int baseTicks, boolean accelerate) {
+        startOrAccelerate(entity, data, concept, baseTicks, accelerate,
                 (int) (AdaptionConfig.DEFENSE_ACCELERATION_SECONDS.get() * 20));
     }
 
-    private static void startOrAccelerate(ServerPlayer player, PlayerAdaption data, String concept, int baseTicks,
+    private static void startOrAccelerate(LivingEntity entity, PlayerAdaption data, String concept, int baseTicks,
                                           boolean accelerate, int accelerationTicks) {
 
         if (data.adversityActive || !data.isEnabled(concept) || data.isAdapted(concept)
@@ -1920,34 +2040,41 @@ public class AdaptionEvents {
                     (baseTicks + data.level(concept) * levelPenaltyTicks(concept))
                             * Shedding.reattachFactor(data, concept)));
             data.tasks.add(new AdaptionTask(concept, Math.max(1, timer), Math.max(1, timer)));
-            player.sendSystemMessage(Component.translatable("adaptionwheel.msg.analyzing", Concepts.chatName(concept))
-                    .withStyle(ChatFormatting.GOLD));
-            sync(player, data, true);
+            ServerPlayer player = Wearers.asPlayer(entity);
+            if (player != null) {
+                player.sendSystemMessage(Component.translatable("adaptionwheel.msg.analyzing", Concepts.chatName(concept))
+                        .withStyle(ChatFormatting.GOLD));
+                sync(player, data, true);
+            }
         } else if (accelerate && accelerationTicks > 0) {
             existing.timer = Math.max(1, existing.timer - accelerationTicks);
         }
     }
 
-    private static void completeTask(ServerPlayer player, PlayerAdaption data, String concept) {
+    private static void completeTask(LivingEntity entity, PlayerAdaption data, String concept) {
 
         if (data.isAdapted(concept) && !Concepts.isLevelBased(concept)) {
             return;
         }
-        grantConceptLevel(player, data, concept);
+        grantConceptLevel(entity, data, concept);
     }
 
-    public static void grantConceptLevel(ServerPlayer player, PlayerAdaption data, String concept) {
-        grantConceptUpTo(player, data, concept, -1);
+    public static void grantConceptLevel(LivingEntity entity, PlayerAdaption data, String concept) {
+        grantConceptUpTo(entity, data, concept, -1);
     }
 
-    public static void grantConceptUpTo(ServerPlayer player, PlayerAdaption data, String concept,
+    public static void grantConceptUpTo(LivingEntity entity, PlayerAdaption data, String concept,
                                         int targetLevel) {
-        applyGrant(player, data, concept, targetLevel);
-        applyStats(player, data);
-
-        applyEnvEffects(player, data);
-        saveToItem(player, data);
-        sync(player, data, true);
+        applyGrant(entity, data, concept, targetLevel);
+        // Stat modifiers and the HUD sync are player-only. Env effects and the item save are safe
+        // for any wearer (food is guarded inside applyEnvEffects), so both halves share them.
+        ServerPlayer player = Wearers.asPlayer(entity);
+        if (player != null) {
+            applyStats(player, data);
+            sync(player, data, true);
+        }
+        applyEnvEffects(entity, data);
+        saveToItem(entity, data);
     }
 
     public static void grantToWheel(ServerPlayer player, PlayerAdaption fed, ItemStack wheel,
@@ -1974,8 +2101,9 @@ public class AdaptionEvents {
         return data;
     }
 
-    private static void applyGrant(ServerPlayer player, PlayerAdaption data, String concept,
+    private static void applyGrant(LivingEntity entity, PlayerAdaption data, String concept,
                                    int targetLevel) {
+        ServerPlayer player = Wearers.asPlayer(entity);
         Style style = Style.EMPTY.withColor(TextColor.fromRgb(Concepts.color(concept)));
         boolean isLevelBased = Concepts.isLevelBased(concept);
         if (isLevelBased) {
@@ -1987,27 +2115,33 @@ public class AdaptionEvents {
                         PlayerAdaption.MAX_LEVEL);
             }
             data.levels.put(concept, level);
-            MutableComponent message = level >= PlayerAdaption.MAX_LEVEL
-                    ? Component.translatable("adaptionwheel.msg.adapted_max", Concepts.chatName(concept))
-                    : Component.translatable("adaptionwheel.msg.adapted", Concepts.chatName(concept), level);
-            player.sendSystemMessage(message.withStyle(style));
+            if (player != null) {
+                MutableComponent message = level >= PlayerAdaption.MAX_LEVEL
+                        ? Component.translatable("adaptionwheel.msg.adapted_max", Concepts.chatName(concept))
+                        : Component.translatable("adaptionwheel.msg.adapted", Concepts.chatName(concept), level);
+                player.sendSystemMessage(message.withStyle(style));
+            }
         } else {
             data.adapted.add(concept);
-            player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adapted_once", Concepts.chatName(concept))
-                    .withStyle(style));
+            if (player != null) {
+                player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adapted_once", Concepts.chatName(concept))
+                        .withStyle(style));
+            }
         }
-        player.heal(AdaptionConfig.ADAPTATION_HEAL_AMOUNT.get());
+        entity.heal(AdaptionConfig.ADAPTATION_HEAL_AMOUNT.get());
         data.addHistory(concept);
         data.targetRotation += (float) (Math.PI / 2);
         data.invalidateAdaptCount();
         boolean maxedOut = isLevelBased && data.level(concept) >= PlayerAdaption.MAX_LEVEL;
-        if (maxedOut) {
-            playMaxVoice(player);
-        } else {
-            playAdaptVoice(player, 1f, 1f);
+        if (player != null) {
+            if (maxedOut) {
+                playMaxVoice(player);
+            } else {
+                playAdaptVoice(player, 1f, 1f);
+            }
+            ru.adaptionwheel.api.events.AdaptationCompleteEvent.post(player, concept,
+                    isLevelBased ? data.level(concept) : -1);
         }
-        ru.adaptionwheel.api.events.AdaptationCompleteEvent.post(player, concept,
-                isLevelBased ? data.level(concept) : -1);
     }
 
     public static void grantAllAdaptations(Player player) {
@@ -2244,26 +2378,29 @@ public class AdaptionEvents {
                 SoundSource.PLAYERS, volume * vol, pitch);
     }
 
-    private static void completeAllTasks(ServerPlayer player, PlayerAdaption data) {
+    private static void completeAllTasks(LivingEntity entity, PlayerAdaption data) {
         List<AdaptionTask> tasks = new ArrayList<>(data.tasks);
         data.tasks.clear();
         for (AdaptionTask task : tasks) {
-            completeTask(player, data, task.concept);
+            completeTask(entity, data, task.concept);
         }
     }
 
-    private static void grantOneTime(ServerPlayer player, PlayerAdaption data, String concept) {
+    private static void grantOneTime(LivingEntity entity, PlayerAdaption data, String concept) {
 
         if (data.isAdapted(concept)) {
             return;
         }
+        ServerPlayer player = Wearers.asPlayer(entity);
         data.adapted.add(concept);
-        player.heal(AdaptionConfig.ADAPTATION_HEAL_AMOUNT.get());
+        entity.heal(AdaptionConfig.ADAPTATION_HEAL_AMOUNT.get());
         data.addHistory(concept);
         data.targetRotation += (float) (Math.PI / 2);
         data.invalidateAdaptCount();
-        ru.adaptionwheel.api.events.AdaptationCompleteEvent.post(player, concept, -1);
-        saveToItem(player, data);
+        if (player != null) {
+            ru.adaptionwheel.api.events.AdaptationCompleteEvent.post(player, concept, -1);
+        }
+        saveToItem(entity, data);
     }
 
     public static void debugGrant(ServerPlayer player, String concept, int level) {

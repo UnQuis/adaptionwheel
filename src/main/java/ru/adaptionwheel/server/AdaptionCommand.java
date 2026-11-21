@@ -23,6 +23,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.item.ItemStack;
@@ -41,6 +43,8 @@ import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.data.WheelData;
+import ru.adaptionwheel.item.ModItems;
+import top.theillusivec4.curios.api.CuriosApi;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -672,6 +676,23 @@ public final class AdaptionCommand {
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(ctx -> wheel(ctx, selfOrTarget(ctx, "player"))))));
 
+        // Mob wheel administration. Any entity is accepted by the selector so a bad target gets an
+        // explicit failure message; the handlers themselves require a LivingEntity with a wheel slot.
+        root.then(Commands.literal("mobwheel")
+                .requires(s -> s.hasPermission(2))
+                .then(Commands.literal("equip")
+                        .then(Commands.argument("target", EntityArgument.entity())
+                                .executes(ctx -> mobwheelEquip(ctx,
+                                        EntityArgument.getEntity(ctx, "target")))))
+                .then(Commands.literal("unequip")
+                        .then(Commands.argument("target", EntityArgument.entity())
+                                .executes(ctx -> mobwheelUnequip(ctx,
+                                        EntityArgument.getEntity(ctx, "target")))))
+                .then(Commands.literal("status")
+                        .then(Commands.argument("target", EntityArgument.entity())
+                                .executes(ctx -> mobwheelStatus(ctx,
+                                        EntityArgument.getEntity(ctx, "target"))))));
+
         return root;
     }
 
@@ -1153,6 +1174,62 @@ public final class AdaptionCommand {
                     + Concepts.drop(mob)), false);
         }
         return Math.max(1, mobs.size());
+    }
+
+    /** Give a mob an empty wheel in its dedicated Curios slot. */
+    private static int mobwheelEquip(CommandContext<CommandSourceStack> ctx, Entity target) {
+        CommandSourceStack source = ctx.getSource();
+        if (!(target instanceof LivingEntity mob)) {
+            source.sendFailure(Component.literal("mobwheel equip: target must be a living entity"));
+            return 0;
+        }
+        var inv = CuriosApi.getCuriosInventory(mob);
+        if (inv.isEmpty() || inv.get().getStacksHandler("wheel").isEmpty()) {
+            source.sendFailure(Component.literal("mobwheel equip: " + mob.getName().getString()
+                    + " has no 'wheel' Curios slot"));
+            return 0;
+        }
+        ItemStack stack = new ItemStack(ModItems.MAHORAGA_WHEEL.get());
+        stack.set(ModDataComponents.WHEEL_DATA, WheelData.EMPTY);
+        inv.get().setEquippedCurio("wheel", 0, stack);
+        source.sendSuccess(() -> Component.literal("Equipped an empty Mahoraga Wheel on "
+                + mob.getName().getString()), false);
+        return 1;
+    }
+
+    /** Take the wheel back out of a mob's Curios slot. */
+    private static int mobwheelUnequip(CommandContext<CommandSourceStack> ctx, Entity target) {
+        CommandSourceStack source = ctx.getSource();
+        if (!(target instanceof LivingEntity mob)) {
+            source.sendFailure(Component.literal("mobwheel unequip: target must be a living entity"));
+            return 0;
+        }
+        var inv = CuriosApi.getCuriosInventory(mob);
+        if (inv.isEmpty() || inv.get().getStacksHandler("wheel").isEmpty()) {
+            source.sendFailure(Component.literal("mobwheel unequip: " + mob.getName().getString()
+                    + " has no 'wheel' Curios slot"));
+            return 0;
+        }
+        inv.get().setEquippedCurio("wheel", 0, ItemStack.EMPTY);
+        source.sendSuccess(() -> Component.literal("Removed the Mahoraga Wheel from "
+                + mob.getName().getString()), false);
+        return 1;
+    }
+
+    /** Report what is in a mob's wheel slot, read through the shared Wearers facade. */
+    private static int mobwheelStatus(CommandContext<CommandSourceStack> ctx, Entity target) {
+        CommandSourceStack source = ctx.getSource();
+        if (!(target instanceof LivingEntity mob)) {
+            source.sendFailure(Component.literal("mobwheel status: target must be a living entity"));
+            return 0;
+        }
+        ItemStack stack = Wearers.wheelStack(mob);
+        WheelData data = stack == null ? null : stack.get(ModDataComponents.WHEEL_DATA);
+        source.sendSuccess(() -> Component.literal("mobwheel " + mob.getName().getString()
+                + ": wearer=" + Wearers.isWearer(mob)
+                + " wheel=" + (stack == null ? "none" : "present")
+                + " adaptCount=" + (data == null ? 0 : data.adaptCount())), false);
+        return 1;
     }
 
     private static int registry(CommandContext<CommandSourceStack> ctx) {

@@ -30,9 +30,11 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterShadersEvent;
 import net.neoforged.neoforge.client.event.RenderLivingEvent;
@@ -44,8 +46,7 @@ import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.ModDataComponents;
-import ru.adaptionwheel.item.ModItems;
-import top.theillusivec4.curios.api.CuriosApi;
+import ru.adaptionwheel.item.MahoragaWheelItem;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -228,14 +229,28 @@ public class WheelRenderer {
         WheelLights.clear();
     }
 
+    /**
+     * Vanilla mobs have no Curios entries and most never wear a wheel, so their cache rows would
+     * otherwise live for the whole session. Entries are refreshed every frame a wheel is drawn; once
+     * an entity stops being rendered (despawn, death, leaving view) its rows age out here. This is
+     * independent of the short {@link #CACHE_TTL_TICKS} lookup TTL and of the full clear on logout.
+     */
+    @SubscribeEvent
+    public static void pruneCaches(ClientTickEvent.Post event) {
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            return;
+        }
+        long now = level.getGameTime();
+        SPIN.entrySet().removeIf(e -> now - e.getValue().lastTouched > CACHE_PRUNE_TICKS);
+        WEARING_CACHE.entrySet().removeIf(e -> now - e.getValue()[0] > CACHE_PRUNE_TICKS);
+    }
+
     @SubscribeEvent
     public static void render(RenderLivingEvent.Post<?, ?> event) {
         LivingEntity entity = event.getEntity();
 
-        if (!(entity instanceof Player player)) {
-            return;
-        }
-        if (!AdaptionConfig.WHEEL_ABOVE_HEAD.get() || !isWearingWheel(player)) {
+        if (!AdaptionConfig.WHEEL_ABOVE_HEAD.get() || !isWearingWheel(entity)) {
             return;
         }
 
@@ -258,12 +273,12 @@ public class WheelRenderer {
         // Growth is a smooth function of the adaptation count rather than a step per named tier:
         // the wheel visibly fills out as the player adapts, with no thresholds to cross and
         // nothing to be told about. Capped so a very late wheel cannot grow off the screen.
-        int adaptCount = adaptCountFor(player);
+        int adaptCount = adaptCountFor(entity);
         float growth = 1.0F + 0.55F * (adaptCount / (float) WHEEL_GROWTH_REFERENCE);
         scale *= Math.min(growth, MAX_GROWTH);
         int tint = tintFor(adaptCount);
 
-        float time = player.level().getGameTime() + partialTick;
+        float time = entity.level().getGameTime() + partialTick;
         float bob = Mth.sin(time * BOB_SPEED) * BOB_AMPLITUDE;
 
         // Real light from the world, sampled the way vanilla samples an entity's: the block and the
@@ -294,7 +309,7 @@ public class WheelRenderer {
         // LivingEntityRenderer's push — so there is nothing to cancel here. The old -bodyYaw turn
         // only looked harmless because the wheel was spinning anyway; without the spin it would
         // read as the wheel turning whenever the player turned.
-        float spinAngle = wheelAngle(player, adaptCount, time);
+        float spinAngle = wheelAngle(entity, adaptCount, time);
         poseStack.mulPose(Axis.YP.rotation(spinAngle));
 
         poseStack.scale(scale, scale, scale);
@@ -332,8 +347,9 @@ public class WheelRenderer {
      * is eight-fold symmetric — only the step matters, so a wheel loaded at 300 adaptations has no
      * phase to spin up to, and a hand-over cannot make it whirl.
      */
-    private static float wheelAngle(Player player, int adaptCount, float time) {
-        SpinState state = SPIN.computeIfAbsent(player.getUUID(), id -> new SpinState(adaptCount));
+    private static float wheelAngle(LivingEntity entity, int adaptCount, float time) {
+        SpinState state = SPIN.computeIfAbsent(entity.getUUID(), id -> new SpinState(adaptCount));
+        state.lastTouched = (long) time;
 
         if (state.count != adaptCount) {
             int delta = adaptCount - state.count;
@@ -378,9 +394,12 @@ public class WheelRenderer {
         float from;
         float to;
         float start;
+        /** Game time of the last frame this wheel was drawn; lets the client tick prune stale mobs. */
+        long lastTouched;
 
         SpinState(int count) {
             this.count = count;
+            this.lastTouched = Long.MIN_VALUE;
         }
     }
 
@@ -465,7 +484,7 @@ public class WheelRenderer {
         // a bug report, while in the dark it is the one thing in the scene that is not lit by
         // something else. The lightmap lift and this are two halves of one adaptation -- the lift
         // makes the world visible, this makes the wheel a source in it.
-        float glow = (entity instanceof Player wearer ? darknessGlowFor(wearer) : 0.0F)
+        float glow = darknessGlowFor(entity)
                 * (0.35f + 0.65f * (1.0f - Math.max(skyAmount, blockAmount)));
         shader.safeGetUniform("WheelGlow").set(glow);
 
@@ -729,18 +748,20 @@ public class WheelRenderer {
         }
     }
 
-    /** The wearer's adaptation count, read the same way for every player a client draws. */
-    private static int adaptCountFor(Player player) {
-        if (player.isLocalPlayer()) {
+    /** The wearer's adaptation count, read the same way for every entity a client draws. */
+    private static int adaptCountFor(LivingEntity entity) {
+        // isLocalPlayer() lives on Player in 1.21.1, not on LivingEntity; the instanceof guard both
+        // compiles and keeps ClientAdaption strictly for the local player.
+        if (entity instanceof Player player && player.isLocalPlayer()) {
             return ClientAdaption.adaptedCount;
         }
 
-        return CuriosApi.getCuriosInventory(player)
-                .flatMap(handler -> handler.findFirstCurio(ModItems.MAHORAGA_WHEEL.get()))
-                .map(top.theillusivec4.curios.api.SlotResult::stack)
-                .map(stack -> stack.get(ModDataComponents.WHEEL_DATA.get()))
-                .map(ru.adaptionwheel.data.WheelData::adaptCount)
-                .orElse(0);
+        ItemStack wheel = MahoragaWheelItem.equippedWheel(entity);
+        if (wheel == null) {
+            return 0;
+        }
+        var data = wheel.get(ModDataComponents.WHEEL_DATA.get());
+        return data == null ? 0 : data.adaptCount();
     }
 
     /**
@@ -754,19 +775,17 @@ public class WheelRenderer {
      * switch lives in the player attachment, which is not synced for other players, so a wheel
      * turned off still glows for an observer. That is a smaller wrong than not glowing at all.
      */
-    private static float darknessGlowFor(Player player) {
-        if (player.isLocalPlayer()) {
+    private static float darknessGlowFor(LivingEntity entity) {
+        if (entity instanceof Player player && player.isLocalPlayer()) {
             return ClientAdaption.active(Concepts.ENV_DARKNESS) ? 1.0F : 0.0F;
         }
 
-        boolean adapted = CuriosApi.getCuriosInventory(player)
-                .flatMap(handler -> handler.findFirstCurio(ModItems.MAHORAGA_WHEEL.get()))
-                .map(top.theillusivec4.curios.api.SlotResult::stack)
-                .map(stack -> stack.get(ModDataComponents.WHEEL_DATA.get()))
-                .map(ru.adaptionwheel.data.WheelData::adapted)
-                .map(adaptedKeys -> adaptedKeys.contains(Concepts.ENV_DARKNESS))
-                .orElse(false);
-        return adapted ? 1.0F : 0.0F;
+        ItemStack wheel = MahoragaWheelItem.equippedWheel(entity);
+        if (wheel == null) {
+            return 0.0F;
+        }
+        var data = wheel.get(ModDataComponents.WHEEL_DATA.get());
+        return data != null && data.adapted().contains(Concepts.ENV_DARKNESS) ? 1.0F : 0.0F;
     }
 
     /** Cool grey at nothing adapted, warming towards gold as the wheel fills out. */
@@ -788,24 +807,25 @@ public class WheelRenderer {
     private static final float MAX_GROWTH = 1.55F;
 
     private static final java.util.Map<java.util.UUID, long[]> WEARING_CACHE = new java.util.HashMap<>();
+    /** How long the wearing lookup is trusted before it is recomputed. */
     private static final long CACHE_TTL_TICKS = 10;
+    /** Age past which an unseen entity's cached entries are dropped, so respawns cannot leak forever. */
+    private static final long CACHE_PRUNE_TICKS = 200L;
 
     /** Per-player click state; see {@link #wheelAngle}. */
     private static final java.util.Map<java.util.UUID, SpinState> SPIN = new java.util.HashMap<>();
 
-    private static boolean isWearingWheel(Player player) {
-        if (player.isLocalPlayer()) {
+    private static boolean isWearingWheel(LivingEntity entity) {
+        if (entity instanceof Player player && player.isLocalPlayer()) {
             return ClientAdaption.wearingWheel;
         }
-        long now = player.level().getGameTime();
-        long[] cached = WEARING_CACHE.get(player.getUUID());
+        long now = entity.level().getGameTime();
+        long[] cached = WEARING_CACHE.get(entity.getUUID());
         if (cached != null && now - cached[0] < CACHE_TTL_TICKS) {
             return cached[1] != 0;
         }
-        boolean wearing = CuriosApi.getCuriosInventory(player)
-                .map(handler -> handler.isEquipped(ModItems.MAHORAGA_WHEEL.get()))
-                .orElse(false);
-        WEARING_CACHE.put(player.getUUID(), new long[]{now, wearing ? 1 : 0});
+        boolean wearing = MahoragaWheelItem.equippedWheel(entity) != null;
+        WEARING_CACHE.put(entity.getUUID(), new long[]{now, wearing ? 1 : 0});
         return wearing;
     }
 }
