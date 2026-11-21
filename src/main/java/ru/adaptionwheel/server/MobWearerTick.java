@@ -33,7 +33,7 @@ public final class MobWearerTick {
     private static final Set<UUID> SEEN_WEARERS = new HashSet<>();
     /** Scanning every LivingEntity every tick is needless: only already-seen wearers need a per-tick check. */
     private static final int NEW_WEARER_SCAN_INTERVAL_TICKS = 20;
-    private static long lastScanTick = Long.MIN_VALUE;
+    private static long lastScanTick = -NEW_WEARER_SCAN_INTERVAL_TICKS;
     private static boolean scanDueThisTick;
 
     @SubscribeEvent
@@ -47,7 +47,7 @@ public final class MobWearerTick {
 
         UUID id = entity.getUUID();
         long now = entity.level().getGameTime();
-        if (now != lastScanTick) {
+        if (now - lastScanTick >= NEW_WEARER_SCAN_INTERVAL_TICKS) {
             lastScanTick = now;
             scanDueThisTick = true;
         }

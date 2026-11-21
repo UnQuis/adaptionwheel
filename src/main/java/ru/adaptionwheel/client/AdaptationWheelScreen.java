@@ -10,7 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import org.lwjgl.glfw.GLFW;
@@ -484,11 +484,16 @@ public final class AdaptationWheelScreen extends Screen {
     }
 
     /**
-     * Scans the level for tamed mobs owned by the local player.
+     * Scans the level for owned mobs belonging to the local player.
      *
-     * <p>Deliberately not {@code entitiesForRendering()}: that set follows the render camera, so a
-     * companion outside it vanishes from the menu for reasons that have nothing to do with taming.
-     * A level query with an owner check is stable on both integrated and dedicated clients.
+     * <p>The test is {@link OwnableEntity}, not {@code TamableAnimal}: wolves, cats and parrots are
+     * only one subset. A horse or llama is owned by the player and can wear the wheel too, and a
+     * filter on TamableAnimal would silently leave it out. The owner check is what makes the entry
+     * a companion rather than just any nearby owned entity.
+     *
+     * <p>Deliberately not a render-camera-derived set: a companion outside it would vanish from the
+     * menu for reasons that have nothing to do with ownership. A level query is stable on both
+     * integrated and dedicated clients.
      */
     private void scanTamedMobs() {
         tamedMobs.clear();
@@ -499,15 +504,15 @@ public final class AdaptationWheelScreen extends Screen {
         AABB box = new AABB(
                 mc.player.getX() - 256.0, mc.player.getY() - 256.0, mc.player.getZ() - 256.0,
                 mc.player.getX() + 256.0, mc.player.getY() + 256.0, mc.player.getZ() + 256.0);
-        for (TamableAnimal animal : mc.level.getEntitiesOfClass(TamableAnimal.class, box)) {
-            if (animal.getOwner() != mc.player) {
+        for (LivingEntity living : mc.level.getEntitiesOfClass(LivingEntity.class, box)) {
+            if (!(living instanceof OwnableEntity owned) || owned.getOwner() != mc.player) {
                 continue;
             }
-            WheelData data = readWheel(animal);
+            WheelData data = readWheel(living);
             int count = data == null ? 0 : data.adaptCount();
-            String key = mc.player.getUUID() + "/" + animal.getUUID();
-            tamedMobs.add(new TamedMob(key, animal.getName(),
-                    Component.translatable(animal.getType().getDescriptionId()), count, data));
+            String key = mc.player.getUUID() + "/" + living.getUUID();
+            tamedMobs.add(new TamedMob(key, living.getName(),
+                    Component.translatable(living.getType().getDescriptionId()), count, data));
         }
         tamedMobs.sort((a, b) -> a.name().getString().compareToIgnoreCase(b.name().getString()));
     }
@@ -544,6 +549,9 @@ public final class AdaptationWheelScreen extends Screen {
 
         String keep = selected;
         rows.clear();
+        // The header/footer counters must describe the selected companion, not the player whose
+        // mirror happens to be in ClientAdaption. Rebuild the counted set here, every refresh.
+        known.clear();
         if (mob == null) {
             sectionLabelOverride = tr("adaptionwheel.gui.tamed_header");
             for (TamedMob entry : tamedMobs) {
@@ -577,6 +585,7 @@ public final class AdaptationWheelScreen extends Screen {
             }
             Set<String> unique = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             unique.addAll(concepts);
+            known.addAll(unique);
             concepts.clear();
             concepts.addAll(unique);
             concepts.removeIf(concept -> !matches(concept));
@@ -740,7 +749,7 @@ public final class AdaptationWheelScreen extends Screen {
     private int activeCount() {
         int count = 0;
         for (String concept : known) {
-            if (acquired(concept) && ClientAdaption.isEnabled(concept)) {
+            if (acquired(concept) && source.enabled(concept)) {
                 count++;
             }
         }
@@ -873,16 +882,24 @@ public final class AdaptationWheelScreen extends Screen {
         tabViewportH = Math.max(0, listBottom - tabY);
         tabScroll = Mth.clamp(tabScroll, 0, maxTabScroll());
 
-        synergyStripH = activeSynergies.isEmpty() ? 0 : SYNERGY_HEIGHT + 6;
+        synergyStripH = tamedTabSelected || activeSynergies.isEmpty() ? 0 : SYNERGY_HEIGHT + 6;
         synergyTop = listTop;
         abilityTop = listTop + synergyStripH;
 
-        List<ActiveAbility> unlockedAbilities = AbilityAvailability.unlocked();
-        int abilityRows = Math.min(2, unlockedAbilities.size());
-        abilityAreaH = unlockedAbilities.isEmpty()
-                ? (height < 300 ? 48 : ABILITY_HEIGHT)
-                : Math.max(1, abilityRows) * ABILITY_ROW_HEIGHT
-                        + Math.max(0, abilityRows - 1) * ABILITY_ROW_GAP;
+        // Companions are a read-only snapshot: the player's ability cards and synergy chips have no
+        // meaning there and must not look clickable. Their reserved space goes back to the list.
+        List<ActiveAbility> unlockedAbilities;
+        if (tamedTabSelected) {
+            unlockedAbilities = List.of();
+            abilityAreaH = 0;
+        } else {
+            unlockedAbilities = AbilityAvailability.unlocked();
+            int abilityRows = Math.min(2, unlockedAbilities.size());
+            abilityAreaH = unlockedAbilities.isEmpty()
+                    ? (height < 300 ? 48 : ABILITY_HEIGHT)
+                    : Math.max(1, abilityRows) * ABILITY_ROW_HEIGHT
+                            + Math.max(0, abilityRows - 1) * ABILITY_ROW_GAP;
+        }
         placeholderRect = new Rect(listX, abilityTop, listW, abilityAreaH);
 
         adaptLabelY = abilityTop + abilityAreaH + 10;
@@ -1534,10 +1551,12 @@ public final class AdaptationWheelScreen extends Screen {
         mobHits.clear();
         backHit = Rect.EMPTY;
 
-        if (!activeSynergies.isEmpty()) {
-            drawSynergyStrip(graphics);
+        if (!tamedTabSelected) {
+            if (!activeSynergies.isEmpty()) {
+                drawSynergyStrip(graphics);
+            }
+            drawAbilityArea(graphics);
         }
-        drawAbilityArea(graphics);
         drawSectionLabel(graphics);
 
         if (rows.isEmpty()) {

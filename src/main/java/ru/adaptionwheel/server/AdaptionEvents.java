@@ -2391,7 +2391,9 @@ public class AdaptionEvents {
     private static final int VOICE_COOLDOWN_TICKS = 15;
     /** A second, global gate: a mob farm must not turn ten simultaneous adaptations into ten voices. */
     private static final int GLOBAL_VOICE_COOLDOWN_TICKS = 2;
-    private static long lastAnyVoiceTick = Long.MIN_VALUE;
+    // Must not be Long.MIN_VALUE: `now - Long.MIN_VALUE` overflows back to a negative number at
+    // ordinary game times, which keeps the global gate permanently open and silences every voice.
+    private static long lastAnyVoiceTick = -GLOBAL_VOICE_COOLDOWN_TICKS;
 
     private static void playAdaptVoice(LivingEntity entity, float pitch, float volume) {
         playSoundThrottled(entity, ModSounds.ADAPT_VOICE.get(), pitch, volume);

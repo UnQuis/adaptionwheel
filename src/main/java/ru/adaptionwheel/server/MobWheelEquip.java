@@ -4,7 +4,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.player.Player;
@@ -43,8 +42,10 @@ public final class MobWheelEquip {
         if (!(event.getTarget() instanceof LivingEntity mob) || mob instanceof Player) {
             return;
         }
-        if (mob instanceof OwnableEntity ownable && ownable.getOwner() instanceof Entity owner
-                && owner != player) {
+        // getOwner() resolves through the level and returns null for an offline owner, which would
+        // turn the gate off exactly when griefing is easiest. Compare the persisted UUID instead.
+        if (mob instanceof OwnableEntity ownable && ownable.getOwnerUUID() != null
+                && !ownable.getOwnerUUID().equals(player.getUUID())) {
             player.displayClientMessage(Component.translatableWithFallback(
                     "adaptionwheel.msg.mobwheel_not_owner",
                     "You can only put a wheel on your own tamed mob"), false);
