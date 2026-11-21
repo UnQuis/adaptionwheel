@@ -1,6 +1,6 @@
 # Orbital Ring Wheel Skin Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add `orbital` as a second, item-stored wheel skin in 1.21.1 with its own mesh, fabric texture and animated emissive, switchable from the adaptation menu.
 
@@ -21,7 +21,7 @@
 - `ObjMesh.STRIDE` stays 11; `o`/`usemtl` stay ignored; the 16 named light uniforms and their names stay byte-identical.
 - The skin applies to `mahoraga_wheel` and `mahoraga_wheel_wood`; the anvil upgrade copies `WHEEL_SKIN`.
 - 1.21.1 only. 26.3 is out of scope.
-- Verification commands: `./gradlew build`, `./tools/validate-shaders.sh`, `./tools/run-gametests.sh 4 150` (the suite is currently 198 tests; the runner handles the known spawn hang).
+- Verification commands: `./gradlew build`, `./tools/validate-shaders.sh`, `./tools/run-gametests.sh 4 150` (the suite is currently 212 tests; the runner handles the known spawn hang).
 
 ## Review Focus
 
