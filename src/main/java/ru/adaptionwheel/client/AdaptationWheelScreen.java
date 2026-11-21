@@ -1,6 +1,7 @@
 package ru.adaptionwheel.client;
 
 import net.minecraft.Util;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -8,7 +9,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.AABB;
 import org.lwjgl.glfw.GLFW;
 import ru.adaptionwheel.ability.ActiveAbility;
 import ru.adaptionwheel.ability.ActiveAbilities;
@@ -19,7 +23,10 @@ import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.category.FistTiers;
 import ru.adaptionwheel.category.Synergies;
 import ru.adaptionwheel.data.AdaptionTask;
+import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.data.PlayerAdaption;
+import ru.adaptionwheel.data.WheelData;
+import ru.adaptionwheel.item.MahoragaWheelItem;
 import ru.adaptionwheel.item.ModItems;
 import ru.adaptionwheel.network.SelectAbilityPayload;
 import ru.adaptionwheel.network.ToggleAdaptationPayload;
@@ -75,6 +82,118 @@ public final class AdaptationWheelScreen extends Screen {
     private static final int ROSE_BG = WheelUi.ROSE_BG;
     private static final int GOLD = WheelUi.GOLD;
 
+    /**
+     * A read-only view of the state a concept card renders.
+     *
+     * <p>The menu's own cards read the client mirror. The companions tab reads the WheelData component
+     * that Curios already synced onto a tamed mob. Routing those five questions through one small
+     * interface lets both views share the whole card-drawing code instead of duplicating the panel;
+     * the player implementation delegates to exactly the same ClientAdaption calls the menu used
+     * before, so the normal view is unchanged.
+     */
+    private interface ConceptSource {
+        int level(String concept);
+
+        boolean adapted(String concept);
+
+        boolean enabled(String concept);
+
+        AdaptionTask task(String concept);
+
+        float taskProgress(AdaptionTask task);
+    }
+
+    private static AdaptionTask findTask(List<AdaptionTask> tasks, String concept) {
+        if (concept == null) {
+            return null;
+        }
+        for (AdaptionTask task : tasks) {
+            if (task != null && concept.equals(task.concept)) {
+                return task;
+            }
+        }
+        return null;
+    }
+
+    private static final ConceptSource PLAYER_SOURCE = new ConceptSource() {
+        @Override
+        public int level(String concept) {
+            return ClientAdaption.level(concept);
+        }
+
+        @Override
+        public boolean adapted(String concept) {
+            return ClientAdaption.isAdapted(concept);
+        }
+
+        @Override
+        public boolean enabled(String concept) {
+            return ClientAdaption.isEnabled(concept);
+        }
+
+        @Override
+        public AdaptionTask task(String concept) {
+            return findTask(ClientAdaption.TASKS, concept);
+        }
+
+        @Override
+        public float taskProgress(AdaptionTask task) {
+            return ClientAdaption.taskProgress(task);
+        }
+    };
+
+    /** A companion's WheelData, read straight off the synced item component. */
+    private static final class WheelSource implements ConceptSource {
+        private final WheelData data;
+
+        WheelSource(WheelData data) {
+            this.data = data;
+        }
+
+        @Override
+        public int level(String concept) {
+            return data.levels().getOrDefault(concept, 0);
+        }
+
+        @Override
+        public boolean adapted(String concept) {
+            return data.adapted().contains(concept) || data.existenceAdapted().contains(concept);
+        }
+
+        @Override
+        public boolean enabled(String concept) {
+            // A wheel has no off switches: everything recorded on it is active by definition.
+            return true;
+        }
+
+        @Override
+        public AdaptionTask task(String concept) {
+            return findTask(data.tasks(), concept);
+        }
+
+        @Override
+        public float taskProgress(AdaptionTask task) {
+            // AdaptionTask.progress() divides by maxTimer. Old or hand-edited wheel data can carry
+            // a zero/negative timer, which would make the bar NaN and silently draw nothing.
+            if (task == null || task.maxTimer <= 0) {
+                return 0f;
+            }
+            return Mth.clamp(1f - (float) task.timer / (float) task.maxTimer, 0f, 1f);
+        }
+    }
+
+    /**
+     * A tamed mob found on the client, with a snapshot of the wheel it wears (if any).
+     *
+     * <p>{@code key} is built from the owner's and the mob's UUIDs. Entity ids are recycled, so an id
+     * would silently select a different mob after a relog or a despawn.
+     */
+    private record TamedMob(String key, Component name, Component type, int adaptCount, WheelData wheel) {
+    }
+
+    private record MobHit(String mobKey, Rect rect) {
+    }
+
     private final List<Row> rows = new ArrayList<>();
     private final List<CardView> cards = new ArrayList<>();
     private final List<AbilityHit> abilityHits = new ArrayList<>();
@@ -94,7 +213,18 @@ public final class AdaptationWheelScreen extends Screen {
     private int lastMouseY;
 
     private AdaptationDomain selectedTab;
+    private boolean tamedTabSelected;
+    private final List<TamedMob> tamedMobs = new ArrayList<>();
+    private final List<MobHit> mobHits = new ArrayList<>();
+    private String selectedMobKey;
+    private String hoveredMobKey;
+    private WheelData selectedMobWheel;
+    private ConceptSource source = PLAYER_SOURCE;
+    private String sectionLabelOverride;
+    private long lastTamedScan;
+    private Rect backHit = Rect.EMPTY;
     private String selected;
+
     private String hovered;
     private String search = "";
     private int searchCaret;
@@ -154,6 +284,8 @@ public final class AdaptationWheelScreen extends Screen {
         buildSpecks();
         lastSignature = signature();
         refreshRows(true);
+        // Warm the companion list on open so the first click on the tab is instant.
+        scanTamedMobs();
     }
 
     @Override
@@ -165,6 +297,10 @@ public final class AdaptationWheelScreen extends Screen {
         if (current != lastSignature) {
             lastSignature = current;
             refreshRows(false);
+        } else if (tamedTabSelected && Util.getMillis() - lastTamedScan > 1000L) {
+            // A slow poll keeps a companion's wheel in step with analyses completing while the
+            // menu is open. One scan a second is cheap and never happens on a normal drawing frame.
+            refreshTamedRows(false);
         }
 
         layout();
@@ -244,6 +380,12 @@ public final class AdaptationWheelScreen extends Screen {
     }
 
     private void refreshRows(boolean resetScroll) {
+        if (tamedTabSelected) {
+            refreshTamedRows(resetScroll);
+            return;
+        }
+        source = PLAYER_SOURCE;
+        sectionLabelOverride = null;
         known.clear();
         known.addAll(ClientAdaption.LEVELS.keySet());
         known.addAll(ClientAdaption.ADAPTED);
@@ -302,16 +444,16 @@ public final class AdaptationWheelScreen extends Screen {
                     continue;
                 }
                 sortConcepts(group);
-                rows.add(new Row(Kind.GROUP, domain, null));
+                rows.add(new Row(Kind.GROUP, domain, null, null));
                 for (String concept : group) {
-                    rows.add(new Row(Kind.CONCEPT, domain, concept));
+                    rows.add(new Row(Kind.CONCEPT, domain, concept, null));
                 }
             }
         } else {
             List<String> group = new ArrayList<>(visible);
             sortConcepts(group);
             for (String concept : group) {
-                rows.add(new Row(Kind.CONCEPT, selectedTab, concept));
+                rows.add(new Row(Kind.CONCEPT, selectedTab, concept, null));
             }
         }
 
@@ -326,6 +468,138 @@ public final class AdaptationWheelScreen extends Screen {
             scrollTarget = Mth.clamp(scrollTarget, 0, maxScroll());
             scroll = Mth.clamp(scroll, 0, maxScroll());
         }
+    }
+
+    // ---------------------------------------------------------------- companions tab
+
+    /**
+     * The one place that reads a wheel's data off an entity. The source is deliberately isolated:
+     * Curios 9.5.1 copies the stack after comparing it in the same tick, so writing WHEEL_DATA onto
+     * an equipped stack is picked up and synced without a custom packet. If that ever changes, only
+     * this method needs to move to a different source -- no UI code has to.
+     */
+    private static WheelData readWheel(LivingEntity entity) {
+        ItemStack stack = MahoragaWheelItem.equippedWheel(entity);
+        return stack == null ? null : stack.get(ModDataComponents.WHEEL_DATA.get());
+    }
+
+    /**
+     * Scans the level for tamed mobs owned by the local player.
+     *
+     * <p>Deliberately not {@code entitiesForRendering()}: that set follows the render camera, so a
+     * companion outside it vanishes from the menu for reasons that have nothing to do with taming.
+     * A level query with an owner check is stable on both integrated and dedicated clients.
+     */
+    private void scanTamedMobs() {
+        tamedMobs.clear();
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) {
+            return;
+        }
+        AABB box = new AABB(
+                mc.player.getX() - 256.0, mc.player.getY() - 256.0, mc.player.getZ() - 256.0,
+                mc.player.getX() + 256.0, mc.player.getY() + 256.0, mc.player.getZ() + 256.0);
+        for (TamableAnimal animal : mc.level.getEntitiesOfClass(TamableAnimal.class, box)) {
+            if (animal.getOwner() != mc.player) {
+                continue;
+            }
+            WheelData data = readWheel(animal);
+            int count = data == null ? 0 : data.adaptCount();
+            String key = mc.player.getUUID() + "/" + animal.getUUID();
+            tamedMobs.add(new TamedMob(key, animal.getName(),
+                    Component.translatable(animal.getType().getDescriptionId()), count, data));
+        }
+        tamedMobs.sort((a, b) -> a.name().getString().compareToIgnoreCase(b.name().getString()));
+    }
+
+    private boolean matchesTamed(TamedMob mob) {
+        String query = search.strip().toLowerCase(Locale.ROOT);
+        if (query.isEmpty()) {
+            return true;
+        }
+        return mob.name().getString().toLowerCase(Locale.ROOT).contains(query)
+                || mob.type().getString().toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private TamedMob findMob(String key) {
+        if (key == null) {
+            return null;
+        }
+        for (TamedMob mob : tamedMobs) {
+            if (key.equals(mob.key())) {
+                return mob;
+            }
+        }
+        return null;
+    }
+
+    private void refreshTamedRows(boolean resetScroll) {
+        scanTamedMobs();
+        if (findMob(selectedMobKey) == null) {
+            selectedMobKey = null;
+        }
+        TamedMob mob = findMob(selectedMobKey);
+        selectedMobWheel = mob == null ? null : mob.wheel();
+        source = selectedMobWheel == null ? PLAYER_SOURCE : new WheelSource(selectedMobWheel);
+
+        String keep = selected;
+        rows.clear();
+        if (mob == null) {
+            sectionLabelOverride = tr("adaptionwheel.gui.tamed_header");
+            for (TamedMob entry : tamedMobs) {
+                if (matchesTamed(entry)) {
+                    rows.add(new Row(Kind.MOB, null, null, entry.key()));
+                }
+            }
+            visible.clear();
+            selected = null;
+        } else if (selectedMobWheel == null) {
+            sectionLabelOverride = mob.name().getString();
+            visible.clear();
+            selected = null;
+        } else {
+            sectionLabelOverride = mob.name().getString() + "  \u00B7  "
+                    + tr("adaptionwheel.gui.tamed_count", mob.adaptCount());
+            rows.add(new Row(Kind.BACK, null, null, null));
+
+            List<String> concepts = new ArrayList<>();
+            concepts.addAll(selectedMobWheel.adapted());
+            concepts.addAll(selectedMobWheel.existenceAdapted());
+            for (Map.Entry<String, Integer> entry : selectedMobWheel.levels().entrySet()) {
+                if (entry.getValue() > 0) {
+                    concepts.add(entry.getKey());
+                }
+            }
+            for (AdaptionTask task : selectedMobWheel.tasks()) {
+                if (task != null && task.concept != null && !task.concept.isBlank()) {
+                    concepts.add(task.concept);
+                }
+            }
+            Set<String> unique = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            unique.addAll(concepts);
+            concepts.clear();
+            concepts.addAll(unique);
+            concepts.removeIf(concept -> !matches(concept));
+            sortConcepts(concepts);
+
+            visible.clear();
+            visible.addAll(concepts);
+            for (String concept : concepts) {
+                rows.add(new Row(Kind.CONCEPT, AdaptationRegistry.domainOf(concept), concept, null));
+            }
+            selected = keep != null && concepts.contains(keep)
+                    ? keep
+                    : (concepts.isEmpty() ? null : concepts.get(0));
+        }
+        hovered = null;
+        if (resetScroll) {
+            scroll = 0;
+            scrollTarget = 0;
+        } else {
+            scrollTarget = Mth.clamp(scrollTarget, 0, maxScroll());
+            scroll = Mth.clamp(scroll, 0, maxScroll());
+        }
+        lastTamedScan = Util.getMillis();
     }
 
     /**
@@ -441,23 +715,16 @@ public final class AdaptationWheelScreen extends Screen {
     }
 
     private AdaptionTask taskFor(String concept) {
-        if (concept == null) {
-            return null;
-        }
-        for (AdaptionTask task : ClientAdaption.TASKS) {
-            if (task != null && concept.equals(task.concept)) {
-                return task;
-            }
-        }
-        return null;
+        return source.task(concept);
     }
 
     private boolean acquired(String concept) {
-        return ClientAdaption.isAdapted(concept) || ClientAdaption.level(concept) > 0;
+        return source.adapted(concept) || source.level(concept) > 0;
     }
 
     private boolean canToggle(String concept) {
-        return concept != null && acquired(concept);
+        // A companion's wheel is a read-only mirror: the client has no authority to toggle it.
+        return concept != null && acquired(concept) && !tamedTabSelected;
     }
 
     private int acquiredCount() {
@@ -631,15 +898,24 @@ public final class AdaptationWheelScreen extends Screen {
         return Math.max(0, contentHeight() - Math.max(0, viewport));
     }
 
+    /** ALL + every owned domain + the companions pseudo-tab. */
+    private int tabCount() {
+        return availableDomains.size() + 2;
+    }
+
     private int maxTabScroll() {
-        int total = (availableDomains.size() + 1) * TAB_HEIGHT;
+        int total = tabCount() * TAB_HEIGHT;
         return Math.max(0, total - Math.max(0, tabViewportH));
+    }
+
+    private int rowHeight(Row row) {
+        return row.kind == Kind.GROUP || row.kind == Kind.BACK ? GROUP_HEIGHT : CARD_STRIDE;
     }
 
     private int contentHeight() {
         int total = 0;
         for (Row row : rows) {
-            total += row.kind == Kind.GROUP ? GROUP_HEIGHT : CARD_STRIDE;
+            total += rowHeight(row);
         }
         return Math.max(0, total - (rows.isEmpty() ? 0 : CARD_GAP));
     }
@@ -661,16 +937,21 @@ public final class AdaptationWheelScreen extends Screen {
             return;
         }
         int y = scrollViewportTop - (int) Math.round(scroll);
+        hoveredMobKey = null;
         for (Row row : rows) {
-            if (row.kind == Kind.GROUP) {
+            if (row.kind == Kind.GROUP || row.kind == Kind.BACK) {
                 y += GROUP_HEIGHT;
-            } else {
-                if (mouseY >= y && mouseY < y + CARD_HEIGHT) {
-                    hovered = row.concept;
+                continue;
+            }
+            if (mouseY >= y && mouseY < y + CARD_HEIGHT) {
+                if (row.kind == Kind.MOB) {
+                    hoveredMobKey = row.mobKey;
                     return;
                 }
-                y += CARD_STRIDE;
+                hovered = row.concept;
+                return;
             }
+            y += CARD_STRIDE;
         }
     }
 
@@ -870,7 +1151,7 @@ public final class AdaptationWheelScreen extends Screen {
         }
 
         int accent = safeColor(Concepts.color(focus));
-        boolean enabled = ClientAdaption.isEnabled(focus);
+        boolean enabled = source.enabled(focus);
         int effective = enabled ? accent : WheelUi.disabled(accent);
         AdaptionTask task = taskFor(focus);
 
@@ -907,9 +1188,9 @@ public final class AdaptationWheelScreen extends Screen {
             leftToggle = new Rect(switchX - 26, toggleY - 4, 64, 24);
         } else {
             WheelUi.text(graphics, font, WheelUi.MONO_8,
-                    WheelUi.upper(tr("adaptionwheel.gui.menu_analyzing")),
-                    x + 20, toggleY + 4, WheelUi.AMBER, false);
-            float progress = task != null ? ClientAdaption.taskProgress(task) : 0f;
+                    WheelUi.upper(tr(detailStateKey())),
+                    x + 20, toggleY + 4, tamedTabSelected ? MUTED : WheelUi.AMBER, false);
+            float progress = detailProgress(focus, task);
             int barW = w - 40;
             graphics.fill(x + 20, toggleY + 13, x + 20 + barW, toggleY + 14, HAIRLINE);
             graphics.fill(x + 20, toggleY + 13,
@@ -987,7 +1268,7 @@ public final class AdaptationWheelScreen extends Screen {
         }
 
         int accent = safeColor(Concepts.color(focus));
-        boolean enabled = ClientAdaption.isEnabled(focus);
+        boolean enabled = source.enabled(focus);
         int effective = enabled ? accent : WheelUi.disabled(accent);
         AdaptionTask task = taskFor(focus);
 
@@ -1025,9 +1306,9 @@ public final class AdaptationWheelScreen extends Screen {
             leftToggle = new Rect(switchX - 24, toggleY - 4, 58, 24);
         } else {
             WheelUi.text(graphics, font, WheelUi.MONO_8,
-                    WheelUi.upper(tr("adaptionwheel.gui.menu_analyzing")),
-                    x + 12, toggleY + 4, WheelUi.AMBER, false);
-            float progress = task != null ? ClientAdaption.taskProgress(task) : 0f;
+                    WheelUi.upper(tr(detailStateKey())),
+                    x + 12, toggleY + 4, tamedTabSelected ? MUTED : WheelUi.AMBER, false);
+            float progress = detailProgress(focus, task);
             int barW = w - 24;
             graphics.fill(x + 12, toggleY + 13, x + 12 + barW, toggleY + 14, HAIRLINE);
             graphics.fill(x + 12, toggleY + 13,
@@ -1110,7 +1391,7 @@ public final class AdaptationWheelScreen extends Screen {
         }
 
         int accent = safeColor(Concepts.color(focus));
-        boolean enabled = ClientAdaption.isEnabled(focus);
+        boolean enabled = source.enabled(focus);
         int effective = enabled ? accent : WheelUi.disabled(accent);
         AdaptionTask task = taskFor(focus);
 
@@ -1147,9 +1428,9 @@ public final class AdaptationWheelScreen extends Screen {
             leftToggle = new Rect(switchX - 24, toggleY - 4, 58, 24);
         } else {
             WheelUi.text(graphics, font, WheelUi.MONO_8,
-                    WheelUi.upper(tr("adaptionwheel.gui.menu_analyzing")),
-                    x + 10, toggleY + 4, WheelUi.AMBER, false);
-            float progress = task != null ? ClientAdaption.taskProgress(task) : 0f;
+                    WheelUi.upper(tr(detailStateKey())),
+                    x + 10, toggleY + 4, tamedTabSelected ? MUTED : WheelUi.AMBER, false);
+            float progress = detailProgress(focus, task);
             int barW = w - 20;
             graphics.fill(x + 10, toggleY + 13, x + 10 + barW, toggleY + 14, HAIRLINE);
             graphics.fill(x + 10, toggleY + 13,
@@ -1169,7 +1450,7 @@ public final class AdaptationWheelScreen extends Screen {
         if (gap < 44) {
             return;
         }
-        int railBottom = tabY + (availableDomains.size() + 1) * TAB_HEIGHT
+        int railBottom = tabY + tabCount() * TAB_HEIGHT
                 - (int) Math.round(tabScroll);
         int floatCX = (leftX + leftW + listX) / 2;
         int floatCY = footerY - 44;
@@ -1195,11 +1476,14 @@ public final class AdaptationWheelScreen extends Screen {
 
         graphics.enableScissor(tabX - 3, tabY - 2, tabX + tabW + 4, tabY + tabViewportH + 2);
         int y = tabY - (int) Math.round(tabScroll);
-        int tabs = availableDomains.size() + 1;
+        int tabs = tabCount();
         for (int i = 0; i < tabs; i++) {
-            AdaptationDomain domain = i == 0 ? null : availableDomains.get(i - 1);
-            boolean active = (selectedTab == null && domain == null)
-                    || (selectedTab != null && selectedTab == domain);
+            boolean tamed = i == tabs - 1;
+            AdaptationDomain domain = tamed || i == 0 ? null : availableDomains.get(i - 1);
+            boolean active = tamed
+                    ? tamedTabSelected
+                    : !tamedTabSelected && ((selectedTab == null && domain == null)
+                            || (selectedTab != null && selectedTab == domain));
             boolean hot = lastMouseX >= tabX && lastMouseX < tabX + tabW
                     && lastMouseY >= tabY && lastMouseY < tabY + tabViewportH
                     && lastMouseY >= y && lastMouseY < y + TAB_HEIGHT;
@@ -1213,19 +1497,21 @@ public final class AdaptationWheelScreen extends Screen {
                             0x12FFFFFF);
                 }
                 int textX = tabX + 10;
-                if (domain != null) {
+                if (tamed || domain != null) {
                     WheelUi.fillRounded(graphics, tabX + 8, y + TAB_HEIGHT / 2 - 2, 4, 4, 2,
-                            safeColor(domain.getColor()));
+                            tamed ? GOLD : safeColor(domain.getColor()));
                     textX = tabX + 18;
                 }
-                String label = WheelUi.upper(domain == null
-                        ? tr("adaptionwheel.gui.tab_all")
-                        : domain.translation().getString());
+                String label = WheelUi.upper(tamed
+                        ? tr("adaptionwheel.gui.tab_tamed")
+                        : domain == null
+                                ? tr("adaptionwheel.gui.tab_all")
+                                : domain.translation().getString());
                 WheelUi.text(graphics, font, WheelUi.MONO_8,
                         WheelUi.fit(font, WheelUi.MONO_8, label, tabX + tabW - 8 - textX),
                         textX, y + 6, active ? INK : (hot ? INK_SOFT : MUTED), false);
             }
-            tabHits.add(new TabView(domain, new Rect(tabX, y, tabW, TAB_HEIGHT)));
+            tabHits.add(new TabView(domain, tamed, new Rect(tabX, y, tabW, TAB_HEIGHT)));
             y += TAB_HEIGHT;
         }
         graphics.disableScissor();
@@ -1233,7 +1519,7 @@ public final class AdaptationWheelScreen extends Screen {
         if (max > 0) {
             int trackX = tabX + tabW + 2;
             int thumbH = Math.max(16, (int) (tabViewportH
-                    * (tabViewportH / (double) ((availableDomains.size() + 1) * TAB_HEIGHT))));
+                    * (tabViewportH / (double) (tabCount() * TAB_HEIGHT))));
             thumbH = Math.min(tabViewportH, thumbH);
             int thumbY = tabY + (int) Math.round((tabScroll / (double) max)
                     * (tabViewportH - thumbH));
@@ -1245,6 +1531,8 @@ public final class AdaptationWheelScreen extends Screen {
     private void drawRightColumn(GuiGraphics graphics) {
         cards.clear();
         abilityHits.clear();
+        mobHits.clear();
+        backHit = Rect.EMPTY;
 
         if (!activeSynergies.isEmpty()) {
             drawSynergyStrip(graphics);
@@ -1253,7 +1541,11 @@ public final class AdaptationWheelScreen extends Screen {
         drawSectionLabel(graphics);
 
         if (rows.isEmpty()) {
-            drawEmpty(graphics);
+            if (tamedTabSelected) {
+                drawTamedEmpty(graphics);
+            } else {
+                drawEmpty(graphics);
+            }
             return;
         }
 
@@ -1261,15 +1553,16 @@ public final class AdaptationWheelScreen extends Screen {
                 scrollViewportBottom);
         int y = scrollViewportTop - (int) Math.round(scroll);
         for (Row row : rows) {
-            int rowHeight = row.kind == Kind.GROUP ? GROUP_HEIGHT : CARD_STRIDE;
-            if (y + rowHeight > scrollViewportTop - 4 && y < scrollViewportBottom + 4) {
-                if (row.kind == Kind.GROUP) {
-                    drawGroupHeader(graphics, row.domain, listX, y, listW);
-                } else {
-                    drawCard(graphics, row.concept, listX, y, listW, CARD_HEIGHT);
+            int rh = rowHeight(row);
+            if (y + rh > scrollViewportTop - 4 && y < scrollViewportBottom + 4) {
+                switch (row.kind) {
+                    case GROUP -> drawGroupHeader(graphics, row.domain, listX, y, listW);
+                    case BACK -> drawBackRow(graphics, listX, y, listW);
+                    case MOB -> drawMobRow(graphics, row.mobKey, listX, y, listW, CARD_HEIGHT);
+                    case CONCEPT -> drawCard(graphics, row.concept, listX, y, listW, CARD_HEIGHT);
                 }
             }
-            y += rowHeight;
+            y += rh;
         }
         graphics.disableScissor();
 
@@ -1308,10 +1601,26 @@ public final class AdaptationWheelScreen extends Screen {
     }
 
     private void drawSectionLabel(GuiGraphics graphics) {
-        String label = WheelUi.upper(tr("adaptionwheel.gui.menu_adaptations"));
+        String label = WheelUi.upper(sectionLabelOverride != null
+                ? sectionLabelOverride
+                : tr("adaptionwheel.gui.menu_adaptations"));
+        if (tamedTabSelected) {
+            label = WheelUi.fit(font, WheelUi.MONO_8, label, Math.max(40, listW - 48));
+        }
         WheelUi.trackedLeft(graphics, font, WheelUi.MONO_8, label, listX, adaptLabelY, MUTED, 1.6f);
         int labelWidth = WheelUi.trackedWidth(font, WheelUi.MONO_8, label, 1.6f);
-        String count = String.valueOf(visibleConceptCount());
+        String count;
+        if (tamedTabSelected) {
+            int entries = 0;
+            for (Row row : rows) {
+                if (row.kind == Kind.MOB || row.kind == Kind.CONCEPT) {
+                    entries++;
+                }
+            }
+            count = String.valueOf(entries);
+        } else {
+            count = String.valueOf(visibleConceptCount());
+        }
         int countWidth = font.width(WheelUi.mono(WheelUi.MONO_8, count));
         int countX = listX + listW - countWidth;
         int lineStart = listX + labelWidth + 9;
@@ -1333,7 +1642,12 @@ public final class AdaptationWheelScreen extends Screen {
         for (int i = 0; i < shown; i++) {
             ActiveAbility ability = unlocked.get(i);
             drawAbilityCard(graphics, ability, listX, y, listW, ABILITY_ROW_HEIGHT);
-            abilityHits.add(new AbilityHit(ability.id(), new Rect(listX, y, listW, ABILITY_ROW_HEIGHT)));
+            // Companions are a snapshot. A click here must never select or activate one of the
+            // player's abilities, so these rows are not clickable at all on that tab.
+            if (!tamedTabSelected) {
+                abilityHits.add(new AbilityHit(ability.id(),
+                        new Rect(listX, y, listW, ABILITY_ROW_HEIGHT)));
+            }
             y += ABILITY_ROW_HEIGHT + ABILITY_ROW_GAP;
         }
     }
@@ -1478,7 +1792,7 @@ public final class AdaptationWheelScreen extends Screen {
     private void drawCard(GuiGraphics graphics, String concept, int x, int y, int w, int h) {
         boolean chosen = concept.equals(selected);
         boolean hoveredCard = concept.equals(hovered);
-        boolean enabled = ClientAdaption.isEnabled(concept);
+        boolean enabled = source.enabled(concept);
         int accent = safeColor(Concepts.color(concept));
         int effective = enabled ? accent : WheelUi.disabled(accent);
 
@@ -1539,10 +1853,10 @@ public final class AdaptationWheelScreen extends Screen {
         int progressY = y + 44;
         graphics.fill(progressX, progressY, progressX + progressW, progressY + 1, 0x24FFFFFF);
         float progress = task != null
-                ? Mth.clamp(ClientAdaption.taskProgress(task), 0f, 1f)
-                : (ClientAdaption.isAdapted(concept)
+                ? Mth.clamp(source.taskProgress(task), 0f, 1f)
+                : (source.adapted(concept)
                         ? 1f
-                        : ClientAdaption.level(concept) / (float) MAX_LEVEL);
+                        : source.level(concept) / (float) MAX_LEVEL);
         int fill = Math.round(progressW * Mth.clamp(progress, 0f, 1f));
         if (fill > 0) {
             int barColor = task != null ? WheelUi.AMBER : (enabled ? effective : 0xFF5A5A62);
@@ -1560,7 +1874,7 @@ public final class AdaptationWheelScreen extends Screen {
         if (hasSwitch) {
             int switchX = x + w - 46;
             int switchY = y + 11;
-            boolean on = ClientAdaption.isEnabled(concept);
+            boolean on = source.enabled(concept);
             String onOff = tr(on ? "adaptionwheel.gui.menu_on" : "adaptionwheel.gui.menu_off");
             int onOffW = font.width(WheelUi.mono(WheelUi.MONO_8, onOff));
             WheelUi.text(graphics, font, WheelUi.MONO_8, onOff, switchX - 8 - onOffW,
@@ -1643,13 +1957,96 @@ public final class AdaptationWheelScreen extends Screen {
                 Math.max(120, listW - 60), 10, 3, MUTED);
     }
 
+    /** The first row of a companion's concept list returns to the mob list. */
+    private void drawBackRow(GuiGraphics graphics, int x, int y, int w) {
+        backHit = new Rect(x, y, w, GROUP_HEIGHT);
+        boolean hot = backHit.contains(lastMouseX, lastMouseY);
+        String label = "\u2039 " + WheelUi.upper(tr("adaptionwheel.gui.tamed_back"));
+        WheelUi.trackedLeft(graphics, font, WheelUi.MONO_8, label, x + 4, y + 7,
+                hot ? INK_SOFT : MUTED, 1.2f);
+        graphics.fill(x + 4, y + GROUP_HEIGHT - 1, x + w - 4, y + GROUP_HEIGHT, HAIRLINE);
+    }
+
+    private void drawMobRow(GuiGraphics graphics, String mobKey, int x, int y, int w, int h) {
+        TamedMob mob = findMob(mobKey);
+        if (mob == null) {
+            return;
+        }
+        boolean chosen = mobKey.equals(selectedMobKey);
+        boolean hot = mobKey.equals(hoveredMobKey);
+        boolean wearing = mob.wheel() != null;
+        WheelUi.card(graphics, x, y, w, h, 9, CARD,
+                chosen ? WheelUi.withAlpha(GREEN, 0.55f) : hot ? 0x44FFFFFF : 0x30FFFFFF);
+        graphics.fill(x + 4, y + 12, x + 6, y + h - 12, wearing ? GREEN : MUTED);
+
+        WheelUi.fillRounded(graphics, x + 14, y + 12, 34, 34, 8,
+                WheelUi.tint(wearing ? GOLD : MUTED));
+        if (wearing) {
+            WheelUi.itemIcon(graphics, wheelIcon(), x + 19, y + 17, 24);
+        } else {
+            WheelUi.centered(graphics, font, WheelUi.MONO_11, "?", x + 31, y + 25, MUTED, false);
+        }
+
+        int nameMax = Math.max(30, w - 136);
+        WheelUi.text(graphics, font, WheelUi.MONO_11,
+                WheelUi.fit(font, WheelUi.MONO_11, WheelUi.upper(mob.name().getString()), nameMax),
+                x + 58, y + 11, INK, false);
+        String subtitle = WheelUi.upper(mob.type().getString()) + "  \u00B7  "
+                + (wearing
+                        ? tr("adaptionwheel.gui.tamed_adaptations", mob.adaptCount())
+                        : tr("adaptionwheel.gui.tamed_no_wheel_short"));
+        WheelUi.text(graphics, font, WheelUi.MONO_8,
+                WheelUi.fit(font, WheelUi.MONO_8, subtitle, Math.max(40, w - 140)),
+                x + 58, y + 27, wearing ? INK_SOFT : MUTED, false);
+        graphics.fill(x + 58, y + 44, x + 58 + Math.max(20, w - 74), y + 45, 0x24FFFFFF);
+
+        mobHits.add(new MobHit(mobKey, new Rect(x, y, w, h)));
+    }
+
+    private void drawTamedEmpty(GuiGraphics graphics) {
+        backHit = Rect.EMPTY;
+        int centerX = listX + listW / 2;
+        int top = scrollViewportTop + 28;
+        boolean none = tamedMobs.isEmpty();
+        boolean searching = !none && !search.isBlank();
+        WheelUi.itemIcon(graphics, wheelIcon(), centerX - 14, top - 2, 28);
+
+        String title = searching
+                ? tr("adaptionwheel.gui.menu_no_matches")
+                : none
+                        ? tr("adaptionwheel.gui.tamed_no_mobs")
+                        : tr("adaptionwheel.gui.tamed_no_wheel");
+        String desc = searching
+                ? tr("adaptionwheel.gui.menu_no_matches_desc")
+                : none
+                        ? tr("adaptionwheel.gui.tamed_no_mobs_desc")
+                        : tr("adaptionwheel.gui.tamed_no_wheel_hint");
+        WheelUi.trackedCentered(graphics, font, WheelUi.MONO_11, WheelUi.upper(title),
+                centerX, top + 38, INK_SOFT, 1.2f);
+        centeredWrapped(graphics, Component.literal(desc), centerX, top + 56,
+                Math.max(120, listW - 60), 10, 4, MUTED);
+
+        if (!none && selectedMobKey != null) {
+            String back = "\u2039 " + tr("adaptionwheel.gui.tamed_back");
+            int bw = Math.max(60, font.width(WheelUi.mono(WheelUi.MONO_8, back)) + 20);
+            int by = top + 108;
+            backHit = new Rect(centerX - bw / 2, by - 4, bw, 18);
+            boolean hot = backHit.contains(lastMouseX, lastMouseY);
+            WheelUi.fillRounded(graphics, backHit.x, backHit.y, bw, 18, 9,
+                    hot ? 0x2AFFFFFF : 0x18FFFFFF);
+            WheelUi.centered(graphics, font, WheelUi.MONO_8, back, centerX, by,
+                    hot ? INK : INK_SOFT, false);
+        }
+    }
+
     private void drawFooter(GuiGraphics graphics) {
         graphics.fill(margin, footerY - 9, width - margin, footerY - 8, 0x1FFFFFFF);
         // The old author credit used to live here. It said nothing the player could act on,
         // so the only permanent footer status is the one that answers a question the wheel
         // cannot otherwise answer: is Instabreak currently on? It is drawn only once the
         // netherite fist has unlocked it, so an unavailable ability does not advertise itself.
-        if (ClientAdaption.wearingWheel && ClientAdaption.instabreakUnlocked && width >= 420) {
+        if (!tamedTabSelected && ClientAdaption.wearingWheel
+                && ClientAdaption.instabreakUnlocked && width >= 420) {
             boolean active = ClientAdaption.instabreakActive;
             int color = active ? GREEN : MUTED;
             WheelUi.fillRounded(graphics, margin, footerY + 3, 3, 3, 1,
@@ -1661,9 +2058,11 @@ public final class AdaptationWheelScreen extends Screen {
                     margin + 8, footerY, color, 1.0f);
         }
 
-        String hint = width >= 900
-                ? tr("adaptionwheel.gui.menu_footer_hint")
-                : tr("adaptionwheel.gui.menu_footer_short");
+        String hint = tamedTabSelected
+                ? tr("adaptionwheel.gui.tamed_readonly_hint")
+                : (width >= 900
+                        ? tr("adaptionwheel.gui.menu_footer_hint")
+                        : tr("adaptionwheel.gui.menu_footer_short"));
         WheelUi.centered(graphics, font, WheelUi.MONO_8, hint, width / 2, footerY, MUTED, false);
 
         String stats = search.isBlank()
@@ -1687,18 +2086,35 @@ public final class AdaptationWheelScreen extends Screen {
         return count;
     }
 
+    private String detailStateKey() {
+        return tamedTabSelected
+                ? "adaptionwheel.gui.tamed_view_only"
+                : "adaptionwheel.gui.menu_analyzing";
+    }
+
+    private float detailProgress(String concept, AdaptionTask task) {
+        if (task != null) {
+            return Mth.clamp(source.taskProgress(task), 0f, 1f);
+        }
+        if (tamedTabSelected && concept != null) {
+            return Mth.clamp(source.adapted(concept) ? 1f : source.level(concept) / (float) MAX_LEVEL,
+                    0f, 1f);
+        }
+        return 0f;
+    }
+
     private String stateText(String concept, AdaptionTask task) {
         if (task != null) {
-            int percent = Math.round(Mth.clamp(ClientAdaption.taskProgress(task), 0f, 1f) * 100f);
+            int percent = Math.round(Mth.clamp(source.taskProgress(task), 0f, 1f) * 100f);
             return tr("adaptionwheel.gui.menu_analyzing") + " " + percent + "%";
         }
-        if (!ClientAdaption.isEnabled(concept)) {
+        if (!source.enabled(concept)) {
             return tr("adaptionwheel.gui.menu_off");
         }
-        if (ClientAdaption.isAdapted(concept)) {
+        if (source.adapted(concept)) {
             return tr("adaptionwheel.gui.menu_adapted");
         }
-        int level = ClientAdaption.level(concept);
+        int level = source.level(concept);
         if (level > 0) {
             if (level >= MAX_LEVEL) {
                 return tr("adaptionwheel.gui.menu_max");
@@ -1737,40 +2153,76 @@ public final class AdaptationWheelScreen extends Screen {
                 && mouseY >= tabY && mouseY < tabY + tabViewportH) {
             for (TabView tab : tabHits) {
                 if (tab.rect.contains(mouseX, mouseY)) {
-                    selectedTab = tab.domain;
+                    if (tab.tamed) {
+                        // Clicking the active tab again steps back out of a selected companion.
+                        if (tamedTabSelected) {
+                            selectedMobKey = null;
+                        }
+                        tamedTabSelected = true;
+                        selectedTab = null;
+                    } else {
+                        tamedTabSelected = false;
+                        selectedTab = tab.domain;
+                    }
                     refreshRows(true);
                     return true;
                 }
             }
         }
 
-        if (leftToggle.contains(mouseX, mouseY)) {
-            toggle(focusConcept());
-            return true;
-        }
+        if (tamedTabSelected) {
+            // Strictly read-only. Only navigation is handled here; no toggle, ability or any other
+            // player-targeting payload may leave this tab. The scrollbar/placeholder handling below
+            // is still reachable, but it only moves the local view.
+            if (backHit.contains(mouseX, mouseY)) {
+                selectedMobKey = null;
+                refreshRows(true);
+                return true;
+            }
+            if (mouseY >= scrollViewportTop && mouseY < scrollViewportBottom) {
+                for (MobHit hit : mobHits) {
+                    if (hit.rect.contains(mouseX, mouseY)) {
+                        selectedMobKey = hit.mobKey;
+                        refreshRows(true);
+                        return true;
+                    }
+                }
+                for (CardView card : cards) {
+                    if (card.card.contains(mouseX, mouseY)) {
+                        selected = card.concept;
+                        return true;
+                    }
+                }
+            }
+        } else {
+            if (leftToggle.contains(mouseX, mouseY)) {
+                toggle(focusConcept());
+                return true;
+            }
 
-        for (CardView card : cards) {
-            if (mouseY < scrollViewportTop || mouseY >= scrollViewportBottom) {
-                continue;
+            for (CardView card : cards) {
+                if (mouseY < scrollViewportTop || mouseY >= scrollViewportBottom) {
+                    continue;
+                }
+                if (card.hasSwitch && card.toggle.contains(mouseX, mouseY)) {
+                    selected = card.concept;
+                    toggle(card.concept);
+                    return true;
+                }
+                if (card.card.contains(mouseX, mouseY)) {
+                    selected = card.concept;
+                    return true;
+                }
             }
-            if (card.hasSwitch && card.toggle.contains(mouseX, mouseY)) {
-                selected = card.concept;
-                toggle(card.concept);
-                return true;
-            }
-            if (card.card.contains(mouseX, mouseY)) {
-                selected = card.concept;
-                return true;
-            }
-        }
 
-        for (AbilityHit hit : abilityHits) {
-            if (hit.rect.contains(mouseX, mouseY)) {
-                // Optimistic for a responsive highlight; the server re-checks the gate, persists the
-                // choice and syncs it back, so a stale client cannot select a locked ability.
-                ActiveAbilities.select(hit.id);
-                SelectAbilityPayload.send(hit.id);
-                return true;
+            for (AbilityHit hit : abilityHits) {
+                if (hit.rect.contains(mouseX, mouseY)) {
+                    // Optimistic for a responsive highlight; the server re-checks the gate, persists the
+                    // choice and syncs it back, so a stale client cannot select a locked ability.
+                    ActiveAbilities.select(hit.id);
+                    SelectAbilityPayload.send(hit.id);
+                    return true;
+                }
             }
         }
 
@@ -1935,7 +2387,9 @@ public final class AdaptationWheelScreen extends Screen {
         }
         if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER
                 || keyCode == GLFW.GLFW_KEY_SPACE) {
-            toggle(selected);
+            if (!tamedTabSelected) {
+                toggle(selected);
+            }
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -2002,7 +2456,7 @@ public final class AdaptationWheelScreen extends Screen {
             if (row.kind == Kind.CONCEPT && concept.equals(row.concept)) {
                 break;
             }
-            y += row.kind == Kind.GROUP ? GROUP_HEIGHT : CARD_STRIDE;
+            y += rowHeight(row);
         }
         int viewport = scrollViewportBottom - scrollViewportTop;
         if (y < scrollTarget) {
@@ -2014,7 +2468,9 @@ public final class AdaptationWheelScreen extends Screen {
     }
 
     private void toggle(String concept) {
-        if (!canToggle(concept)) {
+        // Belt and braces: even a stale click from another code path must not rewrite the player's
+        // adaptations while the companions snapshot is on screen.
+        if (tamedTabSelected || !canToggle(concept)) {
             return;
         }
         // Server-authoritative on purpose. An optimistic local flip here would make the switch the
@@ -2051,16 +2507,16 @@ public final class AdaptationWheelScreen extends Screen {
     }
 
     private enum Kind {
-        GROUP, CONCEPT
+        GROUP, CONCEPT, BACK, MOB
     }
 
-    private record Row(Kind kind, AdaptationDomain domain, String concept) {
+    private record Row(Kind kind, AdaptationDomain domain, String concept, String mobKey) {
     }
 
     private record CardView(String concept, Rect card, Rect toggle, boolean hasSwitch) {
     }
 
-    private record TabView(AdaptationDomain domain, Rect rect) {
+    private record TabView(AdaptationDomain domain, boolean tamed, Rect rect) {
     }
 
     private record AbilityHit(String id, Rect rect) {

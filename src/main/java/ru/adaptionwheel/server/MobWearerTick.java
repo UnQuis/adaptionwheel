@@ -4,8 +4,10 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.data.PlayerAdaption;
 
@@ -29,6 +31,10 @@ public final class MobWearerTick {
     }
 
     private static final Set<UUID> SEEN_WEARERS = new HashSet<>();
+    /** Scanning every LivingEntity every tick is needless: only already-seen wearers need a per-tick check. */
+    private static final int NEW_WEARER_SCAN_INTERVAL_TICKS = 20;
+    private static long lastScanTick = Long.MIN_VALUE;
+    private static boolean scanDueThisTick;
 
     @SubscribeEvent
     public static void onEntityTick(EntityTickEvent.Post event) {
@@ -40,6 +46,14 @@ public final class MobWearerTick {
         }
 
         UUID id = entity.getUUID();
+        long now = entity.level().getGameTime();
+        if (now != lastScanTick) {
+            lastScanTick = now;
+            scanDueThisTick = true;
+        }
+        if (!SEEN_WEARERS.contains(id) && !scanDueThisTick) {
+            return;
+        }
         boolean wearing = Wearers.isWearer(entity);
         if (!wearing) {
             if (SEEN_WEARERS.remove(id)) {
@@ -67,9 +81,36 @@ public final class MobWearerTick {
     }
 
     @SubscribeEvent
+    public static void onServerTick(ServerTickEvent.Post event) {
+        scanDueThisTick = false;
+    }
+
+    /** EntityTickEvent.Post never runs for an entity in an unloaded chunk; this hook does. */
+    @SubscribeEvent
+    public static void onEntityLeaveLevel(EntityLeaveLevelEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity entity) || entity instanceof Player) {
+            return;
+        }
+        if (event.getLevel().isClientSide()) {
+            return;
+        }
+        UUID id = entity.getUUID();
+        if (SEEN_WEARERS.remove(id)) {
+            AdaptionEvents.clearWearerCaches(id);
+        }
+    }
+
+    @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
         if (!(event.getEntity() instanceof LivingEntity entity) || entity instanceof Player) {
             return;
+        }
+        // Curios drops the actual stack object, so write the attachment's latest analyses back onto
+        // it BEFORE the drop event runs. Without this, everything since the last 1 Hz save dies with
+        // the mob, which looks exactly like losing a trained wheel.
+        var stack = ru.adaptionwheel.item.MahoragaWheelItem.equippedWheel(entity);
+        if (stack != null && !entity.level().isClientSide) {
+            AdaptionEvents.saveToStack(stack, Wearers.data(entity));
         }
         if (SEEN_WEARERS.remove(entity.getUUID())) {
             AdaptionEvents.clearWearerCaches(entity.getUUID());

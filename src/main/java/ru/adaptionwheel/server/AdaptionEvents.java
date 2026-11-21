@@ -542,6 +542,7 @@ public class AdaptionEvents {
         if (attackerEntity instanceof LivingEntity attacker
                 && living != attacker
                 && !REFLECTING.contains(living.getUUID())
+                && !friendlyFire(attacker, living)
                 && wearsWheel(attacker)) {
             applyFistDamage(attacker, living, event);
             applyOffense(attacker, living, event);
@@ -696,9 +697,9 @@ public class AdaptionEvents {
             if (category == AdaptionCategory.STARVE) {
                 if (AdaptionConfig.INSTANT_STARVE.get()) {
                     grantOneTime(living, data, Concepts.ENV_STARVE);
+                    playAdaptVoice(living, 0.7f, 1f);
                     if (player != null) {
                         player.getFoodData().eat(20, 20f);
-                        playAdaptVoice(player, 0.7f, 1f);
                         player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adapted_once",
                                         Concepts.chatName(Concepts.ENV_STARVE))
                                 .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(Concepts.COLOR_ENV))));
@@ -832,6 +833,9 @@ public class AdaptionEvents {
         if (!(reflectTarget instanceof LivingEntity living) || reflectTarget == wearer) {
             return;
         }
+        if (friendlyFire(wearer, living)) {
+            return;
+        }
         float multiplier = (float) (double) AdaptionConfig.EXISTENCE_REFLECT_MULTIPLIER.get();
         if (multiplier <= 0f) {
             return;
@@ -874,6 +878,32 @@ public class AdaptionEvents {
             EnumSet.of(AdaptionCategory.PROJECTILE, AdaptionCategory.OTHER);
 
     private static final Set<UUID> REFLECTING = new HashSet<>();
+
+    /**
+     * True when a wearer would be hitting its own household: itself, its owner, a pet with the
+     * same owner, or anything either side considers an ally. Both an offense bonus and existence
+     * reflection go through this one gate, because a wheel-wearing wolf must never crit its owner
+     * or farm Offense_NPC_<owner> by biting the hand that feeds it.
+     */
+    private static boolean friendlyFire(LivingEntity from, LivingEntity to) {
+        if (from == to) {
+            return true;
+        }
+        if (from instanceof net.minecraft.world.entity.OwnableEntity a && a.getOwner() == to) {
+            return true;
+        }
+        if (to instanceof net.minecraft.world.entity.OwnableEntity b && b.getOwner() == from) {
+            return true;
+        }
+        if (from instanceof net.minecraft.world.entity.OwnableEntity a2
+                && to instanceof net.minecraft.world.entity.OwnableEntity b2
+                && a2.getOwner() != null && a2.getOwner() == b2.getOwner()) {
+            return true;
+        }
+        // TamableAnimal.isAlliedTo checks its owner (and that owner's allies) but a player's own
+        // isAlliedTo only checks the team, so both directions are needed.
+        return from.isAlliedTo(to) || to.isAlliedTo(from);
+    }
 
     private static final Map<UUID, Long> DIMENSION_SLASH_LAST = new HashMap<>();
     private static final int DIMENSION_SLASH_COOLDOWN_TICKS = 20;
@@ -1267,9 +1297,9 @@ public class AdaptionEvents {
                 completeAllTasks(entity, data);
                 grantOneTime(entity, data, Concepts.ADVERSITY);
 
+                playAdaptVoice(entity, 1f, 1f);
                 if (player != null) {
                     applyStats(player, data);
-                    playAdaptVoice(player, 1f, 1f);
                     player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adversity_done")
                             .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
                 }
@@ -1473,6 +1503,7 @@ public class AdaptionEvents {
         DIMENSION_SLASH_LAST.remove(id);
         MartialArts.forget(id);
         ru.adaptionwheel.server.DiveAbility.forget(id);
+        ru.adaptionwheel.server.SwordOfExterminationHandler.forget(id);
     }
 
     private static void restorePendingRespawnHealth(ServerPlayer player) {
@@ -1728,12 +1759,12 @@ public class AdaptionEvents {
         }
         grantOneTime(entity, data, concept);
         ServerPlayer player = Wearers.asPlayer(entity);
+        playMaxVoice(entity);
         if (player != null) {
             player.sendSystemMessage(Component.translatable("adaptionwheel.msg.mutation_unlocked",
                             Concepts.chatName(concept))
                     .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(Concepts.color(concept)))
                             .withBold(true)));
-            playMaxVoice(player);
             spawnMutationBurst(player, concept);
             sync(player, data, true);
         }
@@ -2133,12 +2164,12 @@ public class AdaptionEvents {
         data.targetRotation += (float) (Math.PI / 2);
         data.invalidateAdaptCount();
         boolean maxedOut = isLevelBased && data.level(concept) >= PlayerAdaption.MAX_LEVEL;
+        if (maxedOut) {
+            playMaxVoice(entity);
+        } else {
+            playAdaptVoice(entity, 1f, 1f);
+        }
         if (player != null) {
-            if (maxedOut) {
-                playMaxVoice(player);
-            } else {
-                playAdaptVoice(player, 1f, 1f);
-            }
             ru.adaptionwheel.api.events.AdaptationCompleteEvent.post(player, concept,
                     isLevelBased ? data.level(concept) : -1);
         }
@@ -2358,23 +2389,42 @@ public class AdaptionEvents {
 
     private static final Map<UUID, Long> LAST_VOICE_TICK = new HashMap<>();
     private static final int VOICE_COOLDOWN_TICKS = 15;
+    /** A second, global gate: a mob farm must not turn ten simultaneous adaptations into ten voices. */
+    private static final int GLOBAL_VOICE_COOLDOWN_TICKS = 2;
+    private static long lastAnyVoiceTick = Long.MIN_VALUE;
 
-    private static void playAdaptVoice(ServerPlayer player, float pitch, float volume) {
-        playSoundThrottled(player, ModSounds.ADAPT_VOICE.get(), pitch, volume);
+    private static void playAdaptVoice(LivingEntity entity, float pitch, float volume) {
+        playSoundThrottled(entity, ModSounds.ADAPT_VOICE.get(), pitch, volume);
     }
 
-    private static void playMaxVoice(ServerPlayer player) {
-        playSoundThrottled(player, ModSounds.ADAPT_VOICE.get(), 0.68f, 1.2f);
+    private static void playMaxVoice(LivingEntity entity) {
+        playSoundThrottled(entity, ModSounds.ADAPT_VOICE.get(), 0.68f, 1.2f);
     }
 
-    private static void playSoundThrottled(ServerPlayer player, net.minecraft.sounds.SoundEvent sound, float pitch, float volume) {
+    /**
+     * Plays the adaptation voice for any wearer. Throttling is per entity UUID, so a crowd of
+     * adapting mobs cannot stack voices on the same tick; the cleanup on death/despawn drops the
+     * timestamp with the rest of the wearer's caches.
+     */
+    private static void playSoundThrottled(LivingEntity entity, net.minecraft.sounds.SoundEvent sound,
+                                           float pitch, float volume) {
         float vol = (float) (double) AdaptionConfig.VOICE_VOLUME.get() / 100f;
-        if (vol <= 0f) return;
-        long now = player.level().getGameTime();
-        Long last = LAST_VOICE_TICK.get(player.getUUID());
-        if (last != null && now - last < VOICE_COOLDOWN_TICKS) return;
-        LAST_VOICE_TICK.put(player.getUUID(), now);
-        player.level().playSound(null, player.blockPosition(), sound,
+        if (vol <= 0f || entity.level().isClientSide) {
+            return;
+        }
+        long now = entity.level().getGameTime();
+        if (now - lastAnyVoiceTick < GLOBAL_VOICE_COOLDOWN_TICKS) {
+            return;
+        }
+        Long last = LAST_VOICE_TICK.get(entity.getUUID());
+        if (last != null && now - last < VOICE_COOLDOWN_TICKS) {
+            return;
+        }
+        LAST_VOICE_TICK.put(entity.getUUID(), now);
+        lastAnyVoiceTick = now;
+        // Keep the vanilla "Players" category for mobs too: it is the slider players already use
+        // to control this voice, and routing mobs through NEUTRAL would ignore it.
+        entity.level().playSound(null, entity.blockPosition(), sound,
                 SoundSource.PLAYERS, volume * vol, pitch);
     }
 

@@ -53,8 +53,13 @@ public final class SwordOfExterminationHandler {
 
     @SubscribeEvent
     public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
-        LAST_SLASH_TIME.remove(event.getEntity().getUUID());
-        LAST_RIFT_TIME.remove(event.getEntity().getUUID());
+        forget(event.getEntity().getUUID());
+    }
+
+    /** Drops the per-wearer cooldowns when an entity dies, despawns or leaves a chunk. */
+    public static void forget(java.util.UUID id) {
+        LAST_SLASH_TIME.remove(id);
+        LAST_RIFT_TIME.remove(id);
     }
 
     public static void tryFireSlashes(Player player) {

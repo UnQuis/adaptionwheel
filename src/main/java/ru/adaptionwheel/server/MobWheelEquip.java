@@ -1,11 +1,12 @@
 package ru.adaptionwheel.server;
 
-import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -18,11 +19,12 @@ import ru.adaptionwheel.item.MahoragaWheelItem;
 import top.theillusivec4.curios.api.CuriosApi;
 
 /**
- * Equips a wheel on a mob with shift + right click, without opening a GUI or a command.
+ * Equips or removes a wheel with shift + right click on a mob, without a GUI or command.
  *
- * <p>The command stays the administrative path; this is the in-world one. It only accepts a wheel
- * in the main hand so it cannot fire twice from the offhand, and it only accepts a non-player
- * {@link LivingEntity} target so it never competes with the player-to-player adaptation transfer.
+ * <p>The command stays the administrative path; this is the in-world one. It only accepts the main
+ * hand so it cannot fire twice, and it only accepts a non-player {@link LivingEntity} target so it
+ * never competes with the player-to-player adaptation transfer. An owned mob can only be wheeled by
+ * its owner: handing a trained wheel to somebody else's dog is griefing, not a feature.
  */
 @EventBusSubscriber(modid = AdaptionWheel.MODID)
 public final class MobWheelEquip {
@@ -38,14 +40,27 @@ public final class MobWheelEquip {
         if (event.getHand() != InteractionHand.MAIN_HAND) {
             return;
         }
-        ItemStack held = event.getItemStack();
-        if (!MahoragaWheelItem.isWheel(held)) {
-            return;
-        }
         if (!(event.getTarget() instanceof LivingEntity mob) || mob instanceof Player) {
             return;
         }
-        if (equip(player, mob, held)) {
+        if (mob instanceof OwnableEntity ownable && ownable.getOwner() instanceof Entity owner
+                && owner != player) {
+            player.displayClientMessage(Component.translatableWithFallback(
+                    "adaptionwheel.msg.mobwheel_not_owner",
+                    "You can only put a wheel on your own tamed mob"), false);
+            return;
+        }
+
+        ItemStack held = event.getItemStack();
+        boolean done;
+        if (MahoragaWheelItem.isWheel(held)) {
+            done = equip(player, mob, held);
+        } else if (held.isEmpty()) {
+            done = unequip(player, mob);
+        } else {
+            return;
+        }
+        if (done) {
             event.setCancellationResult(InteractionResult.SUCCESS);
             event.setCanceled(true);
         }
@@ -63,13 +78,13 @@ public final class MobWheelEquip {
                 .flatMap(inv -> inv.getStacksHandler(MahoragaWheelItem.WHEEL_SLOT))
                 .orElse(null);
         if (handler == null) {
-            player.displayClientMessage(Component.literal(
-                    "This entity has no 'wheel' Curios slot"), false);
+            player.displayClientMessage(Component.translatableWithFallback(
+                    "adaptionwheel.msg.mobwheel_no_slot", "This entity has no 'wheel' Curios slot"), false);
             return false;
         }
         if (MahoragaWheelItem.equippedWheel(mob) != null) {
-            player.displayClientMessage(Component.literal(
-                    mob.getName().getString() + " is already wearing a wheel"), false);
+            player.displayClientMessage(Component.translatable(
+                    "adaptionwheel.msg.mobwheel_occupied", mob.getName()), false);
             return false;
         }
 
@@ -82,8 +97,28 @@ public final class MobWheelEquip {
         if (!player.getAbilities().instabuild) {
             held.shrink(1);
         }
-        player.displayClientMessage(Component.literal(
-                "Equipped a wheel on " + mob.getName().getString()), false);
+        player.displayClientMessage(Component.translatable(
+                "adaptionwheel.msg.mobwheel_equipped", mob.getName()), false);
+        return true;
+    }
+
+    /** Shift + right click with an empty hand takes the wheel back, saving its data first. */
+    public static boolean unequip(ServerPlayer player, LivingEntity mob) {
+        var handler = CuriosApi.getCuriosInventory(mob)
+                .flatMap(inv -> inv.getStacksHandler(MahoragaWheelItem.WHEEL_SLOT))
+                .orElse(null);
+        ItemStack worn = handler == null ? null : handler.getStacks().getStackInSlot(0);
+        if (worn == null || !MahoragaWheelItem.isWheel(worn)) {
+            return false;
+        }
+        // The attachment is the live copy; the stack is what survives the mob. Write before removal.
+        AdaptionEvents.saveToStack(worn, Wearers.data(mob));
+        handler.getStacks().setStackInSlot(0, ItemStack.EMPTY);
+        if (!player.getInventory().add(worn)) {
+            player.drop(worn, false);
+        }
+        player.displayClientMessage(Component.translatableWithFallback(
+                "adaptionwheel.msg.mobwheel_removed", "Removed the wheel from %s", mob.getName()), false);
         return true;
     }
 }
