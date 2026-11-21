@@ -66,7 +66,7 @@ public class MahoragaWheelItem extends Item implements ICurioItem {
         tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip").withStyle(ChatFormatting.GOLD));
         tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip2").withStyle(ChatFormatting.GRAY));
         tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip3").withStyle(ChatFormatting.DARK_GRAY));
-
+        tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip5").withStyle(ChatFormatting.GRAY));
         WheelData wd = stack.get(ModDataComponents.WHEEL_DATA);
         if (wd != null) {
             int count = wd.adaptCount();

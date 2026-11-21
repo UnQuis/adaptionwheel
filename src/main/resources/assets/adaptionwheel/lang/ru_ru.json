@@ -80,6 +80,7 @@
   "adaptionwheel.concept.percep.Percep_SteadyGaze": "Непоколебимый Взор",
   "adaptionwheel.concept.special.Dimension_Destroy": "Разрушение Измерения",
   "item.adaptionwheel.mahoraga_wheel.tooltip4": "[%s] Меню колеса",
+  "item.adaptionwheel.mahoraga_wheel.tooltip5": "Shift + ПКМ по мобу — надеть колесо на него",
   "key.category.adaptionwheel.adaptionwheel": "Колесо Адаптации",
   "key.adaptionwheel.open_screen": "Открыть меню колеса",
   "adaptionwheel.gui.menu_title": "КОЛЕСО АДАПТАЦИИ",
