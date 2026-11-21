@@ -384,6 +384,64 @@ public class ObjMeshTests {
         helper.succeed();
     }
 
+    /**
+     * The orbital shader keys every shell off the red vertex-colour channel. The draw path reads the
+     * QUADS view, not {@code corners()}: if a future {@code STRIDE} change shifted or dropped that
+     * channel during repacking, every shell would silently draw as the same material with no error.
+     * Pin the ids on the array that actually reaches the GPU, including the duplicated fourth corner.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theOrbitalIdsSurviveQuadPacking(GameTestHelper helper) {
+        ObjMesh mesh = load(ORBITAL_OBJ);
+        helper.assertTrue(mesh != null, "the orbital OBJ must load before its quad packing can be checked");
+        if (mesh == null) {
+            return;
+        }
+
+        float[] triangles = mesh.corners();
+        float[] quads = mesh.quadCorners();
+        boolean found0 = false, foundHalf = false, found1 = false;
+        int lost = 0, repeated = 0;
+        for (int triangle = 0; triangle < mesh.triangleCount(); triangle++) {
+            int triBase = triangle * 3 * ObjMesh.STRIDE;
+            int quadBase = triangle * 4 * ObjMesh.STRIDE;
+            for (int corner = 0; corner < 3; corner++) {
+                float expected = triangles[triBase + corner * ObjMesh.STRIDE + 8];
+                float actual = quads[quadBase + corner * ObjMesh.STRIDE + 8];
+                if (Math.abs(expected - actual) > 0.001f) {
+                    lost++;
+                }
+            }
+            if (quads[quadBase + 2 * ObjMesh.STRIDE + 8] != quads[quadBase + 3 * ObjMesh.STRIDE + 8]) {
+                repeated++;
+            }
+            for (int corner = 0; corner < 4; corner++) {
+                float id = quads[quadBase + corner * ObjMesh.STRIDE + 8];
+                if (Math.abs(id - 0.0f) < 0.01f) {
+                    found0 = true;
+                } else if (Math.abs(id - 0.5f) < 0.01f) {
+                    foundHalf = true;
+                } else if (Math.abs(id - 1.0f) < 0.01f) {
+                    found1 = true;
+                } else {
+                    lost++;
+                }
+            }
+        }
+
+        helper.assertTrue(lost == 0,
+                "quad packing changed or dropped the material id on " + lost + " corners; every shell "
+                        + "would draw as the same material");
+        helper.assertTrue(repeated == 0,
+                "the fourth corner must duplicate the third on all " + mesh.triangleCount()
+                        + " triangles, but " + repeated + " differ");
+        helper.assertTrue(found0 && foundHalf && found1,
+                "quads must still carry all three ids; found 0=" + found0 + " 0.5=" + foundHalf
+                        + " 1=" + found1);
+
+        helper.succeed();
+    }
+
     private static ObjMesh shipped() {
         return load(WHEEL_OBJ);
     }
