@@ -36,6 +36,13 @@ Changes made after the 0.2.0 section was written; fold them into the next releas
 - **Untamed mobs cap at level 7.** Level 8 is full immunity/i-frames, so wild wearers stop one
   rung below it; tamed companions and players keep the full ladder. One-time phenomena
   (Env_/Debuff_/mutations) are unaffected. A wheel carrying level 8 is clamped on equip.
+- **Mob killers earn their own loot progression.** A wheel-wearing mob that lands the kill gets
+  kill counts, Drop_NPC_ analysis and extra loot-table rolls; an un-wheeled pet still credits its
+  owner. Player-only luck/messages stay player-only.
+- **Killing a wheel-wearing pet no longer drops two wheels.** Curios' equipped wheel is excluded
+  from the fallback copies used when a loot table rolls empty.
+- TAMED left card shows the companion's face texture (wolf/cat/parrot/horse/llama, with a fallback),
+  and the domain rail is available in TAMED too so the mob's adaptations can be filtered by domain.
 - 207 gametests now pass (new tests pin mob mortality and the level-7 cap).
 
 ---

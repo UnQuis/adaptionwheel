@@ -2,6 +2,7 @@ package ru.adaptionwheel.client;
 
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -188,7 +189,16 @@ public final class AdaptationWheelScreen extends Screen {
      * <p>{@code key} is built from the owner's and the mob's UUIDs. Entity ids are recycled, so an id
      * would silently select a different mob after a relog or a despawn.
      */
-    private record TamedMob(String key, Component name, Component type, int adaptCount, WheelData wheel) {
+    private record TamedMob(String key, Component name, Component type, int adaptCount, WheelData wheel,
+                            LivingEntity entity) {
+    }
+
+    /**
+     * A vanilla entity texture plus its real pixel size, so a small head crop can be sampled
+     * correctly. The size matters: GuiGraphics normalises UVs against these numbers, and a wrong
+     * one silently shows a different part of the sheet instead of failing.
+     */
+    private record MobFace(ResourceLocation texture, int width, int height) {
     }
 
     private record MobHit(String mobKey, Rect rect) {
@@ -329,11 +339,9 @@ public final class AdaptationWheelScreen extends Screen {
             }
             drawFloatingWheel(graphics);
         }
-        // The domain rail is part of the PLAYER mode only. In TAMED mode it would offer domain
-        // filters over a snapshot that has nothing to do with the player's own domains.
-        if (!tamedTabSelected) {
-            drawTabs(graphics);
-        }
+        // The domain rail is shared by both modes: in TAMED it filters the selected companion's
+        // adaptations rather than the player's. TAMED itself is never a rail row.
+        drawTabs(graphics);
         drawRightColumn(graphics);
         drawFooter(graphics);
     }
@@ -503,6 +511,68 @@ public final class AdaptationWheelScreen extends Screen {
     }
 
     /**
+     * The vanilla entity texture that stands in for a companion's face, keyed by the entity type's
+     * registry path. {@code null} means "not one of the vanilla tameables": the left card then falls
+     * back to the wheel icon it used before, so a modded mob or a moved vanilla texture never makes
+     * the panel throw or draw a missing-texture checkerboard.
+     */
+    private static ResourceLocation mobFaceTexture(LivingEntity entity) {
+        MobFace face = mobFace(entity);
+        return face == null ? null : face.texture();
+    }
+
+    private static MobFace mobFace(LivingEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+        String path = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getPath();
+        switch (path) {
+            case "wolf":
+                return face("textures/entity/wolf/wolf_tame.png", 64, 32);
+            case "cat":
+                return face("textures/entity/cat/cat.png", 64, 32);
+            case "parrot":
+                return face("textures/entity/parrot/parrot_red_blue.png", 32, 32);
+            case "horse":
+                return face("textures/entity/horse/horse_brown.png", 64, 64);
+            case "donkey":
+                return face("textures/entity/donkey/donkey.png", 64, 64);
+            case "mule":
+                return face("textures/entity/mule/mule.png", 64, 64);
+            case "llama":
+                return face("textures/entity/llama/llama_creamy.png", 128, 64);
+            case "trader_llama":
+                return face("textures/entity/llama/trader_llama.png", 128, 64);
+            default:
+                return null;
+        }
+    }
+
+    private static MobFace face(String path, int width, int height) {
+        return new MobFace(ResourceLocation.fromNamespaceAndPath("minecraft", path), width, height);
+    }
+
+    /**
+     * Samples a 16x16 head crop and scales it into the existing icon square through the pose stack.
+     * Scaling the pose -- rather than asking blit for a destination size different from the source
+     * -- keeps us on the one blit overload whose texture-size argument is known to be honoured.
+     */
+    private static void drawMobFace(GuiGraphics graphics, LivingEntity entity, int centerX,
+                                    int centerY, int size) {
+        ResourceLocation texture = mobFaceTexture(entity);
+        MobFace face = mobFace(entity);
+        if (texture == null || face == null) {
+            return;
+        }
+        graphics.pose().pushPose();
+        graphics.pose().translate(centerX - size / 2f, centerY - size / 2f, 0f);
+        float scale = size / 16f;
+        graphics.pose().scale(scale, scale, 1f);
+        graphics.blit(texture, 0, 0, 0, 0, 16, 16, face.width(), face.height());
+        graphics.pose().popPose();
+    }
+
+    /**
      * Scans the level for owned mobs belonging to the local player.
      *
      * <p>The test is {@link OwnableEntity}, not {@code TamableAnimal}: wolves, cats and parrots are
@@ -531,7 +601,7 @@ public final class AdaptationWheelScreen extends Screen {
             int count = data == null ? 0 : data.adaptCount();
             String key = mc.player.getUUID() + "/" + living.getUUID();
             tamedMobs.add(new TamedMob(key, living.getName(),
-                    Component.translatable(living.getType().getDescriptionId()), count, data));
+                    Component.translatable(living.getType().getDescriptionId()), count, data, living));
         }
         tamedMobs.sort((a, b) -> a.name().getString().compareToIgnoreCase(b.name().getString()));
     }
@@ -580,10 +650,14 @@ public final class AdaptationWheelScreen extends Screen {
             }
             visible.clear();
             selected = null;
+            availableDomains.clear();
+            selectedTab = null;
         } else if (selectedMobWheel == null) {
             sectionLabelOverride = mob.name().getString();
             visible.clear();
             selected = null;
+            availableDomains.clear();
+            selectedTab = null;
         } else {
             sectionLabelOverride = mob.name().getString() + "  \u00B7  "
                     + tr("adaptionwheel.gui.tamed_count", mob.adaptCount());
@@ -605,8 +679,27 @@ public final class AdaptationWheelScreen extends Screen {
             Set<String> unique = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             unique.addAll(concepts);
             known.addAll(unique);
+
+            // The shared domain rail needs the same universe in both modes. Here it is the
+            // selected companion's own concepts, so a tab that leads nowhere simply is not shown.
+            availableDomains.clear();
+            for (AdaptationDomain domain : AdaptationDomain.values()) {
+                for (String concept : known) {
+                    if (AdaptationRegistry.domainOf(concept) == domain) {
+                        availableDomains.add(domain);
+                        break;
+                    }
+                }
+            }
+            if (selectedTab != null && !availableDomains.contains(selectedTab)) {
+                selectedTab = null;
+            }
+
             concepts.clear();
             concepts.addAll(unique);
+            if (selectedTab != null) {
+                concepts.removeIf(concept -> AdaptationRegistry.domainOf(concept) != selectedTab);
+            }
             concepts.removeIf(concept -> !matches(concept));
             sortConcepts(concepts);
 
@@ -1147,17 +1240,19 @@ public final class AdaptationWheelScreen extends Screen {
             graphics.pose().popPose();
         }
         WheelUi.fillCircle(graphics, cx, iconCY, iconR, WheelUi.tint(worn ? GOLD : MUTED));
-        if (!mini) {
-            WheelUi.ringCircle(graphics, cx, iconCY, iconR, 0x30FFFFFF);
-            WheelUi.ringCircle(graphics, cx, iconCY, iconR + 2,
-                    WheelUi.withAlpha(worn ? GOLD : MUTED, 0.38f));
-        }
-        if (worn) {
-            int size = mini ? 18 : 40;
+        int size = mini ? 18 : 40;
+        if (mob != null && mobFaceTexture(mob.entity()) != null) {
+            drawMobFace(graphics, mob.entity(), cx, iconCY, size);
+        } else if (worn) {
             WheelUi.itemIcon(graphics, wheelIcon(), cx - size / 2, iconCY - size / 2, size);
         } else {
             WheelUi.centered(graphics, font, WheelUi.MONO_11, "?", cx,
                     iconCY - (mini ? 5 : 7), MUTED, false);
+        }
+        if (!mini) {
+            WheelUi.ringCircle(graphics, cx, iconCY, iconR, 0x30FFFFFF);
+            WheelUi.ringCircle(graphics, cx, iconCY, iconR + 2,
+                    WheelUi.withAlpha(worn ? GOLD : MUTED, 0.38f));
         }
 
         String title = mob == null
@@ -2386,9 +2481,8 @@ public final class AdaptationWheelScreen extends Screen {
             }
         }
 
-        // The domain rail belongs to PLAYER mode; its stale hit rects must not be clickable while
-        // a companion is on screen.
-        if (!tamedTabSelected && mouseX >= tabX && mouseX < tabX + tabW
+        // The rail filters whichever list is on screen -- the player's or the selected companion's.
+        if (mouseX >= tabX && mouseX < tabX + tabW
                 && mouseY >= tabY && mouseY < tabY + tabViewportH) {
             for (TabView tab : tabHits) {
                 if (tab.rect.contains(mouseX, mouseY)) {
@@ -2479,7 +2573,7 @@ public final class AdaptationWheelScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (!tamedTabSelected && mouseX >= tabX - 3 && mouseX < tabX + tabW + 4
+        if (mouseX >= tabX - 3 && mouseX < tabX + tabW + 4
                 && mouseY >= tabY && mouseY < tabY + tabViewportH) {
             tabScroll = Mth.clamp(tabScroll - scrollY * 24.0, 0, maxTabScroll());
             return true;

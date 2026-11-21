@@ -1030,15 +1030,36 @@ public class AdaptionEvents {
         return null;
     }
 
+    /**
+     * The wearer to credit for a kill, which is not always a player.
+     *
+     * <p>The attacker comes from the damage source with a projectile unwrapped to its shooter, so a
+     * wheel-wearing mob (or player) that fired the shot owns the kill. When that attacker wears a
+     * wheel of its own, the kill belongs to it and nothing else -- a wheeled pet is never credited to
+     * its owner, which is the double-credit this replaces. Only when the attacker has no wheel do we
+     * fall back to {@link #killerOf}, which credits a player whose pet did the killing.
+     */
+    private static LivingEntity wheelKillerOf(DamageSource source) {
+        LivingEntity attacker = BossHelper.resolveLiving(source.getDirectEntity());
+        if (attacker == null) {
+            attacker = BossHelper.resolveLiving(source.getEntity());
+        }
+        if (attacker != null && wearsWheel(attacker)) {
+            return attacker;
+        }
+        return killerOf(source);
+    }
+
     @SubscribeEvent
     public static void onMobDeath(LivingDeathEvent event) {
         if (event.getEntity().level().isClientSide) return;
         LivingEntity dead = event.getEntity();
         if (dead instanceof Player) return;
-        ServerPlayer player = killerOf(event.getSource());
-        if (player == null || !wearingWheel(player)) return;
-        PlayerAdaption data = data(player);
-        if (dead instanceof net.minecraft.world.entity.monster.Enemy) {
+        LivingEntity killer = wheelKillerOf(event.getSource());
+        if (killer == null || !wearsWheel(killer)) return;
+        PlayerAdaption data = data(killer);
+        ServerPlayer player = Wearers.asPlayer(killer);
+        if (player != null && dead instanceof net.minecraft.world.entity.monster.Enemy) {
             MartialArts.onFistKill(player, data, dead, event.getSource());
         }
         if (data.adversityActive || !AdaptionConfig.ENABLE_LOOT.get() || BossHelper.isBoss(dead)) return;
@@ -1046,8 +1067,8 @@ public class AdaptionEvents {
         String concept = Concepts.drop(pathOf(dead));
         data.killCounts.merge(concept, 1, Integer::sum);
         int newLevel = AdaptionConfig.dropLevelFromKills(data.kills(concept));
-        if (newLevel > data.level(concept) && newLevel <= PlayerAdaption.MAX_LEVEL) {
-            startDropTask(player, data, concept);
+        if (newLevel > data.level(concept) && newLevel <= maxLevelFor(killer)) {
+            startDropTask(killer, data, concept);
         }
     }
 
@@ -1071,24 +1092,28 @@ public class AdaptionEvents {
         event.setDroppedExperience((int) Math.min(base * (1.0 + bonusPct / 100.0), Integer.MAX_VALUE / 4));
     }
 
-    private static void startDropTask(ServerPlayer player, PlayerAdaption data, String concept) {
-        if (data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
+    private static void startDropTask(LivingEntity killer, PlayerAdaption data, String concept) {
+        if (data.level(concept) >= maxLevelFor(killer)) return;
 
         for (AdaptionTask task : data.tasks) {
             if (task.concept.equals(concept)) return;
         }
         data.tasks.add(new AdaptionTask(concept, 20, 20));
-        player.sendSystemMessage(Component.translatable("adaptionwheel.msg.analyzing", Concepts.chatName(concept))
-                .withStyle(ChatFormatting.GOLD));
+        ServerPlayer player = Wearers.asPlayer(killer);
+        if (player != null) {
+            player.sendSystemMessage(Component.translatable("adaptionwheel.msg.analyzing", Concepts.chatName(concept))
+                    .withStyle(ChatFormatting.GOLD));
+        }
     }
 
     @SubscribeEvent
     public static void onMobDrops(LivingDropsEvent event) {
         if (event.getEntity().level().isClientSide) return;
         LivingEntity dead = event.getEntity();
-        ServerPlayer player = killerOf(event.getSource());
-        if (player == null || !wearingWheel(player)) return;
-        PlayerAdaption data = data(player);
+        LivingEntity killer = wheelKillerOf(event.getSource());
+        if (killer == null || !wearsWheel(killer)) return;
+        ServerPlayer player = Wearers.asPlayer(killer);
+        PlayerAdaption data = data(killer);
         if (data.adversityActive || !AdaptionConfig.ENABLE_LOOT.get() || BossHelper.isBoss(dead)) return;
 
         String concept = Concepts.drop(pathOf(dead));
@@ -1097,7 +1122,7 @@ public class AdaptionEvents {
 
         double increase = AdaptionConfig.lootBonus(level);
         int extraRolls = (int) (increase / 100.0);
-        if (player.getRandom().nextDouble() < increase / 100.0 - extraRolls) extraRolls++;
+        if (killer.getRandom().nextDouble() < increase / 100.0 - extraRolls) extraRolls++;
         if (extraRolls <= 0) return;
         extraRolls = Math.min(extraRolls, 200);
 
@@ -1107,19 +1132,28 @@ public class AdaptionEvents {
                 .withParameter(LootContextParams.THIS_ENTITY, dead)
                 .withParameter(LootContextParams.ORIGIN, dead.position())
                 .withParameter(LootContextParams.DAMAGE_SOURCE, source)
-                .withLuck(player.getLuck());
-        if (source.getEntity() instanceof LivingEntity killer) {
-            builder.withOptionalParameter(LootContextParams.ATTACKING_ENTITY, killer);
+                .withLuck(player != null ? player.getLuck() : 0.0F);
+        if (source.getEntity() instanceof LivingEntity killerEntity) {
+            builder.withOptionalParameter(LootContextParams.ATTACKING_ENTITY, killerEntity);
         }
         if (source.getDirectEntity() instanceof LivingEntity directEntity) {
             builder.withOptionalParameter(LootContextParams.DIRECT_ATTACKING_ENTITY, directEntity);
         }
-        builder.withOptionalParameter(LootContextParams.LAST_DAMAGE_PLAYER, player);
+        // LAST_DAMAGE_PLAYER and luck are player-only: a mob has no luck and no player identity.
+        if (player != null) {
+            builder.withOptionalParameter(LootContextParams.LAST_DAMAGE_PLAYER, player);
+        }
         LootParams params = builder.create(LootContextParamSets.ENTITY);
 
         java.util.List<ItemStack> baseDrops = new java.util.ArrayList<>();
         for (ItemEntity ie : event.getDrops()) {
-            if (!ie.getItem().isEmpty()) baseDrops.add(ie.getItem().copy());
+            ItemStack drop = ie.getItem();
+            // Curios drops the worn wheel into this same event before we run. Its loot table is
+            // usually empty for a pet, so the fallback below would copy every base drop and hand
+            // out a second wheel. Equipment is never loot.
+            if (!drop.isEmpty() && !ru.adaptionwheel.item.MahoragaWheelItem.isWheel(drop)) {
+                baseDrops.add(drop.copy());
+            }
         }
 
         boolean usedFallback = false;
