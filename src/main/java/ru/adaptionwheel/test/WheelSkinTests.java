@@ -39,4 +39,18 @@ public class WheelSkinTests {
 
         helper.succeed();
     }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theSkinWhitelistRejectsUnknownIds(GameTestHelper helper) {
+        helper.assertTrue(WheelSkins.isValid("dharma"),
+                "the dharma id must be accepted by the whitelist");
+        helper.assertTrue(WheelSkins.isValid("orbital"),
+                "the orbital id must be accepted by the whitelist");
+        helper.assertTrue(!WheelSkins.isValid("orbital:else"),
+                "a namespaced/unknown skin id must be rejected by the whitelist");
+        helper.assertTrue(!WheelSkins.isValid(""),
+                "an empty skin id must be rejected by the whitelist");
+
+        helper.succeed();
+    }
 }
