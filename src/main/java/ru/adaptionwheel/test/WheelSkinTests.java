@@ -53,4 +53,32 @@ public class WheelSkinTests {
 
         helper.succeed();
     }
+
+    /**
+     * The CPU-lit fallback cannot feed the orbital mesh's vertex colours straight into
+     * {@code setColor}: red carries a material id, so the three shells would draw black,
+     * dark grey and red. These are the explicit tints it must decode that id into instead.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void materialIdsDecodeToFallbackTints(GameTestHelper helper) {
+        assertTint(helper, WheelSkins.tintForMaterial(0.0f), 0.35f, 0.35f, 0.35f, "dark metal");
+        assertTint(helper, WheelSkins.tintForMaterial(0.5f), 0.05f, 0.80f, 1.00f, "emissive shell");
+        assertTint(helper, WheelSkins.tintForMaterial(1.0f), 1.00f, 1.00f, 1.00f, "fabric");
+
+        helper.succeed();
+    }
+
+    private static void assertTint(GameTestHelper helper, float[] actual,
+                                   float r, float g, float b, String material) {
+        helper.assertTrue(actual != null && actual.length == 3,
+                "tintForMaterial must return three channels for " + material);
+        if (actual == null || actual.length != 3) {
+            return;
+        }
+        helper.assertTrue(Math.abs(actual[0] - r) < 0.001f
+                        && Math.abs(actual[1] - g) < 0.001f
+                        && Math.abs(actual[2] - b) < 0.001f,
+                "the fallback tint for " + material + " must be (" + r + ", " + g + ", " + b
+                        + "), got (" + actual[0] + ", " + actual[1] + ", " + actual[2] + ")");
+    }
 }
