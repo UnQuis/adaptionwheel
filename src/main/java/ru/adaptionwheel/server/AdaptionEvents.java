@@ -435,10 +435,38 @@ public class AdaptionEvents {
         stack.set(ModDataComponents.WHEEL_DATA, WheelData.fromPlayer(data));
     }
 
+    /**
+     * The highest level a wearer may reach. Players and tamed companions get the full ladder;
+     * a wild mob stops at 7, one below max, because level 8 is full immunity/i-frames in this mod.
+     * One-time phenomena (Env_/Debuff_/mutations) are unaffected: they have no levels.
+     */
+    public static int maxLevelFor(LivingEntity entity) {
+        if (entity instanceof ServerPlayer) {
+            return PlayerAdaption.MAX_LEVEL;
+        }
+        if (entity instanceof net.minecraft.world.entity.OwnableEntity owned
+                && owned.getOwnerUUID() != null) {
+            return PlayerAdaption.MAX_LEVEL;
+        }
+        return PlayerAdaption.MAX_LEVEL - 1;
+    }
+
+    private static void capWildMobLevels(LivingEntity entity, PlayerAdaption data) {
+        int cap = maxLevelFor(entity);
+        if (cap >= PlayerAdaption.MAX_LEVEL) {
+            return;
+        }
+        data.levels.replaceAll((concept, level) -> Math.min(level, cap));
+        data.invalidateAdaptCount();
+    }
+
     private static void loadFromItem(LivingEntity entity, PlayerAdaption data) {
         getWheelStack(entity).ifPresent(stack -> {
             WheelData wd = stack.get(ModDataComponents.WHEEL_DATA);
-            if (wd != null) wd.loadInto(data);
+            if (wd != null) {
+                wd.loadInto(data);
+                capWildMobLevels(entity, data);
+            }
         });
     }
 
@@ -1447,7 +1475,7 @@ public class AdaptionEvents {
         double hpPct = AdaptionConfig.REGEN_HP_THRESHOLD.get() / 100.0;
         int injureLevel = data.levelOrZero(Concepts.SELF_DAMAGE);
         if (entity.getHealth() <= entity.getMaxHealth() * hpPct) {
-            if (injureLevel < PlayerAdaption.MAX_LEVEL) {
+            if (injureLevel < maxLevelFor(entity)) {
                 startTask(entity, data, Concepts.SELF_DAMAGE, (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20));
             }
         }
@@ -2045,7 +2073,7 @@ public class AdaptionEvents {
     public static void startTask(LivingEntity entity, PlayerAdaption data, String concept, int timer) {
 
         if (data.adversityActive || !data.isEnabled(concept) || data.isAdapted(concept)
-                || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
+                || data.level(concept) >= maxLevelFor(entity)) return;
 
         if (data.tasks.size() >= AdaptionConfig.MAX_SIMULTANEOUS_ADAPTATIONS.get()) return;
         for (AdaptionTask task : data.tasks) {
@@ -2074,7 +2102,7 @@ public class AdaptionEvents {
                                           boolean accelerate, int accelerationTicks) {
 
         if (data.adversityActive || !data.isEnabled(concept) || data.isAdapted(concept)
-                || data.level(concept) >= PlayerAdaption.MAX_LEVEL) return;
+                || data.level(concept) >= maxLevelFor(entity)) return;
         AdaptionTask existing = null;
         for (AdaptionTask task : data.tasks) {
             if (task.concept.equals(concept)) { existing = task; break; }
@@ -2154,13 +2182,13 @@ public class AdaptionEvents {
         ServerPlayer player = Wearers.asPlayer(entity);
         Style style = Style.EMPTY.withColor(TextColor.fromRgb(Concepts.color(concept)));
         boolean isLevelBased = Concepts.isLevelBased(concept);
+        int cap = maxLevelFor(entity);
         if (isLevelBased) {
             int level;
             if (Concepts.isDrop(concept)) {
-                level = Math.min(AdaptionConfig.dropLevelFromKills(data.kills(concept)), PlayerAdaption.MAX_LEVEL);
+                level = Math.min(AdaptionConfig.dropLevelFromKills(data.kills(concept)), cap);
             } else {
-                level = Math.min(targetLevel < 0 ? data.level(concept) + 1 : targetLevel,
-                        PlayerAdaption.MAX_LEVEL);
+                level = Math.min(targetLevel < 0 ? data.level(concept) + 1 : targetLevel, cap);
             }
             data.levels.put(concept, level);
             if (player != null) {
@@ -2180,7 +2208,7 @@ public class AdaptionEvents {
         data.addHistory(concept);
         data.targetRotation += (float) (Math.PI / 2);
         data.invalidateAdaptCount();
-        boolean maxedOut = isLevelBased && data.level(concept) >= PlayerAdaption.MAX_LEVEL;
+        boolean maxedOut = isLevelBased && data.level(concept) >= cap;
         if (maxedOut) {
             playMaxVoice(entity);
         } else {

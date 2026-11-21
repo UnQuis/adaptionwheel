@@ -218,6 +218,27 @@ public class MobWearerTests {
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void aWildMobNeverReachesLevelEight(GameTestHelper helper) {
+        Zombie mob = spawn(helper);
+        String concept = Concepts.type(AdaptionCategory.MOB);
+        equip(helper, mob, wheelWith(Map.of(concept, 8), List.of()));
+
+        AdaptionEvents.tickWearer(mob, AdaptionEvents.data(mob), true);
+        PlayerAdaption data = AdaptionEvents.data(mob);
+        helper.assertTrue(data.level(concept) == 7,
+                "a wheel loaded with level 8 must be capped to 7 on an untamed mob, got "
+                        + data.level(concept));
+
+        for (int i = 0; i < 3; i++) {
+            AdaptionEvents.grantConceptLevel(mob, data, concept);
+        }
+        helper.assertTrue(data.level(concept) == 7,
+                "further grants must never push a wild mob past the level-7 cap, got "
+                        + data.level(concept));
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void adversityDoesNotKeepAWheelWearingMobAlive(GameTestHelper helper) {
         Zombie mob = spawn(helper);
         equip(helper, mob, emptyWheel());

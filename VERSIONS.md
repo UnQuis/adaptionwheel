@@ -33,7 +33,10 @@ Changes made after the 0.2.0 section was written; fold them into the next releas
 - Knockback denial and harmful-effect denial (Debuff_ adaptations) now work for mob wearers.
 - **Adversity is player-only again.** It no longer resurrects wheel-wearing mobs mid-fight;
   a mob can die normally.
-- 206 gametests now pass (one new regression test pins mob mortality).
+- **Untamed mobs cap at level 7.** Level 8 is full immunity/i-frames, so wild wearers stop one
+  rung below it; tamed companions and players keep the full ladder. One-time phenomena
+  (Env_/Debuff_/mutations) are unaffected. A wheel carrying level 8 is clamped on equip.
+- 207 gametests now pass (new tests pin mob mortality and the level-7 cap).
 
 ---
 
