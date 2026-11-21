@@ -719,6 +719,12 @@ public class AdaptionEvents {
 
     private static boolean tryAdversitySurvival(LivingEntity entity, PlayerAdaption data, float damage) {
         ServerPlayer player = Wearers.asPlayer(entity);
+        // Adversity is strictly a player mechanic: a tamed mob wearing a wheel must be allowed to
+        // die. Without this, the survival triggered on every lethal hit, reset its own cooldown and
+        // ran again on the next hit, so mob health piled into the thousands instead of dropping.
+        if (player == null) {
+            return false;
+        }
         if (!AdaptionConfig.ENABLE_ADVERSITY.get()
                 || (player != null && player.isCreative())
                 || data.adversityCooldownTimer > 0 || data.adversityActive
@@ -1203,9 +1209,9 @@ public class AdaptionEvents {
 
     /**
      * One tick of a wheel wearer, player or mob. Everything that reads or mutates {@link PlayerAdaption}
-     * is shared; everything that needs a {@link ServerPlayer} (food, abilities, messages, voice,
-     * cinematics, the HUD sync, stat modifiers, rituals and advancements) is gated on the asPlayer
-     * lookup so a mob can never reach it.
+     * is shared, as are the attribute-based stat modifiers (a mob has attributes too). Everything that
+     * needs a {@link ServerPlayer} (food, abilities, messages, voice, cinematics, the HUD sync, rituals
+     * and advancements) is gated on the asPlayer lookup so a mob can never reach it.
      */
     public static void tickWearer(LivingEntity entity, PlayerAdaption data, boolean wearing) {
         ServerPlayer player = Wearers.asPlayer(entity);
@@ -1217,7 +1223,9 @@ public class AdaptionEvents {
             // slot a moment late, so joining a world silently cancelled every analysis that was
             // running. Unequipping already owns that reset; an equip has nothing to clear.
             loadFromItem(entity, data);
-            if (player != null) applyStats(player, data);
+            // Stat modifiers are attribute-based and exist on every LivingEntity. A mob that
+            // equips a trained wheel must get the same health/armor/speed grants a player does.
+            applyStats(entity, data);
         }
         if (!wearing && data.wasWearing) {
 
@@ -1245,6 +1253,9 @@ public class AdaptionEvents {
                 applyStats(player, data);
                 sync(player, data, false);
             } else {
+                // data.resetForUnequip() left the mob's data empty, so this removes the modifiers
+                // the equip transition installed. Keep revokeWearableState/ MartialArts player-only.
+                applyStats(entity, data);
                 clearWearerCaches(entity.getUUID());
             }
         }
@@ -1263,8 +1274,8 @@ public class AdaptionEvents {
                     revokeWearableState(player);
                 }
                 loadFromItem(entity, data);
+                applyStats(entity, data);
                 if (player != null) {
-                    applyStats(player, data);
                     sync(player, data, true);
                 }
             }
@@ -1298,8 +1309,8 @@ public class AdaptionEvents {
                 grantOneTime(entity, data, Concepts.ADVERSITY);
 
                 playAdaptVoice(entity, 1f, 1f);
+                applyStats(entity, data);
                 if (player != null) {
-                    applyStats(player, data);
                     player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adversity_done")
                             .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
                 }
@@ -1461,10 +1472,14 @@ public class AdaptionEvents {
             data.wheelRotation += 0.2f;
         }
 
+        // Stat modifiers must be re-asserted on every wearer, not just players: attribute values
+        // can be reset by mob AI / attribute reloads, and a mob has no other path that reapplies
+        // them. The 1 Hz cadence is the same one players have always used.
+        if (entity.tickCount % 20 == 0) {
+            applyStats(entity, data);
+        }
+
         if (player != null) {
-            if (entity.tickCount % 20 == 0) {
-                applyStats(player, data);
-            }
             restorePendingRespawnHealth(player);
 
             SynergyEffects.refresh(player, data);
@@ -2097,11 +2112,13 @@ public class AdaptionEvents {
     public static void grantConceptUpTo(LivingEntity entity, PlayerAdaption data, String concept,
                                         int targetLevel) {
         applyGrant(entity, data, concept, targetLevel);
-        // Stat modifiers and the HUD sync are player-only. Env effects and the item save are safe
-        // for any wearer (food is guarded inside applyEnvEffects), so both halves share them.
+        // Stat modifiers are attribute-based and safe for any wearer; a newly granted level must
+        // raise a mob's health/speed just as it does a player's. Only the HUD sync needs a real
+        // ServerPlayer. Env effects and the item save are safe for any wearer too (food is guarded
+        // inside applyEnvEffects).
+        applyStats(entity, data);
         ServerPlayer player = Wearers.asPlayer(entity);
         if (player != null) {
-            applyStats(player, data);
             sync(player, data, true);
         }
         applyEnvEffects(entity, data);
@@ -2503,19 +2520,20 @@ public class AdaptionEvents {
 
     @SubscribeEvent
     public static void onKnockback(LivingKnockBackEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || player.level().isClientSide) {
+        LivingEntity entity = event.getEntity();
+        if (entity.level().isClientSide) {
             return;
         }
-        if (!wearingWheel(player)) {
+        if (!isWearingWheel(entity)) {
             return;
         }
-        PlayerAdaption data = data(player);
+        PlayerAdaption data = data(entity);
         if (data.active(Concepts.ENV_KNOCKBACK)) {
 
             event.setCanceled(true);
         } else if (AdaptionConfig.ENABLE_ENVIRONMENT.get() && !data.adversityActive) {
 
-            startOrAccelerate(player, data, Concepts.ENV_KNOCKBACK,
+            startOrAccelerate(entity, data, Concepts.ENV_KNOCKBACK,
                     (int) (AdaptionConfig.DEFENSE_ANALYSIS_SECONDS.get() * 20), true);
         }
     }
@@ -2568,9 +2586,8 @@ public class AdaptionEvents {
 
     @SubscribeEvent
     public static void onEffectApplicable(MobEffectEvent.Applicable event) {
-        if (event.getEntity() instanceof ServerPlayer player
-                && !player.level().isClientSide
-                && wearingWheel(player)) {
+        LivingEntity entity = event.getEntity();
+        if (!entity.level().isClientSide && isWearingWheel(entity)) {
             MobEffectInstance instance = event.getEffectInstance();
             if (instance != null && !instance.getEffect().value().isBeneficial()) {
                 String concept = Concepts.debuff(effectKey(instance));
@@ -2578,7 +2595,7 @@ public class AdaptionEvents {
                 // answers "do you have it", so the denial kept firing after the adaptation was
                 // switched off and the debuff could still never be received. isAdapted is still
                 // right for the altar, shedding and the panel itself, which must show what is owned.
-                if (data(player).active(concept)) {
+                if (data(entity).active(concept)) {
                     event.setResult(MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
                 }
             }
@@ -2616,21 +2633,26 @@ public class AdaptionEvents {
         SynergyEffects.forget(player);
     }
 
-    private static void applyStats(ServerPlayer player, PlayerAdaption data) {
+    /**
+     * Applies the stat side of the wheel to any wearer. Every attribute lookup goes through
+     * {@link #applyStat}, which ignores a {@code null} {@link AttributeInstance}, so a mob that
+     * simply does not carry one of these attributes (swim speed, submerged mining, ...) is safe.
+     */
+    private static void applyStats(LivingEntity entity, PlayerAdaption data) {
         int count = data.getAdaptCount();
 
-        applyStat(player.getAttribute(Attributes.MAX_HEALTH), HP_MODIFIER,
+        applyStat(entity.getAttribute(Attributes.MAX_HEALTH), HP_MODIFIER,
                 count * AdaptionConfig.BONUS_HP_PCT.get() / 100.0,
                 AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
-        applyStat(player.getAttribute(Attributes.ARMOR), ARMOR_MODIFIER,
+        applyStat(entity.getAttribute(Attributes.ARMOR), ARMOR_MODIFIER,
                 count * AdaptionConfig.BONUS_ARMOR_FLAT.get(),
                 AttributeModifier.Operation.ADD_VALUE);
 
         // Apply the requested movement bonuses directly as attributes (no potion effects); both
         // scale linearly and stop increasing after the 400-adaptation progression cap.
-        applyStat(player.getAttribute(Attributes.MOVEMENT_SPEED), ADAPTATION_COUNT_SPEED_MODIFIER,
+        applyStat(entity.getAttribute(Attributes.MOVEMENT_SPEED), ADAPTATION_COUNT_SPEED_MODIFIER,
                 AdaptationProgression.movementSpeedBonus(count), AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL);
-        applyStat(player.getAttribute(Attributes.JUMP_STRENGTH), ADAPTATION_COUNT_JUMP_MODIFIER,
+        applyStat(entity.getAttribute(Attributes.JUMP_STRENGTH), ADAPTATION_COUNT_JUMP_MODIFIER,
                 AdaptationProgression.jumpStrengthBonus(count), AttributeModifier.Operation.ADD_VALUE);
 
         boolean liquid = data.isEnabled(Concepts.ENV_LIQUID) && data.active(Concepts.ENV_LIQUID);
@@ -2652,18 +2674,18 @@ public class AdaptionEvents {
                 ? Math.clamp(AdaptionConfig.AQUATIC_SWIM_SPEED_BONUS.get(), 0.0, 0.35)
                 : 0.0;
         double efficiency = aquatic ? 0.45 : liquid ? 0.22 : 0.0;
-        applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), SWIM_MODIFIER,
+        applyStat(entity.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), SWIM_MODIFIER,
                 efficiency, AttributeModifier.Operation.ADD_VALUE);
-        applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), LIQUID_SPEED_MODIFIER,
+        applyStat(entity.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), LIQUID_SPEED_MODIFIER,
                 swim, AttributeModifier.Operation.ADD_VALUE);
         // The two names are kept as one modifier each for config compatibility, but only one of
         // them is ever non-zero now; the old saved modifiers are removed by the amount check.
-        applyStat(player.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), AQUATIC_SWIM_SPEED_MODIFIER,
+        applyStat(entity.getAttribute(net.neoforged.neoforge.common.NeoForgeMod.SWIM_SPEED), AQUATIC_SWIM_SPEED_MODIFIER,
                 0.0, AttributeModifier.Operation.ADD_VALUE);
-        applyStat(player.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), AQUATIC_SWIM_EFFICIENCY_MODIFIER,
+        applyStat(entity.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY), AQUATIC_SWIM_EFFICIENCY_MODIFIER,
                 0.0, AttributeModifier.Operation.ADD_VALUE);
 
-        applyStat(player.getAttribute(Attributes.SUBMERGED_MINING_SPEED), SUBMERGED_MINING_MODIFIER,
+        applyStat(entity.getAttribute(Attributes.SUBMERGED_MINING_SPEED), SUBMERGED_MINING_MODIFIER,
                 liquid ? 0.8 : 0.0, AttributeModifier.Operation.ADD_VALUE);
     }
 

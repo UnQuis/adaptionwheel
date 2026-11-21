@@ -17,7 +17,23 @@ Format:
 
 ## Unreleased
 
-Nothing yet. Add new work here before it is released.
+Changes made after the 0.2.0 section was written; fold them into the next release.
+
+### Added
+
+- Two separate top-level menu tabs, `PLAYER` and `TAMED`. `TAMED` is no longer an item in the
+  vertical domain rail; selecting it shows a full companion list and a dedicated left card with
+  that mob's wheel status. The player view is unchanged.
+
+### Changed / Fixed
+
+- Wheel-wearing mobs now receive **all passive buffs**, not just damage reduction:
+  `applyStats` (HP, armor, movement speed, jump strength, swim modifiers) runs for mobs, and
+  the ice/slime/honey/web/powder-snow/berry-bush/bubble-column mixins accept `LivingEntity`.
+- Knockback denial and harmful-effect denial (Debuff_ adaptations) now work for mob wearers.
+- **Adversity is player-only again.** It no longer resurrects wheel-wearing mobs mid-fight;
+  a mob can die normally.
+- 206 gametests now pass (one new regression test pins mob mortality).
 
 ---
 

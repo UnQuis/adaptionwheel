@@ -217,6 +217,19 @@ public class MobWearerTests {
         helper.succeed();
     }
 
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void adversityDoesNotKeepAWheelWearingMobAlive(GameTestHelper helper) {
+        Zombie mob = spawn(helper);
+        equip(helper, mob, emptyWheel());
+        AdaptionEvents.tickWearer(mob, AdaptionEvents.data(mob), true);
+
+        AdaptionEvents.handleDirectHealthReduction(mob, 0f);
+
+        helper.assertTrue(mob.getHealth() <= 0f,
+                "Adversity is a player mechanic: a wheel-wearing mob must be able to die");
+        helper.succeed();
+    }
+
     /** A freshly created wheel carrying the exact data the mod's own equip command writes. */
     private static ItemStack wheelWith(Map<String, Integer> levels, List<AdaptionTask> tasks) {
         ItemStack stack = new ItemStack(ModItems.MAHORAGA_WHEEL.get());

@@ -198,6 +198,7 @@ public final class AdaptationWheelScreen extends Screen {
     private final List<CardView> cards = new ArrayList<>();
     private final List<AbilityHit> abilityHits = new ArrayList<>();
     private final List<TabView> tabHits = new ArrayList<>();
+    private final List<ModeTabHit> modeTabHits = new ArrayList<>();
     private final List<String> known = new ArrayList<>();
     private final List<String> visible = new ArrayList<>();
     private final List<AdaptationDomain> availableDomains = new ArrayList<>();
@@ -255,6 +256,13 @@ public final class AdaptationWheelScreen extends Screen {
     private int tabY;
     private int tabW;
     private int tabViewportH;
+    // The two top-level mode tabs (PLAYER / TAMED). They live in the header, left of the centred
+    // title, and are a different control from the domain rail below -- hence their own geometry.
+    private int modeTabX;
+    private int modeTabY;
+    private int modeTabW;
+    private int modeTabH;
+    private int modeTabGap;
     private int listX;
     private int listW;
     private int listTop;
@@ -309,12 +317,23 @@ public final class AdaptationWheelScreen extends Screen {
 
         renderBackground(graphics, mouseX, mouseY, partialTick);
         drawHeader(graphics);
+        drawModeTabs(graphics);
         drawSearch(graphics);
         if (twoColumn) {
-            drawLeftCard(graphics);
+            // The companion mode has its own left card. It must never fall through to the player
+            // card, which reads ClientAdaption.wearingWheel and the player's 331/331 statistics.
+            if (tamedTabSelected) {
+                drawTamedLeftCard(graphics);
+            } else {
+                drawLeftCard(graphics);
+            }
             drawFloatingWheel(graphics);
         }
-        drawTabs(graphics);
+        // The domain rail is part of the PLAYER mode only. In TAMED mode it would offer domain
+        // filters over a snapshot that has nothing to do with the player's own domains.
+        if (!tamedTabSelected) {
+            drawTabs(graphics);
+        }
         drawRightColumn(graphics);
         drawFooter(graphics);
     }
@@ -812,6 +831,17 @@ public final class AdaptationWheelScreen extends Screen {
         titleWidth = WheelUi.trackedWidth(font, titleFont, titleText, titleTracking);
 
         titleY = Math.max(20, height / 18);
+        // Sit the two mode tabs on the title row, strictly to the LEFT of the centred title. The
+        // title is never moved or resized for them, so the player view stays pixel-identical; only
+        // the space that was already empty gets the controls. On a narrow window the title shrinks
+        // (see the fit loop above), which is what frees the room for the tabs.
+        int titleLeft = width / 2 - titleWidth / 2;
+        int roomForTabs = titleLeft - margin - 12;
+        modeTabGap = 8;
+        modeTabH = 22;
+        modeTabW = Mth.clamp((roomForTabs - modeTabGap) / 2, 48, 96);
+        modeTabX = margin;
+        modeTabY = titleY - 1;
         ruleY = titleY + titleSize + 10;
         contentTop = Math.max(ruleY + 24, (int) (height * 0.19f));
         searchRect = new Rect(searchX, titleY + titleSize / 2 - 10, searchW, 20);
@@ -915,9 +945,9 @@ public final class AdaptationWheelScreen extends Screen {
         return Math.max(0, contentHeight() - Math.max(0, viewport));
     }
 
-    /** ALL + every owned domain + the companions pseudo-tab. */
+    /** The domain rail is ALL + every owned domain. TAMED is a top-level mode tab, not a rail row. */
     private int tabCount() {
-        return availableDomains.size() + 2;
+        return availableDomains.size() + 1;
     }
 
     private int maxTabScroll() {
@@ -1075,6 +1105,135 @@ public final class AdaptationWheelScreen extends Screen {
             WheelUi.centered(graphics, font, WheelUi.MONO_8, "\u00D7",
                     clearRect.x + clearRect.w / 2, y + 6, clearColor, false);
         }
+    }
+
+    /**
+     * The companion mode's left card. It describes the SELECTED MOB, not the player: the wheel
+     * status comes from that mob's {@link WheelData} and the two counters come from {@link #known}
+     * / {@link #source}, which {@code refreshTamedRows} rebuilt from that same wheel. Nothing here
+     * reads {@link ClientAdaption} -- a mob without a wheel honestly shows NO WHEEL and 0 / 0.
+     */
+    private void drawTamedLeftCard(GuiGraphics graphics) {
+        leftToggle = Rect.EMPTY;
+        int x = leftX;
+        int y = leftY;
+        int w = leftW;
+        int h = leftH;
+        boolean mini = h < 190;
+        ResourceLocation fontId = mini ? WheelUi.MONO_9 : WheelUi.MONO_11;
+
+        WheelUi.card(graphics, x, y, w, h, mini ? 10 : 12, CARD, WheelUi.BORDER);
+        int lineX = x + (mini ? 12 : 18);
+        int lineRight = x + w - (mini ? 12 : 18);
+        int segments = mini ? 24 : 36;
+        for (int i = 0; i < segments; i++) {
+            int sx = lineX + (lineRight - lineX) * i / segments;
+            int ex = lineX + (lineRight - lineX) * (i + 1) / segments;
+            graphics.fill(sx, y + 1, Math.max(sx + 1, ex), y + 3,
+                    WheelUi.mix(GOLD, ROSE, i / (float) (segments - 1)));
+        }
+
+        TamedMob mob = findMob(selectedMobKey);
+        boolean worn = mob != null && mob.wheel() != null;
+        int cx = x + w / 2;
+        int iconR = mini ? 13 : 34;
+        int iconCY = mini ? y + 22 : y + 62;
+
+        if (!mini) {
+            graphics.pose().pushPose();
+            graphics.pose().translate(cx, iconCY + 32, 0);
+            graphics.pose().scale(1f, 0.20f, 1f);
+            WheelUi.fillCircle(graphics, 0, 0, 22, 0x66000000);
+            graphics.pose().popPose();
+        }
+        WheelUi.fillCircle(graphics, cx, iconCY, iconR, WheelUi.tint(worn ? GOLD : MUTED));
+        if (!mini) {
+            WheelUi.ringCircle(graphics, cx, iconCY, iconR, 0x30FFFFFF);
+            WheelUi.ringCircle(graphics, cx, iconCY, iconR + 2,
+                    WheelUi.withAlpha(worn ? GOLD : MUTED, 0.38f));
+        }
+        if (worn) {
+            int size = mini ? 18 : 40;
+            WheelUi.itemIcon(graphics, wheelIcon(), cx - size / 2, iconCY - size / 2, size);
+        } else {
+            WheelUi.centered(graphics, font, WheelUi.MONO_11, "?", cx,
+                    iconCY - (mini ? 5 : 7), MUTED, false);
+        }
+
+        String title = mob == null
+                ? tr("adaptionwheel.gui.tamed_header")
+                : mob.name().getString();
+        WheelUi.centered(graphics, font, fontId,
+                WheelUi.fit(font, fontId, WheelUi.upper(title), w - 24),
+                cx, mini ? y + 42 : y + 104, INK, false);
+        String subtitle = mob == null
+                ? tr("adaptionwheel.gui.tamed_select_hint")
+                : WheelUi.upper(mob.type().getString()) + "  \u00B7  "
+                        + tr("adaptionwheel.gui.tamed_count", mob.adaptCount());
+        WheelUi.centered(graphics, font, WheelUi.MONO_8,
+                WheelUi.fit(font, WheelUi.MONO_8, subtitle, w - 24),
+                cx, mini ? y + 55 : y + 120, MUTED, false);
+
+        String status = tr(worn
+                ? "adaptionwheel.gui.menu_equipped"
+                : "adaptionwheel.gui.tamed_no_wheel_short");
+        int statusW = font.width(WheelUi.mono(WheelUi.MONO_8, status)) + 24;
+        int pillY = mini ? y + 70 : y + 148;
+        WheelUi.fillRounded(graphics, cx - statusW / 2, pillY, statusW, mini ? 14 : 17, 8,
+                worn ? GREEN_BG : 0xFF202024);
+        WheelUi.fillCircle(graphics, cx - statusW / 2 + 9, pillY + (mini ? 7 : 8), 2,
+                worn ? GREEN : FAINT);
+        WheelUi.centered(graphics, font, WheelUi.MONO_8, status, cx + 3,
+                pillY + (mini ? 3 : 4), worn ? GREEN : MUTED, false);
+
+        // Derived only from the selected companion's wheel: zero when nobody is selected.
+        int statsY = mini ? y + 92 : y + 174;
+        int halfGap = mini ? 32 : 40;
+        ResourceLocation countFont = mini ? WheelUi.MONO_14 : WheelUi.MONO_20;
+        WheelUi.centered(graphics, font, countFont, String.valueOf(acquiredCount()),
+                cx - halfGap, statsY, INK, false);
+        WheelUi.centered(graphics, font, WheelUi.MONO_8,
+                WheelUi.upper(tr("adaptionwheel.gui.menu_adaptations")),
+                cx - halfGap, statsY + (mini ? 15 : 22), MUTED, false);
+        WheelUi.centered(graphics, font, countFont, String.valueOf(activeCount()),
+                cx + halfGap, statsY, INK, false);
+        WheelUi.centered(graphics, font, WheelUi.MONO_8,
+                WheelUi.upper(tr("adaptionwheel.gui.menu_active")),
+                cx + halfGap, statsY + (mini ? 15 : 22), MUTED, false);
+        graphics.fill(cx, statsY + 2, cx + 1, statsY + (mini ? 19 : 26), 0x24FFFFFF);
+
+        if (mini ? h >= 172 : h >= 280) {
+            int detailY = mini ? y + 118 : y + 226;
+            graphics.fill(x + (mini ? 12 : 20), detailY - 10,
+                    x + w - (mini ? 12 : 20), detailY - 9, HAIRLINE);
+            drawTamedDetail(graphics, x + (mini ? 12 : 20), detailY, w - (mini ? 24 : 40));
+        }
+    }
+
+    /** A single read-only concept line for the companion card. No switch, no payload. */
+    private void drawTamedDetail(GuiGraphics graphics, int x, int y, int w) {
+        String focus = focusConcept();
+        if (focus == null) {
+            WheelUi.text(graphics, font, WheelUi.MONO_8,
+                    tr("adaptionwheel.gui.menu_no_selection"), x, y, INK_SOFT, false);
+            return;
+        }
+        int accent = safeColor(Concepts.color(focus));
+        WheelUi.fillRounded(graphics, x, y - 2, 18, 18, 4, WheelUi.tint(accent));
+        WheelUi.itemIcon(graphics, icon(focus), x + 2, y, 14);
+        WheelUi.text(graphics, font, WheelUi.MONO_8,
+                WheelUi.fit(font, WheelUi.MONO_8, WheelUi.upper(menuName(focus).getString()), w - 24),
+                x + 24, y - 1, INK, false);
+        AdaptionTask task = taskFor(focus);
+        String sub = WheelUi.upper(AdaptationRegistry.domainOf(focus).translation().getString())
+                + "  \u00B7  " + stateText(focus, task);
+        WheelUi.text(graphics, font, WheelUi.MONO_8,
+                WheelUi.fit(font, WheelUi.MONO_8, sub, w - 24),
+                x + 24, y + 11, task != null ? WheelUi.AMBER : MUTED, false);
+        float progress = detailProgress(focus, task);
+        graphics.fill(x, y + 26, x + w, y + 27, HAIRLINE);
+        graphics.fill(x, y + 26, x + Math.round(w * Mth.clamp(progress, 0f, 1f)), y + 27,
+                WheelUi.AMBER);
     }
 
     private void drawLeftCard(GuiGraphics graphics) {
@@ -1483,6 +1642,52 @@ public final class AdaptationWheelScreen extends Screen {
         WheelUi.itemIcon(graphics, wheelIcon(), floatCX - 20, floatCY - 20 + bob, 40);
     }
 
+    /**
+     * The two top-level mode tabs, PLAYER and TAMED. They are deliberately not drawn by
+     * {@link #drawTabs}: that method owns the vertical domain rail, which belongs to the PLAYER
+     * mode alone. These sit in the header, left of the centred title, and switching one replaces
+     * the whole working area rather than filtering a list.
+     *
+     * <p>The scissor is the tab band itself, and the recorded hit areas are exactly that band, so a
+     * click can only land where a tab was actually drawn. They travel the same {@link #mouseClicked}
+     * path as the rail tabs and the search field.
+     */
+    private void drawModeTabs(GuiGraphics graphics) {
+        modeTabHits.clear();
+        if (modeTabW <= 0 || modeTabH <= 0) {
+            return;
+        }
+        int bandRight = modeTabX + 2 * modeTabW + modeTabGap;
+        graphics.enableScissor(modeTabX - 2, modeTabY - 2, bandRight + 2,
+                modeTabY + modeTabH + 2);
+        for (int i = 0; i < 2; i++) {
+            boolean tamed = i == 1;
+            int x = modeTabX + i * (modeTabW + modeTabGap);
+            Rect rect = new Rect(x, modeTabY, modeTabW, modeTabH);
+            boolean active = tamed ? tamedTabSelected : !tamedTabSelected;
+            boolean hot = rect.contains(lastMouseX, lastMouseY);
+            int fill = active ? 0x24FFFFFF : hot ? 0x12FFFFFF : 0xFF121215;
+            WheelUi.fillRounded(graphics, x, modeTabY, modeTabW, modeTabH, 6, fill);
+            WheelUi.outlineRounded(graphics, x, modeTabY, modeTabW, modeTabH, 6,
+                    active ? WheelUi.withAlpha(GOLD, 0.55f) : WheelUi.BORDER, fill);
+            if (active) {
+                graphics.fill(x + 6, modeTabY + modeTabH - 3,
+                        x + modeTabW - 6, modeTabY + modeTabH - 2,
+                        WheelUi.withAlpha(GOLD, 0.60f));
+            }
+            WheelUi.fillRounded(graphics, x + 9, modeTabY + modeTabH / 2 - 2, 4, 4, 2,
+                    tamed ? GOLD : GREEN);
+            String label = WheelUi.upper(tr(tamed
+                    ? "adaptionwheel.gui.tab_tamed"
+                    : "adaptionwheel.gui.tab_player"));
+            WheelUi.text(graphics, font, WheelUi.MONO_8,
+                    WheelUi.fit(font, WheelUi.MONO_8, label, modeTabW - 30),
+                    x + 19, modeTabY + 6, active ? INK : (hot ? INK_SOFT : MUTED), false);
+            modeTabHits.add(new ModeTabHit(tamed, rect));
+        }
+        graphics.disableScissor();
+    }
+
     private void drawTabs(GuiGraphics graphics) {
         tabHits.clear();
         if (tabViewportH <= 0 || tabW <= 0) {
@@ -1495,12 +1700,9 @@ public final class AdaptationWheelScreen extends Screen {
         int y = tabY - (int) Math.round(tabScroll);
         int tabs = tabCount();
         for (int i = 0; i < tabs; i++) {
-            boolean tamed = i == tabs - 1;
-            AdaptationDomain domain = tamed || i == 0 ? null : availableDomains.get(i - 1);
-            boolean active = tamed
-                    ? tamedTabSelected
-                    : !tamedTabSelected && ((selectedTab == null && domain == null)
-                            || (selectedTab != null && selectedTab == domain));
+            AdaptationDomain domain = i == 0 ? null : availableDomains.get(i - 1);
+            boolean active = (selectedTab == null && domain == null)
+                    || (selectedTab != null && selectedTab == domain);
             boolean hot = lastMouseX >= tabX && lastMouseX < tabX + tabW
                     && lastMouseY >= tabY && lastMouseY < tabY + tabViewportH
                     && lastMouseY >= y && lastMouseY < y + TAB_HEIGHT;
@@ -1514,21 +1716,19 @@ public final class AdaptationWheelScreen extends Screen {
                             0x12FFFFFF);
                 }
                 int textX = tabX + 10;
-                if (tamed || domain != null) {
+                if (domain != null) {
                     WheelUi.fillRounded(graphics, tabX + 8, y + TAB_HEIGHT / 2 - 2, 4, 4, 2,
-                            tamed ? GOLD : safeColor(domain.getColor()));
+                            safeColor(domain.getColor()));
                     textX = tabX + 18;
                 }
-                String label = WheelUi.upper(tamed
-                        ? tr("adaptionwheel.gui.tab_tamed")
-                        : domain == null
-                                ? tr("adaptionwheel.gui.tab_all")
-                                : domain.translation().getString());
+                String label = WheelUi.upper(domain == null
+                        ? tr("adaptionwheel.gui.tab_all")
+                        : domain.translation().getString());
                 WheelUi.text(graphics, font, WheelUi.MONO_8,
                         WheelUi.fit(font, WheelUi.MONO_8, label, tabX + tabW - 8 - textX),
                         textX, y + 6, active ? INK : (hot ? INK_SOFT : MUTED), false);
             }
-            tabHits.add(new TabView(domain, tamed, new Rect(tabX, y, tabW, TAB_HEIGHT)));
+            tabHits.add(new TabView(domain, new Rect(tabX, y, tabW, TAB_HEIGHT)));
             y += TAB_HEIGHT;
         }
         graphics.disableScissor();
@@ -2168,21 +2368,31 @@ public final class AdaptationWheelScreen extends Screen {
             searchFocused = false;
         }
 
-        if (mouseX >= tabX && mouseX < tabX + tabW
+        // Top-level mode tabs first. Their rects are the scissored band they were drawn in, so the
+        // same containment test is both the hit test and the "only where drawn" guarantee.
+        for (ModeTabHit tab : modeTabHits) {
+            if (tab.rect.contains(mouseX, mouseY)) {
+                if (tab.tamed) {
+                    // Clicking the active tab again steps back out of a selected companion.
+                    selectedMobKey = null;
+                    tamedTabSelected = true;
+                } else {
+                    // Keep selectedTab untouched so the player's domain filter survives a round trip
+                    // through companion mode. The two modes are otherwise completely separate.
+                    tamedTabSelected = false;
+                }
+                refreshRows(true);
+                return true;
+            }
+        }
+
+        // The domain rail belongs to PLAYER mode; its stale hit rects must not be clickable while
+        // a companion is on screen.
+        if (!tamedTabSelected && mouseX >= tabX && mouseX < tabX + tabW
                 && mouseY >= tabY && mouseY < tabY + tabViewportH) {
             for (TabView tab : tabHits) {
                 if (tab.rect.contains(mouseX, mouseY)) {
-                    if (tab.tamed) {
-                        // Clicking the active tab again steps back out of a selected companion.
-                        if (tamedTabSelected) {
-                            selectedMobKey = null;
-                        }
-                        tamedTabSelected = true;
-                        selectedTab = null;
-                    } else {
-                        tamedTabSelected = false;
-                        selectedTab = tab.domain;
-                    }
+                    selectedTab = tab.domain;
                     refreshRows(true);
                     return true;
                 }
@@ -2269,7 +2479,7 @@ public final class AdaptationWheelScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (mouseX >= tabX - 3 && mouseX < tabX + tabW + 4
+        if (!tamedTabSelected && mouseX >= tabX - 3 && mouseX < tabX + tabW + 4
                 && mouseY >= tabY && mouseY < tabY + tabViewportH) {
             tabScroll = Mth.clamp(tabScroll - scrollY * 24.0, 0, maxTabScroll());
             return true;
@@ -2535,7 +2745,10 @@ public final class AdaptationWheelScreen extends Screen {
     private record CardView(String concept, Rect card, Rect toggle, boolean hasSwitch) {
     }
 
-    private record TabView(AdaptationDomain domain, boolean tamed, Rect rect) {
+    private record TabView(AdaptationDomain domain, Rect rect) {
+    }
+
+    private record ModeTabHit(boolean tamed, Rect rect) {
     }
 
     private record AbilityHit(String id, Rect rect) {

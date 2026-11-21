@@ -1,7 +1,7 @@
 package ru.adaptionwheel.mixin;
 
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.SweetBerryBushBlock;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -17,7 +17,7 @@ public abstract class BerryBushMixin {
                                       net.minecraft.world.level.Level level,
                                       net.minecraft.core.BlockPos pos,
                                       Entity entity, CallbackInfo ci) {
-        if (entity instanceof Player player && SurfaceAdaptations.movesThroughBerryBush(player)) {
+        if (entity instanceof LivingEntity living && SurfaceAdaptations.movesThroughBerryBush(living)) {
             ci.cancel();
         }
     }
