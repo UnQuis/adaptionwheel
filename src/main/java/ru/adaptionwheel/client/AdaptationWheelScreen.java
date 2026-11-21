@@ -27,9 +27,11 @@ import ru.adaptionwheel.data.AdaptionTask;
 import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.data.WheelData;
+import ru.adaptionwheel.data.WheelSkins;
 import ru.adaptionwheel.item.MahoragaWheelItem;
 import ru.adaptionwheel.item.ModItems;
 import ru.adaptionwheel.network.SelectAbilityPayload;
+import ru.adaptionwheel.network.SetSkinPayload;
 import ru.adaptionwheel.network.ToggleAdaptationPayload;
 
 import java.util.ArrayList;
@@ -288,6 +290,8 @@ public final class AdaptationWheelScreen extends Screen {
     private Rect clearRect = Rect.EMPTY;
     private Rect trackHit = Rect.EMPTY;
     private Rect leftToggle = Rect.EMPTY;
+    private Rect skinDharmaHit = Rect.EMPTY;
+    private Rect skinOrbitalHit = Rect.EMPTY;
     private Rect placeholderRect = Rect.EMPTY;
     private ItemStack wheelIcon;
 
@@ -1333,6 +1337,9 @@ public final class AdaptationWheelScreen extends Screen {
 
     private void drawLeftCard(GuiGraphics graphics) {
         leftToggle = Rect.EMPTY;
+        // Cleared before the layout branches so the switcher is never clickable in mini/compact mode.
+        skinDharmaHit = Rect.EMPTY;
+        skinOrbitalHit = Rect.EMPTY;
         if (leftH < 190) {
             drawMiniLeftCard(graphics);
             return;
@@ -1405,6 +1412,46 @@ public final class AdaptationWheelScreen extends Screen {
                 WheelUi.upper(tr("adaptionwheel.gui.menu_active")),
                 cx + 40, statsY + 22, MUTED, false);
         graphics.fill(cx, statsY + 2, cx + 1, statsY + 26, 0x24FFFFFF);
+
+        // The skin lives on the worn wheel's component, so read the slot directly rather than the
+        // synced wearing mirror, which can lag a swap by a tick.
+        ItemStack wornWheel = MahoragaWheelItem.equippedWheel(Minecraft.getInstance().player);
+        boolean wheelWorn = wornWheel != null;
+        String currentSkin = WheelSkins.normalize(
+                wheelWorn ? wornWheel.get(ModDataComponents.WHEEL_SKIN.get()) : null);
+        int skinY = y + 204;
+        int skinH = 11;
+        String skinLabel = WheelUi.upper(tr("adaptionwheel.gui.menu_skin"));
+        WheelUi.trackedLeft(graphics, font, WheelUi.MONO_8, skinLabel,
+                x + 20, skinY + 1, wheelWorn ? MUTED : FAINT, 1.2f);
+        int buttonLeft = x + 28
+                + WheelUi.trackedWidth(font, WheelUi.MONO_8, skinLabel, 1.2f);
+        int buttonGap = 4;
+        int buttonW = Math.max(24, (x + w - 20 - buttonLeft - buttonGap) / 2);
+        for (int i = 0; i < 2; i++) {
+            boolean orbital = i == 1;
+            int bx = buttonLeft + i * (buttonW + buttonGap);
+            Rect hit = new Rect(bx, skinY, buttonW, skinH);
+            boolean active = wheelWorn && currentSkin.equals(
+                    orbital ? WheelSkins.ORBITAL : WheelSkins.DHARMA);
+            boolean hot = wheelWorn && hit.contains(lastMouseX, lastMouseY);
+            int fill = active ? 0x24FFFFFF : hot ? 0x12FFFFFF : 0xFF121215;
+            WheelUi.fillRounded(graphics, bx, skinY, buttonW, skinH, 3, fill);
+            WheelUi.outlineRounded(graphics, bx, skinY, buttonW, skinH, 3,
+                    active ? GOLD : WheelUi.BORDER, fill);
+            String label = WheelUi.upper(tr(orbital
+                    ? "adaptionwheel.gui.menu_skin_orbital"
+                    : "adaptionwheel.gui.menu_skin_dharma"));
+            WheelUi.text(graphics, font, WheelUi.MONO_8,
+                    WheelUi.fit(font, WheelUi.MONO_8, label, buttonW - 10),
+                    bx + 5, skinY + 1,
+                    !wheelWorn ? FAINT : active ? INK : (hot ? INK_SOFT : MUTED), false);
+            if (orbital) {
+                skinOrbitalHit = hit;
+            } else {
+                skinDharmaHit = hit;
+            }
+        }
 
         graphics.fill(x + 20, y + 216, x + w - 20, y + 217, HAIRLINE);
         WheelUi.trackedLeft(graphics, font, WheelUi.MONO_8,
@@ -2461,6 +2508,20 @@ public final class AdaptationWheelScreen extends Screen {
         }
         if (searchFocused) {
             searchFocused = false;
+        }
+
+        // The switcher is client intent only; without a wheel there is nothing to write to. The
+        // mode guard also keeps a stale rect from TAMED mode (where the row is not drawn) clickable.
+        if (!tamedTabSelected && twoColumn
+                && MahoragaWheelItem.equippedWheel(Minecraft.getInstance().player) != null) {
+            if (skinDharmaHit.contains(mouseX, mouseY)) {
+                SetSkinPayload.send(WheelSkins.DHARMA);
+                return true;
+            }
+            if (skinOrbitalHit.contains(mouseX, mouseY)) {
+                SetSkinPayload.send(WheelSkins.ORBITAL);
+                return true;
+            }
         }
 
         // Top-level mode tabs first. Their rects are the scissored band they were drawn in, so the
