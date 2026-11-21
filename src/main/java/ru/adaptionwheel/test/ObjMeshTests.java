@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 public class ObjMeshTests {
 
     private static final String WHEEL_OBJ = "/assets/adaptionwheel/models/entity/dharma_chakra.obj";
+    private static final String ORBITAL_OBJ = "/assets/adaptionwheel/models/entity/orbital_ring.obj";
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theShippedWheelParses(GameTestHelper helper) {
@@ -321,8 +322,74 @@ public class ObjMeshTests {
         helper.succeed();
     }
 
+    /**
+     * The orbital skin is one mesh exported from three Blender materials. An OBJ has nowhere to put
+     * a material the game reads, so each object carries its material id in the red channel of its
+     * vertex colour (0 / 0.5 / 1); green and blue stay zero. The renderer will key off that id, so a
+     * dropped colour attribute would collapse all three rings into one material with no error
+     * anywhere. Pin the ids at the source, along with the mesh's size and finite normals.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theOrbitalWheelParsesWithMaterialIds(GameTestHelper helper) {
+        ObjMesh mesh = load(ORBITAL_OBJ);
+        helper.assertTrue(mesh != null,
+                "orbital OBJ is not readable from the classpath at " + ORBITAL_OBJ
+                        + " -- the skin renderer would silently draw nothing");
+        if (mesh == null) {
+            return;
+        }
+
+        helper.assertTrue(mesh.triangleCount() >= 9000,
+                "the orbital ring is exported as over nine thousand triangles; parsed " + mesh.triangleCount()
+                        + ", which means the export dropped most of the mesh");
+        helper.assertTrue(mesh.radius() > 0,
+                "the orbital OBJ must have a horizontal extent, but its radius is " + mesh.radius());
+
+        boolean found0 = false, foundHalf = false, found1 = false;
+        float[] corners = mesh.corners();
+        for (int i = 0; i < corners.length; i += ObjMesh.STRIDE) {
+            float nx = corners[i + 5], ny = corners[i + 6], nz = corners[i + 7];
+            helper.assertTrue(Float.isFinite(nx) && Float.isFinite(ny) && Float.isFinite(nz),
+                    "an orbital corner has a non-finite normal: " + nx + ", " + ny + ", " + nz);
+            float r = corners[i + 8], g = corners[i + 9], b = corners[i + 10];
+            helper.assertTrue(g == 0.0f && b == 0.0f,
+                    "the material id lives in red only; found green " + g + " and blue " + b);
+            if (Math.abs(r - 0.0f) < 0.01f) {
+                found0 = true;
+            } else if (Math.abs(r - 0.5f) < 0.01f) {
+                foundHalf = true;
+            } else if (Math.abs(r - 1.0f) < 0.01f) {
+                found1 = true;
+            } else {
+                helper.assertTrue(false, "an orbital corner has material id " + r
+                        + ", expected one of 0, 0.5 or 1");
+            }
+        }
+        helper.assertTrue(found0 && foundHalf && found1,
+                "all three material ids must survive the export; found 0=" + found0
+                        + " 0.5=" + foundHalf + " 1=" + found1);
+
+        // The original wheel has no colour attribute in the file, so it must still read as white.
+        ObjMesh dharma = shipped();
+        helper.assertTrue(dharma != null, "the shipped wheel must load before its colours can be re-checked");
+        if (dharma != null) {
+            for (int i = 0; i < dharma.corners().length; i += ObjMesh.STRIDE) {
+                float r = dharma.corners()[i + 8], g = dharma.corners()[i + 9], b = dharma.corners()[i + 10];
+                helper.assertTrue(r == 1.0f && g == 1.0f && b == 1.0f,
+                        "the shipped wheel carries no vertex colours, so every corner must be white; got "
+                                + r + ", " + g + ", " + b);
+            }
+        }
+
+        helper.succeed();
+    }
+
     private static ObjMesh shipped() {
-        try (InputStream in = ObjMesh.class.getResourceAsStream(WHEEL_OBJ)) {
+        return load(WHEEL_OBJ);
+    }
+
+    private static ObjMesh load(String path) {
+        try (InputStream in = ObjMesh.class.getResourceAsStream(path)) {
             if (in == null) {
                 return null;
             }
