@@ -48,7 +48,7 @@ Why: the player wants visual customization of the wheel that survives trading an
 
 ### Storage and intent
 
-- Add `ModDataComponents.WHEEL_SKIN`: `DataComponentType<String>`, `.persistent(Codec.STRING).networkSynchronized(ByteBufCodecs.STRING)`. Absent = `dharma`. Accepted values exactly `dharma` and `orbital`.
+- Add `ModDataComponents.WHEEL_SKIN`: `DataComponentType<String>`, `.persistent(Codec.STRING).networkSynchronized(ByteBufCodecs.STRING_UTF8)`. Absent = `dharma`. Accepted values exactly `dharma` and `orbital`. (`ByteBufCodecs.STRING` does not exist in this NeoForge version; only `STRING_UTF8` is available.)
 - Add `network/SetSkinPayload.java`: `record SetSkinPayload(String skin) implements CustomPacketPayload`; `TYPE` id `adaptionwheel:set_skin`; `STREAM_CODEC = StreamCodec.of(buf -> buf.writeUtf(...), buf -> new SetSkinPayload(buf.readUtf()))`; `send()` via `PacketDistributor.sendToServer`.
 - Handler: reject ids outside the whitelist; `AdaptionEvents.getWheelStack(player).ifPresent(stack -> stack.set(WHEEL_SKIN.get(), skin))`; no reply packet. Register in `AdaptionNetworking` `playToServer` beside `ToggleAdaptationPayload`.
 - Both `mahoraga_wheel` and `mahoraga_wheel_wood` are valid targets (`MahoragaWheelItem.isWheel`), and both already render the 3D wheel (`WheelRenderer.isWearingWheel` uses `equippedWheel != null`). **Decision:** the skin is active on the wooden wheel too, so the menu row is not disabled for it. `AdaptionEvents.onAnvilUpdate` builds a **new** `ItemStack` for the upgrade (`:2770-2781`), so it must copy `WHEEL_SKIN` from whichever input is the wheel — otherwise a chosen skin silently reverts on upgrade.
