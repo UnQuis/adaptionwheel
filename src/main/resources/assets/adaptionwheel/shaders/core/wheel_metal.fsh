@@ -346,8 +346,12 @@ void main() {
         // the contrast-stretched weave is tinted blue-grey rather than left neutral.
         // The authored UV unwrap is 0..1 around the whole ring; tile u 16x so the weave's texels
         // are square in world space instead of stretched along the circumference.
+        // The authored fabric is "full black": after the contrast stretch its mean is 0.55, so
+        // this multiplier has to stay low. 0.36/0.42/0.58 gave an effective albedo of ~0.20/0.23/
+        // 0.32 and read far lighter than the Blender original; half of that (~0.09/0.11/0.15)
+        // keeps the weave readable without turning the rubber into a grey shell.
         albedo = mat == 2 ? texture(Sampler1, vec2(texCoord.x * 16.0, texCoord.y)).rgb
-                            * vec3(0.36, 0.42, 0.58) : vec3(0.14);
+                            * vec3(0.16, 0.20, 0.27) : vec3(0.14);
     }
     float a = rough * rough;
 
