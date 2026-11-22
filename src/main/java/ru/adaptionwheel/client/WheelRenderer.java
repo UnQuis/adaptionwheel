@@ -50,8 +50,8 @@ import ru.adaptionwheel.item.MahoragaWheelItem;
 import ru.adaptionwheel.item.ModItems;
 import top.theillusivec4.curios.api.CuriosApi;
 
-import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Optional;
 
 @EventBusSubscriber(modid = AdaptionWheel.MODID,
@@ -68,11 +68,11 @@ public class WheelRenderer {
      * logged.
      */
     private static final ResourceLocation WHEEL_MODEL = ResourceLocation.fromNamespaceAndPath(
-            AdaptionWheel.MODID, "models/entity/dharma_chakra.obj");
+            AdaptionWheel.MODID, "models/entity/dharma_chakra.bin");
 
-    /** The second skin's mesh and albedo; no new model format, both go through {@link ObjMesh}. */
+    /** The second skin's mesh and albedo; both go through {@link ObjMesh}. */
     private static final ResourceLocation ORBITAL_MODEL = ResourceLocation.fromNamespaceAndPath(
-            AdaptionWheel.MODID, "models/entity/orbital_ring.obj");
+            AdaptionWheel.MODID, "models/entity/orbital_ring.bin");
     // TextureManager.getTexture -> SimpleTexture looks the ResourceLocation up verbatim as
     // assets/<namespace>/<path>: it does not prepend "textures/" or append ".png" the way
     // RenderType's sprite path does. A short id logs "Failed to load texture" and samples black.
@@ -747,9 +747,9 @@ public class WheelRenderer {
     }
 
     /**
-     * Reads the OBJ during the resource reload rather than on the first frame a wheel is seen: the
-     * file is 260 KB and 8.4k lines, and a parse in the middle of a render tick is a visible hitch
-     * for something that can be done behind the loading screen. It also means a resource pack that
+     * Reads the model binaries during a resource reload rather than on the first frame a wheel is
+     * seen: parsing a multi-megabyte mesh in the middle of a render tick is a visible hitch for
+     * something that can be done behind the loading screen. It also means a resource pack that
      * replaces the model takes effect on F3+T like every other asset.
      */
     private static final class WheelMeshReloadListener extends SimplePreparableReloadListener<WheelMeshes> {
@@ -775,8 +775,8 @@ public class WheelRenderer {
             return null;
         }
 
-        try (BufferedReader reader = resource.get().openAsReader()) {
-            ObjMesh mesh = ObjMesh.parse(reader);
+        try (InputStream in = resource.get().open()) {
+            ObjMesh mesh = ObjMesh.parseBinary(in.readAllBytes());
             LOGGER.info("[{}] Wheel model {}: {} faces -> {} triangles, radius {} blocks",
                     AdaptionWheel.MODID, path, mesh.faceCount(), mesh.triangleCount(), mesh.radius());
             return mesh;
@@ -809,7 +809,7 @@ public class WheelRenderer {
         return WheelSkins.normalize(wheel == null ? null : wheel.get(ModDataComponents.WHEEL_SKIN.get()));
     }
 
-    /** Which OBJ a missing mesh was supposed to come from, for the fallback warning. */
+    /** Which binary a missing mesh was supposed to come from, for the fallback warning. */
     private static ResourceLocation modelFor(String skin) {
         return WheelSkins.ORBITAL.equals(skin) ? ORBITAL_MODEL : WHEEL_MODEL;
     }

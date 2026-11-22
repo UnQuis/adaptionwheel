@@ -34,8 +34,8 @@ import java.util.Arrays;
 @PrefixGameTestTemplate(false)
 public class ObjMeshTests {
 
-    private static final String WHEEL_OBJ = "/assets/adaptionwheel/models/entity/dharma_chakra.obj";
-    private static final String ORBITAL_OBJ = "/assets/adaptionwheel/models/entity/orbital_ring.obj";
+    private static final String WHEEL_OBJ = "/assets/adaptionwheel/models/entity/dharma_chakra.bin";
+    private static final String ORBITAL_OBJ = "/assets/adaptionwheel/models/entity/orbital_ring.bin";
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theShippedWheelParses(GameTestHelper helper) {
@@ -454,7 +454,7 @@ public class ObjMeshTests {
      */
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void binaryMatchesTextParserOnFixture(GameTestHelper helper) {
-        ObjMesh text = load("/models/fixture.obj");
+        ObjMesh text = loadText("/models/fixture.obj");
         byte[] binary = bytes("/models/fixture.bin");
         helper.assertTrue(text != null && binary != null,
                 "the FRRB fixture resources (/models/fixture.obj and .bin) must be on the test classpath");
@@ -631,6 +631,19 @@ public class ObjMeshTests {
     }
 
     private static ObjMesh load(String path) {
+        byte[] bytes = bytes(path);
+        if (bytes == null) {
+            return null;
+        }
+        try {
+            return ObjMesh.parseBinary(bytes);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** The fixture OBJ stays text: it is the reference the binary is compared against. */
+    private static ObjMesh loadText(String path) {
         try (InputStream in = open(path)) {
             if (in == null) {
                 return null;
