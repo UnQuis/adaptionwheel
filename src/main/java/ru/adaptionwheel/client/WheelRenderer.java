@@ -577,7 +577,8 @@ public class WheelRenderer {
      *
      * <p>Two things multiply into the vertex colour: the artist's material (gold ring/spheres,
      * bronze beams for dharma; a material id for orbital — baked into the mesh at export time) and
-     * the adaptation tint (grey at nothing adapted, warming to gold as the wheel fills out). The
+     * the adaptation tint (grey at nothing adapted, warming to gold as the wheel fills out). Orbital
+     * is the exception: its decoded material colours are authoritative, as in the shader. The
      * texture is a neutral grain for dharma and the fabric albedo for orbital.
      *
      * <p>Base lighting is the vanilla entity pipeline (diffuse from the sun/moon, sky/block
@@ -695,9 +696,10 @@ public class WheelRenderer {
                 float blockDiffuse = METAL_AMBIENT * blockAmount;
 
                 // Per-channel diffuse: material * tint * (skyDiffuse neutral + blockDiffuse warm).
-                float baseR = mr * red * skyDiffuse + mr * blockWarmR * blockDiffuse;
-                float baseG = mg * green * skyDiffuse + mg * blockWarmG * blockDiffuse;
-                float baseB = mb * blue * skyDiffuse + mb * blockWarmB * blockDiffuse;
+                // Orbital keeps its decoded material tint (the shader ignores WheelTint there).
+                float baseR = WheelSkins.fallbackTint(orbital, mr, red) * skyDiffuse + mr * blockWarmR * blockDiffuse;
+                float baseG = WheelSkins.fallbackTint(orbital, mg, green) * skyDiffuse + mg * blockWarmG * blockDiffuse;
+                float baseB = WheelSkins.fallbackTint(orbital, mb, blue) * skyDiffuse + mb * blockWarmB * blockDiffuse;
 
                 // --- SPECULAR: tight Blinn-Phong fleck, additive, in the colour of the dominant
                 // light (sky white by day, moon blue-grey at night, torch warm underground).

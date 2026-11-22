@@ -68,6 +68,24 @@ public class WheelSkinTests {
         helper.succeed();
     }
 
+    /**
+     * The decoded orbital tint is used as-is: the shader ignores WheelTint on that branch, so the
+     * CPU fallback must not multiply the authored shell colour by the adaptation tint. Dharma keeps
+     * the old multiply.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void orbitalFallbackDoesNotApplyTheAdaptationTint(GameTestHelper helper) {
+        float adaptation = 0.29f; // a partly-adapted wheel's grey
+        helper.assertTrue(WheelSkins.fallbackTint(true, 0.05f, adaptation) == 0.05f,
+                "orbital must keep the decoded material tint, not multiply by the adaptation tint");
+        helper.assertTrue(WheelSkins.fallbackTint(true, 1.00f, adaptation) == 1.00f,
+                "an orbital fabric shell must stay white regardless of the adaptation tint");
+        helper.assertTrue(Math.abs(WheelSkins.fallbackTint(false, 1.0f, adaptation) - adaptation) < 0.001f,
+                "dharma must still multiply the material by the adaptation tint");
+
+        helper.succeed();
+    }
+
     private static void assertTint(GameTestHelper helper, float[] actual,
                                    float r, float g, float b, String material) {
         helper.assertTrue(actual != null && actual.length == 3,

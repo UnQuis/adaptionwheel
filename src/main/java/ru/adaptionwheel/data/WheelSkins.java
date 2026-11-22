@@ -35,4 +35,12 @@ public final class WheelSkins {
         }
         return id < 0.75f ? EMISSIVE_SHELL : WHITE;
     }
+
+    /**
+     * The CPU fallback's per-channel tint: an orbital shell keeps its authored colour because the
+     * shader's orbital branch ignores WheelTint, so the fallback must not apply it either.
+     */
+    public static float fallbackTint(boolean orbital, float material, float adaptationTint) {
+        return orbital ? material : material * adaptationTint;
+    }
 }

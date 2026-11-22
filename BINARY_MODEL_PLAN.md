@@ -57,7 +57,7 @@ Keep both sides' changes: the existing menu layout/tabs from this branch plus th
 - [x] **Step 3: Verify the landed base**
 
 Run: `./gradlew build --no-daemon` and `./tools/run-gametests.sh 4 150`.
-Expected: clean build; all tests pass (count should be 212+ as on the feature branch).
+Expected: clean build; all tests pass (count should be 206 on this base).
 
 - [x] **Step 4: Commit the conflict resolution**
 
