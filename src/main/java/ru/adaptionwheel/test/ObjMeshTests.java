@@ -12,7 +12,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.StringReader;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /**
  * Pins the OBJ reader the wheel above the head depends on.
@@ -443,12 +446,192 @@ public class ObjMeshTests {
         helper.succeed();
     }
 
+    /**
+     * The converter must produce the same mesh the text parser does. The fixture is small enough to
+     * compare every float: one centred quad, two triangles, two UVs and a 7-token colour line whose
+     * red (the material id) is 1.0. Everything except the material id is compared with a 1e-6
+     * tolerance; the material id is exact because the shader buckets it.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void binaryMatchesTextParserOnFixture(GameTestHelper helper) {
+        ObjMesh text = load("/models/fixture.obj");
+        byte[] binary = bytes("/models/fixture.bin");
+        helper.assertTrue(text != null && binary != null,
+                "the FRRB fixture resources (/models/fixture.obj and .bin) must be on the test classpath");
+        if (text == null || binary == null) {
+            return;
+        }
+
+        ObjMesh parsed;
+        try {
+            parsed = ObjMesh.parseBinary(binary);
+        } catch (IOException e) {
+            helper.assertTrue(false, "the valid FRRB fixture must parse: " + e.getMessage());
+            return;
+        }
+
+        helper.assertTrue(parsed != null, "parseBinary returned null for a valid fixture");
+        if (parsed == null) {
+            return;
+        }
+        helper.assertTrue(parsed.triangleCount() == text.triangleCount(),
+                "binary has " + parsed.triangleCount() + " triangles, text has " + text.triangleCount());
+        helper.assertTrue(parsed.faceCount() == text.faceCount(),
+                "binary has " + parsed.faceCount() + " faces, text has " + text.faceCount());
+        helper.assertTrue(Math.abs(parsed.radius() - text.radius()) < 1.0e-6f
+                        && Math.abs(parsed.height() - text.height()) < 1.0e-6f,
+                "radius/height must come from the metadata layer, not be recomputed: "
+                        + parsed.radius() + "/" + parsed.height() + " vs " + text.radius() + "/" + text.height());
+
+        float[] expected = text.corners();
+        float[] actual = parsed.corners();
+        helper.assertTrue(expected.length == actual.length, "corner arrays differ in length");
+        for (int i = 0; i < Math.min(expected.length, actual.length); i += ObjMesh.STRIDE) {
+            for (int element = 0; element < 8; element++) {
+                helper.assertTrue(Math.abs(expected[i + element] - actual[i + element]) < 1.0e-6f,
+                        "corner " + (i / ObjMesh.STRIDE) + " element " + element + ": text "
+                                + expected[i + element] + " vs binary " + actual[i + element]);
+            }
+            helper.assertTrue(actual[i + 8] == 1.0f,
+                    "the fixture's material id must survive as the exact float 1.0, got " + actual[i + 8]);
+        }
+
+        helper.succeed();
+    }
+
+    /**
+     * Packed white is the float bit pattern 0xFFFFFFFF -- a NaN. Float arithmetic or a narrowing
+     * cast turns it into garbage (or 0), and the wheel then draws black with no error anywhere.
+     * The material id lives in data4.x instead, at full precision, so 0.5 must stay exactly 0.5.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void materialIdSurvivesAsExactFloat(GameTestHelper helper) {
+        byte[] binary = oneTriangleBin(0xFFFFFFFF, 0.5f);
+        ObjMesh mesh;
+        try {
+            mesh = ObjMesh.parseBinary(binary);
+        } catch (IOException e) {
+            helper.assertTrue(false, "a valid one-triangle FRRB must parse: " + e.getMessage());
+            return;
+        }
+        helper.assertTrue(mesh != null && mesh.corners().length >= ObjMesh.STRIDE,
+                "the one-triangle FRRB must produce at least one corner");
+        if (mesh == null || mesh.corners().length < ObjMesh.STRIDE) {
+            return;
+        }
+
+        float[] corner = mesh.corners();
+        helper.assertTrue(corner[8] == 0.5f,
+                "data4.x = 0.5f must decode to exactly 0.5, got " + corner[8]
+                        + " -- quantising it through the packed colour would break the shader's material bucket");
+        helper.assertTrue(corner[9] == 1.0f && corner[10] == 1.0f,
+                "packed white RGBA (0xFFFFFFFF, a NaN float) must decode to green/blue 1.0/1.0 via "
+                        + "Float.floatToRawIntBits, got " + corner[9] + "/" + corner[10]);
+        for (float value : corner) {
+            helper.assertTrue(Float.isFinite(value),
+                    "no NaN from the packed colour may leak into a corner, got " + value);
+        }
+
+        // A genuinely white corner (dharma/soe have no colour attribute): material id 1.0 plus the
+        // NaN packed bits must give 1.0/1.0/1.0, not a dark or garbled tint.
+        try {
+            float[] white = ObjMesh.parseBinary(oneTriangleBin(0xFFFFFFFF, 1.0f)).corners();
+            helper.assertTrue(white[8] == 1.0f && white[9] == 1.0f && white[10] == 1.0f,
+                    "packed white must decode to 1.0/1.0/1.0, got " + white[8] + "/" + white[9] + "/" + white[10]);
+        } catch (IOException e) {
+            helper.assertTrue(false, "a white one-triangle FRRB must parse: " + e.getMessage());
+        }
+
+        helper.succeed();
+    }
+
+    /** A corrupt binary must be rejected on the named header field before any mesh is allocated. */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void corruptHeadersAreRejectedBeforeAllocation(GameTestHelper helper) {
+        byte[] valid = oneTriangleBin(0xFFFFFFFF, 1.0f);
+
+        byte[] badMagic = valid.clone();
+        badMagic[0] = 'X';
+        expectBad(helper, badMagic, "magic");
+
+        byte[] badVersion = valid.clone();
+        ByteBuffer.wrap(badVersion).order(ByteOrder.LITTLE_ENDIAN).putInt(4, 2);
+        expectBad(helper, badVersion, "version");
+
+        byte[] hugeCorners = valid.clone();
+        ByteBuffer.wrap(hugeCorners).order(ByteOrder.LITTLE_ENDIAN).putInt(12, -1); // 0xFFFFFFFF
+        expectBad(helper, hugeCorners, "cornerCount");
+
+        expectBad(helper, Arrays.copyOf(valid, valid.length - 10), "byteCount");
+
+        helper.succeed();
+    }
+
+    private static void expectBad(GameTestHelper helper, byte[] bytes, String field) {
+        try {
+            ObjMesh.parseBinary(bytes);
+            helper.assertTrue(false, "a corrupt FRRB with a bad " + field + " must throw IOException");
+        } catch (IOException e) {
+            helper.assertTrue(e.getMessage() != null && e.getMessage().contains(field),
+                    "the rejection of a bad " + field + " must name that field, got: " + e.getMessage());
+        }
+    }
+
+    /** A hand-built, valid one-triangle FRRB v1 file: 3 corners, 3 indices, one face. */
+    private static byte[] oneTriangleBin(int packedRgbaBits, float materialId) {
+        int corners = 3;
+        int total = 32 + corners * 56 + corners * 4 + 8 + 28;
+        ByteBuffer buffer = ByteBuffer.allocate(total).order(ByteOrder.LITTLE_ENDIAN);
+        buffer.put("FRRB".getBytes(StandardCharsets.US_ASCII));
+        buffer.putInt(1).putInt(6).putInt(corners).putInt(corners).putInt(0).putInt(0).putInt(total);
+
+        float[][] positions = {{0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}};
+        float[][] uvs = {{0.0f, 0.0f}, {1.0f, 0.0f}, {0.0f, 1.0f}};
+        for (int c = 0; c < corners; c++) {
+            buffer.putFloat(positions[c][0]).putFloat(positions[c][1]).putFloat(positions[c][2]);
+            buffer.putInt(packedRgbaBits); // packed colour: raw float bits, NOT float arithmetic
+            buffer.putFloat(materialId).putFloat(0.0f).putFloat(0.0f).putFloat(0.0f); // data4
+            buffer.putFloat(0.0f).putFloat(0.0f).putFloat(1.0f).putFloat(0.0f); // aux4: normal
+            buffer.putFloat(uvs[c][0]).putFloat(uvs[c][1]);
+        }
+        for (int c = 0; c < corners; c++) {
+            buffer.putInt(c); // layer 1: sequential indices
+        }
+        buffer.putInt(0).putInt(0); // layer 4: face 0 -> group 0 / material 0
+        buffer.putInt(1); // layer 5: faceCount
+        buffer.putFloat(0.0f).putFloat(0.0f).putFloat(0.0f); // centre (positions already centred)
+        buffer.putFloat(1.0f).putFloat(1.0f); // radius, height
+        buffer.putInt(0); // reserved
+        return buffer.array();
+    }
+
+    private static byte[] bytes(String path) {
+        try (InputStream in = open(path)) {
+            return in == null ? null : in.readAllBytes();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** Test resources are mounted on the gametest run classpath, but the mod's own class loader
+     *  only sees main resources -- so try the JVM class loaders as well. */
+    private static InputStream open(String path) {
+        InputStream in = ObjMeshTests.class.getResourceAsStream(path);
+        if (in != null) {
+            return in;
+        }
+        String name = path.startsWith("/") ? path.substring(1) : path;
+        ClassLoader context = Thread.currentThread().getContextClassLoader();
+        in = context != null ? context.getResourceAsStream(name) : null;
+        return in != null ? in : ClassLoader.getSystemResourceAsStream(name);
+    }
+
     private static ObjMesh shipped() {
         return load(WHEEL_OBJ);
     }
 
     private static ObjMesh load(String path) {
-        try (InputStream in = ObjMesh.class.getResourceAsStream(path)) {
+        try (InputStream in = open(path)) {
             if (in == null) {
                 return null;
             }

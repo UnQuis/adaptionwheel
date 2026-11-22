@@ -62,6 +62,9 @@ runs {
 
     gameTestServer {
         systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
+        // Gametest classes live in main, but the OBJ/FRRB equivalence fixture is test-only data.
+        // Run classpaths contain only main resources, so mount it explicitly.
+        runtimeClasspath.from 'src/test/resources'
     }
 
     data {
