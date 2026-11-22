@@ -1,14 +1,14 @@
 # Orbital Ring wheel skin, exported from ~/Blender/Ready/OrbitalRing.blend.
 #
-# IMPORTANT: this file includes the Geometry Nodes detail from the Bezier circle, realised into
-# a mesh via a GeometryNodeRealizeInstances node before export. The three toruses alone are only
-# 9416 triangles and read as a plain grey ring -- the repeated blocks are the actual detail.
-# Totals: 30548 vertices / 59328 triangles; o Torus / Torus.001 / Torus.002 / OrbitalDetails.
+# Includes the Geometry Nodes detail from the Bezier circle, realised before export:
+# 30548 vertices / 59328 triangles (Toruses + OrbitalDetails).
 #
-# Vertex-colour RED carries the shader material id, written as srgb_to_linear(id) so Blender's
-# sRGB export round-trips to the exact values: 0.0 = metal (both toruses and GN detail),
-# 0.5 = the emissive shell, 1.0 = the fabric torus. Green and blue are always zero.
-# Axes: Blender NEGATIVE_Z/Y (Minecraft Y-up). UVs are the active automap layer; triangulated.
+# Vertex-colour RED is the shader material id, written as srgb_to_linear(id) so Blender's sRGB
+# export round-trips to 0.0 = metal, 0.5 = emissive shell, 1.0 = fabric.
+#
+# UVs use the authored UVMap: u runs around the ring and v around the tube, both 0..1. The other
+# layer, automap, is a flat XY projection spanning -9..10 and stretches the weave at the bends;
+# do not switch the active layer back to it. The shader tiles u 16x for square texels.
 # Blender 5.3.0
 # www.blender.org
 o Torus.001

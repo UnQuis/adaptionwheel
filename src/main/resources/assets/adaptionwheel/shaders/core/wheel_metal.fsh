@@ -139,18 +139,16 @@ vec2 voronoi2(vec2 p) {
 
 /**
  * The orbital emissive shell: two animated Voronoi bands, the slow F2 outline and the fast F1
- * core. `dir` is a radius-normalised wheel-local direction, so the pattern travels with the wheel
- * and does not change when the wheel grows. The strengths are capped here, before ACES.
+ * core. It runs on the authored torus UVs, not on dir.xz: a polar projection of the direction
+ * squeezes the cells near the ring's tangent direction and stretches them across it. u runs once
+ * around the ring and v once around the tube; tiling u 16x makes the cells square in world space.
+ * The bands are wider than the authored 0.88..0.90 / 0.20..0.25, which are sub-pixel at 1.3 blocks.
  */
-vec3 orbitalEmissive(vec3 dir) {
+vec3 orbitalEmissive(vec2 uv) {
     float seconds = GameTime * 1200.0;
-    vec2 q = dir.xz;
-    vec2 slow = voronoi2(q * 3.0 + vec2(seconds * -0.67, 0.0));
-    // The authored bands (0.88..0.90 and 0.20..0.25 of the cell distance) are thinner than a
-    // pixel on a 1.3-block wheel: only ~8% of the circumference lit, as isolated cyan dots.
-    // Wider bands and a coarser fast layer keep the same two-layer interference but make the
-    // squares readable; measured at ~43% of the ring above the visible threshold.
-    vec2 fast = voronoi2(q * 6.0 + vec2(seconds * -0.5, 0.0));
+    vec2 q = vec2(uv.x * 16.0, uv.y);
+    vec2 slow = voronoi2(q + vec2(seconds * -0.67, 0.0));
+    vec2 fast = voronoi2(q * 2.0 + vec2(seconds * -0.5, 0.0));
 
     float outline = smoothstep(0.80, 0.84, slow.y) * (1.0 - smoothstep(0.90, 0.94, slow.y));
     float core = smoothstep(0.10, 0.16, fast.x) * (1.0 - smoothstep(0.26, 0.34, fast.x));
@@ -346,7 +344,10 @@ void main() {
         // same light grey, so the fabric and the metal became indistinguishable. 0.14 keeps the
         // reflections readable while leaving room for the fabric to read as a darker material;
         // the contrast-stretched weave is tinted blue-grey rather than left neutral.
-        albedo = mat == 2 ? texture(Sampler1, texCoord).rgb * vec3(0.36, 0.42, 0.58) : vec3(0.14);
+        // The authored UV unwrap is 0..1 around the whole ring; tile u 16x so the weave's texels
+        // are square in world space instead of stretched along the circumference.
+        albedo = mat == 2 ? texture(Sampler1, vec2(texCoord.x * 16.0, texCoord.y)).rgb
+                            * vec3(0.36, 0.42, 0.58) : vec3(0.14);
     }
     float a = rough * rough;
 
@@ -388,7 +389,7 @@ void main() {
     // The orbital emissive shell, gated by its material id so it cannot leak onto the metal or the
     // fabric. This is an emission baked into the skin, not the wearer's darkness adaptation below.
     if (!dharma && mat == 1) {
-        color += orbitalEmissive(normalize(worldPos - WheelCentre));
+        color += orbitalEmissive(texCoord);
     }
 
     // The wheel's own light, once the wearer has adapted to darkness. Emissive, not reflective:
