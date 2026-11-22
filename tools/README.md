@@ -23,6 +23,7 @@ machine `TMPDIR=/mnt/Barracuda/tmp`. Do not redirect verbose logs to `/tmp`.
 | `./tools/validate-shaders.sh` | Compiles every `.vsh`/`.fsh` with `glslangValidator` via temporary `.vert`/`.frag` copies. Needs `glslang-tools` installed. A shader that fails to link only logs once at game load and silently falls back. |
 | `./tools/check-jar.sh` | Checks the built jar's name and manifest against `mod_version`/`minecraft_version` in `gradle.properties`. Run after `./gradlew build`. |
 | `python3 tools/check-lang.py [--strict]` | Finds duplicate display names in `en_us.json` (two rows with the same label means one of them cannot be switched off from the panel) and missing keys between `en_us` and `ru_ru`. |
+| `python3 tools/check_model_bins.py` | Regenerates `dharma_chakra`, `orbital_ring` and `soe` from their OBJ sources into a temp dir under `/mnt/Barracuda/tmp/opencode/` and compares the bytes with the committed `.bin` files. A binary that drifted from its source otherwise loads as garbage with no error. |
 
 ## Branch-port audits
 

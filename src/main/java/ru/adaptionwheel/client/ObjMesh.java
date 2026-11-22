@@ -2,6 +2,10 @@ package ru.adaptionwheel.client;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -241,6 +245,153 @@ public final class ObjMesh {
         }
 
         return new ObjMesh(corners, faces, radius, maxY - minY);
+    }
+
+    /** Little-endian FRRB v1 header: magic(4), then seven uint32 fields. */
+    private static final int HEADER_BYTES = 32;
+
+    /** One layer-0 corner record: pos3 + packed RGBA + data4 + aux4 + uv2, four bytes each. */
+    private static final int CORNER_BYTES = 14 * 4;
+
+    /** Layer 5: faceCount + centre xyz + radius + height + reserved. */
+    private static final int METADATA_BYTES = 28;
+
+    /**
+     * Reads an FRRB v1 model binary (see {@code tools/gen_model_bin.py}). The geometry was centred by
+     * the converter, so positions are copied verbatim and radius/height come from the metadata layer
+     * — subtracting the centre or recomputing the radius here a second time would shift the model by
+     * -2x the centre and break the renderer's scale.
+     *
+     * <p><b>Every header field and the exact byte count are checked before allocating anything.</b>
+     * A corrupt count passed to {@code new float[count * STRIDE]} is an OOM up to hundreds of MB, and
+     * the reload listener treats that as "no model" — silent, with no field named in the log.
+     *
+     * <p>The packed colour is the raw float bit pattern {@code 0xFFFFFFFF} for white, i.e. a NaN.
+     * It is only ever reinterpreted with {@link Float#floatToRawIntBits(float)}; float arithmetic or a
+     * narrowing cast turns white into garbage or black. The material id is <em>not</em> in those bits
+     * (8 bits cannot hold 0.5 exactly): it is {@code data4.x}, copied into the corner's red channel at
+     * full float precision, with green/blue taken from the packed bytes.
+     */
+    public static ObjMesh parseBinary(byte[] bytes) throws IOException {
+        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+        if (buffer.remaining() < HEADER_BYTES) {
+            throw new IOException("FRRB header truncated: " + buffer.remaining() + " of " + HEADER_BYTES + " bytes");
+        }
+
+        byte[] magicBytes = new byte[4];
+        buffer.get(magicBytes);
+        String magic = new String(magicBytes, StandardCharsets.US_ASCII);
+        if (!"FRRB".equals(magic)) {
+            throw new IOException("bad FRRB magic '" + magic + "', expected 'FRRB'");
+        }
+        int version = buffer.getInt();
+        if (version != 1) {
+            throw new IOException("unsupported FRRB version " + version + ", expected 1");
+        }
+        int layerCount = buffer.getInt();
+        if (layerCount != 6) {
+            throw new IOException("unsupported FRRB layerCount " + layerCount + ", expected 6");
+        }
+        int cornerCount = buffer.getInt();
+        int indexCount = buffer.getInt();
+        int groupCount = buffer.getInt();
+        int materialCount = buffer.getInt();
+        int byteCount = buffer.getInt();
+
+        if (cornerCount <= 0 || cornerCount % 3 != 0) {
+            throw new IOException("invalid FRRB cornerCount " + cornerCount + ": expected a positive multiple of 3");
+        }
+        if (indexCount != cornerCount) {
+            throw new IOException("FRRB indexCount " + indexCount + " does not match cornerCount " + cornerCount);
+        }
+        if (groupCount < 0 || materialCount < 0) {
+            throw new IOException("invalid FRRB groupCount " + groupCount + " / materialCount " + materialCount);
+        }
+        if (byteCount < HEADER_BYTES || byteCount != bytes.length
+                || buffer.remaining() != byteCount - HEADER_BYTES) {
+            throw new IOException("FRRB byteCount " + byteCount + " does not match the " + bytes.length
+                    + " bytes supplied (" + buffer.remaining() + " remaining after the header)");
+        }
+        // Fixed-size layers must fit before any allocation; 0xFFFFFFFF corners would otherwise reach
+        // the float[] constructor with a wrapped/overflowing length.
+        long fixedBytes = (long) CORNER_BYTES * cornerCount + 4L * indexCount
+                + 8L * (indexCount / 3) + METADATA_BYTES;
+        if (fixedBytes > buffer.remaining()) {
+            throw new IOException("FRRB cornerCount " + cornerCount + " needs " + fixedBytes
+                    + " bytes, but only " + buffer.remaining() + " remain");
+        }
+
+        // The index layer is sequential in our converter: the corners are already in draw order, so
+        // there is nothing to gather. The views share the slice but keep independent positions.
+        ByteBuffer cornerSlice = buffer.slice();
+        // slice() resets the byte order to BIG_ENDIAN -- inheriting it would mirror every float bit
+        // and turn 0.5 into 8.8E-44 with no exception and no log line.
+        cornerSlice.order(ByteOrder.LITTLE_ENDIAN);
+        cornerSlice.limit(CORNER_BYTES * cornerCount);
+        FloatBuffer source = cornerSlice.asFloatBuffer();
+        float[] corners = new float[cornerCount * STRIDE];
+        for (int c = 0; c < cornerCount; c++) {
+            int s = c * 14;
+            int d = c * STRIDE;
+            corners[d] = source.get(s);
+            corners[d + 1] = source.get(s + 1);
+            corners[d + 2] = source.get(s + 2);
+            corners[d + 3] = source.get(s + 12); // uv
+            corners[d + 4] = source.get(s + 13);
+            corners[d + 5] = source.get(s + 8); // normal (aux4.xyz)
+            corners[d + 6] = source.get(s + 9);
+            corners[d + 7] = source.get(s + 10);
+            corners[d + 8] = source.get(s + 4); // material id (data4.x)
+            int rgba = Float.floatToRawIntBits(source.get(s + 3)); // packed colour: raw bits, a NaN for white
+            corners[d + 9] = ((rgba >>> 8) & 0xFF) / 255.0f;
+            corners[d + 10] = ((rgba >>> 16) & 0xFF) / 255.0f;
+        }
+
+        buffer.position(buffer.position() + CORNER_BYTES * cornerCount);
+        buffer.position(buffer.position() + 4 * indexCount);
+        for (int i = 0; i < groupCount; i++) {
+            skipName(buffer, "groupCount");
+        }
+        for (int i = 0; i < materialCount; i++) {
+            skipName(buffer, "materialCount");
+        }
+        buffer.position(buffer.position() + 8 * (indexCount / 3));
+
+        if (buffer.remaining() < METADATA_BYTES) {
+            throw new IOException("FRRB metadata layer truncated: " + buffer.remaining() + " bytes");
+        }
+        int faceCount = buffer.getInt();
+        if (faceCount <= 0) {
+            throw new IOException("invalid FRRB faceCount " + faceCount + " in the metadata layer");
+        }
+        buffer.getInt(); // centre xyz: reporting only, positions are already centred
+        buffer.getInt();
+        buffer.getInt();
+        float radius = buffer.getFloat();
+        float height = buffer.getFloat();
+        buffer.getInt(); // reserved
+        if (!(radius > 0.0f) || !Float.isFinite(radius)) {
+            throw new IOException("invalid FRRB radius " + radius + " in the metadata layer");
+        }
+        if (height < 0.0f || !Float.isFinite(height)) {
+            throw new IOException("invalid FRRB height " + height + " in the metadata layer");
+        }
+        if (buffer.remaining() != 0) {
+            throw new IOException("FRRB has " + buffer.remaining() + " trailing bytes beyond byteCount " + byteCount);
+        }
+        return new ObjMesh(corners, faceCount, radius, height);
+    }
+
+    /** Skips one length-prefixed UTF-8 name from layer 2 or 3, with a bounds check. */
+    private static void skipName(ByteBuffer buffer, String field) throws IOException {
+        if (buffer.remaining() < 2) {
+            throw new IOException("FRRB " + field + " name length is truncated");
+        }
+        int length = buffer.getShort() & 0xFFFF;
+        if (buffer.remaining() < length) {
+            throw new IOException("FRRB " + field + " name of " + length + " bytes is truncated");
+        }
+        buffer.position(buffer.position() + length);
     }
 
     /**

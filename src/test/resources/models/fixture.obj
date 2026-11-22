@@ -1,0 +1,9 @@
+# Tiny FRRB fixture: one quad, two UVs, and a 7-token vertex colour line.
+# The red channel (1.0) is the material id and must survive at full float precision.
+v 0.0 0.0 0.0 1.0 1.0 0.0
+v 1.0 0.0 0.0 1.0 1.0 0.0
+v 1.0 1.0 0.0 1.0 1.0 0.0
+v 0.0 1.0 0.0 1.0 1.0 0.0
+vt 0.0 0.0
+vt 1.0 1.0
+f 1/1 2/2 3/1 4/2

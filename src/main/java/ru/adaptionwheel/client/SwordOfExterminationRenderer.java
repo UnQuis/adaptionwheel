@@ -20,8 +20,8 @@ import org.joml.Vector3f;
 import org.slf4j.Logger;
 import ru.adaptionwheel.AdaptionWheel;
 
-import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Optional;
 
 /**
@@ -69,13 +69,13 @@ public final class SwordOfExterminationRenderer extends BlockEntityWithoutLevelR
     private static final Logger LOGGER = LogUtils.getLogger();
 
     private static final ResourceLocation BLADE_MODEL = ResourceLocation.fromNamespaceAndPath(
-            AdaptionWheel.MODID, "models/entity/soe.obj");
+            AdaptionWheel.MODID, "models/entity/soe.bin");
     private static final ResourceLocation BLADE_TEXTURE = ResourceLocation.fromNamespaceAndPath(
             AdaptionWheel.MODID, "textures/item/soe_blade.png");
     private static final ResourceLocation ICON_TEXTURE = ResourceLocation.fromNamespaceAndPath(
             AdaptionWheel.MODID, "textures/item/sword_of_extermination.png");
 
-    /** Null until a reload has read the OBJ, and again if reading it failed. */
+    /** Null until a reload has read the binary, and again if reading it failed. */
     private static volatile ObjMesh bladeMesh;
 
     /** One per client; the constructor needs the client's render dispatchers, so it is lazy. */
@@ -299,9 +299,9 @@ public final class SwordOfExterminationRenderer extends BlockEntityWithoutLevelR
     }
 
     /**
-     * Reads the OBJ during a resource reload rather than on the first frame the sword is seen: the
-     * parse belongs behind the loading screen, and a resource pack that replaces the model should
-     * take effect on F3+T like every other asset.
+     * Reads the model binary during a resource reload rather than on the first frame the sword is
+     * seen: the parse belongs behind the loading screen, and a resource pack that replaces the
+     * model should take effect on F3+T like every other asset.
      */
     public static final class MeshReloadListener extends SimplePreparableReloadListener<ObjMesh> {
 
@@ -314,8 +314,8 @@ public final class SwordOfExterminationRenderer extends BlockEntityWithoutLevelR
                 return null;
             }
 
-            try (BufferedReader reader = resource.get().openAsReader()) {
-                ObjMesh mesh = ObjMesh.parse(reader);
+            try (InputStream in = resource.get().open()) {
+                ObjMesh mesh = ObjMesh.parseBinary(in.readAllBytes());
                 LOGGER.info("[{}] Sword model {}: {} faces -> {} triangles, {} units long",
                         AdaptionWheel.MODID, BLADE_MODEL, mesh.faceCount(), mesh.triangleCount(), mesh.height());
                 return mesh;

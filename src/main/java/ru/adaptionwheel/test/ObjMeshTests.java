@@ -12,7 +12,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.StringReader;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /**
  * Pins the OBJ reader the wheel above the head depends on.
@@ -31,7 +34,8 @@ import java.nio.charset.StandardCharsets;
 @PrefixGameTestTemplate(false)
 public class ObjMeshTests {
 
-    private static final String WHEEL_OBJ = "/assets/adaptionwheel/models/entity/dharma_chakra.obj";
+    private static final String WHEEL_OBJ = "/assets/adaptionwheel/models/entity/dharma_chakra.bin";
+    private static final String ORBITAL_OBJ = "/assets/adaptionwheel/models/entity/orbital_ring.bin";
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void theShippedWheelParses(GameTestHelper helper) {
@@ -321,8 +325,326 @@ public class ObjMeshTests {
         helper.succeed();
     }
 
+    /**
+     * The orbital skin is one mesh exported from three Blender materials. An OBJ has nowhere to put
+     * a material the game reads, so each object carries its material id in the red channel of its
+     * vertex colour (0 / 0.5 / 1); green and blue stay zero. The renderer will key off that id, so a
+     * dropped colour attribute would collapse all three rings into one material with no error
+     * anywhere. Pin the ids at the source, along with the mesh's size and finite normals.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theOrbitalWheelParsesWithMaterialIds(GameTestHelper helper) {
+        ObjMesh mesh = load(ORBITAL_OBJ);
+        helper.assertTrue(mesh != null,
+                "orbital OBJ is not readable from the classpath at " + ORBITAL_OBJ
+                        + " -- the skin renderer would silently draw nothing");
+        if (mesh == null) {
+            return;
+        }
+
+        helper.assertTrue(mesh.triangleCount() >= 50000,
+                "the orbital ring includes the realised Geometry Nodes detail (~59k triangles); parsed "
+                        + mesh.triangleCount() + ", which means a re-export dropped the Bezier-circle instances "
+                        + "and left only the three plain toruses");
+        helper.assertTrue(mesh.radius() > 0,
+                "the orbital OBJ must have a horizontal extent, but its radius is " + mesh.radius());
+
+        boolean found0 = false, foundHalf = false, found1 = false;
+        float[] corners = mesh.corners();
+        for (int i = 0; i < corners.length; i += ObjMesh.STRIDE) {
+            float nx = corners[i + 5], ny = corners[i + 6], nz = corners[i + 7];
+            helper.assertTrue(Float.isFinite(nx) && Float.isFinite(ny) && Float.isFinite(nz),
+                    "an orbital corner has a non-finite normal: " + nx + ", " + ny + ", " + nz);
+            float r = corners[i + 8], g = corners[i + 9], b = corners[i + 10];
+            helper.assertTrue(g == 0.0f && b == 0.0f,
+                    "the material id lives in red only; found green " + g + " and blue " + b);
+            if (Math.abs(r - 0.0f) < 0.01f) {
+                found0 = true;
+            } else if (Math.abs(r - 0.5f) < 0.01f) {
+                foundHalf = true;
+            } else if (Math.abs(r - 1.0f) < 0.01f) {
+                found1 = true;
+            } else {
+                helper.assertTrue(false, "an orbital corner has material id " + r
+                        + ", expected one of 0, 0.5 or 1");
+            }
+        }
+        helper.assertTrue(found0 && foundHalf && found1,
+                "all three material ids must survive the export; found 0=" + found0
+                        + " 0.5=" + foundHalf + " 1=" + found1);
+
+        // The original wheel has no colour attribute in the file, so it must still read as white.
+        ObjMesh dharma = shipped();
+        helper.assertTrue(dharma != null, "the shipped wheel must load before its colours can be re-checked");
+        if (dharma != null) {
+            for (int i = 0; i < dharma.corners().length; i += ObjMesh.STRIDE) {
+                float r = dharma.corners()[i + 8], g = dharma.corners()[i + 9], b = dharma.corners()[i + 10];
+                helper.assertTrue(r == 1.0f && g == 1.0f && b == 1.0f,
+                        "the shipped wheel carries no vertex colours, so every corner must be white; got "
+                                + r + ", " + g + ", " + b);
+            }
+        }
+
+        helper.succeed();
+    }
+
+    /**
+     * The orbital shader keys every shell off the red vertex-colour channel. The draw path reads the
+     * QUADS view, not {@code corners()}: if a future {@code STRIDE} change shifted or dropped that
+     * channel during repacking, every shell would silently draw as the same material with no error.
+     * Pin the ids on the array that actually reaches the GPU, including the duplicated fourth corner.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void theOrbitalIdsSurviveQuadPacking(GameTestHelper helper) {
+        ObjMesh mesh = load(ORBITAL_OBJ);
+        helper.assertTrue(mesh != null, "the orbital OBJ must load before its quad packing can be checked");
+        if (mesh == null) {
+            return;
+        }
+
+        float[] triangles = mesh.corners();
+        float[] quads = mesh.quadCorners();
+        boolean found0 = false, foundHalf = false, found1 = false;
+        int lost = 0, repeated = 0;
+        for (int triangle = 0; triangle < mesh.triangleCount(); triangle++) {
+            int triBase = triangle * 3 * ObjMesh.STRIDE;
+            int quadBase = triangle * 4 * ObjMesh.STRIDE;
+            for (int corner = 0; corner < 3; corner++) {
+                float expected = triangles[triBase + corner * ObjMesh.STRIDE + 8];
+                float actual = quads[quadBase + corner * ObjMesh.STRIDE + 8];
+                if (Math.abs(expected - actual) > 0.001f) {
+                    lost++;
+                }
+            }
+            if (quads[quadBase + 2 * ObjMesh.STRIDE + 8] != quads[quadBase + 3 * ObjMesh.STRIDE + 8]) {
+                repeated++;
+            }
+            for (int corner = 0; corner < 4; corner++) {
+                float id = quads[quadBase + corner * ObjMesh.STRIDE + 8];
+                if (Math.abs(id - 0.0f) < 0.01f) {
+                    found0 = true;
+                } else if (Math.abs(id - 0.5f) < 0.01f) {
+                    foundHalf = true;
+                } else if (Math.abs(id - 1.0f) < 0.01f) {
+                    found1 = true;
+                } else {
+                    lost++;
+                }
+            }
+        }
+
+        helper.assertTrue(lost == 0,
+                "quad packing changed or dropped the material id on " + lost + " corners; every shell "
+                        + "would draw as the same material");
+        helper.assertTrue(repeated == 0,
+                "the fourth corner must duplicate the third on all " + mesh.triangleCount()
+                        + " triangles, but " + repeated + " differ");
+        helper.assertTrue(found0 && foundHalf && found1,
+                "quads must still carry all three ids; found 0=" + found0 + " 0.5=" + foundHalf
+                        + " 1=" + found1);
+
+        helper.succeed();
+    }
+
+    /**
+     * The converter must produce the same mesh the text parser does. The fixture is small enough to
+     * compare every float: one centred quad, two triangles, two UVs and a 7-token colour line whose
+     * red (the material id) is 1.0. Everything except the material id is compared with a 1e-6
+     * tolerance; the material id is exact because the shader buckets it.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void binaryMatchesTextParserOnFixture(GameTestHelper helper) {
+        ObjMesh text = loadText("/models/fixture.obj");
+        byte[] binary = bytes("/models/fixture.bin");
+        helper.assertTrue(text != null && binary != null,
+                "the FRRB fixture resources (/models/fixture.obj and .bin) must be on the test classpath");
+        if (text == null || binary == null) {
+            return;
+        }
+
+        ObjMesh parsed;
+        try {
+            parsed = ObjMesh.parseBinary(binary);
+        } catch (IOException e) {
+            helper.assertTrue(false, "the valid FRRB fixture must parse: " + e.getMessage());
+            return;
+        }
+
+        helper.assertTrue(parsed != null, "parseBinary returned null for a valid fixture");
+        if (parsed == null) {
+            return;
+        }
+        helper.assertTrue(parsed.triangleCount() == text.triangleCount(),
+                "binary has " + parsed.triangleCount() + " triangles, text has " + text.triangleCount());
+        helper.assertTrue(parsed.faceCount() == text.faceCount(),
+                "binary has " + parsed.faceCount() + " faces, text has " + text.faceCount());
+        helper.assertTrue(Math.abs(parsed.radius() - text.radius()) < 1.0e-6f
+                        && Math.abs(parsed.height() - text.height()) < 1.0e-6f,
+                "radius/height must come from the metadata layer, not be recomputed: "
+                        + parsed.radius() + "/" + parsed.height() + " vs " + text.radius() + "/" + text.height());
+
+        float[] expected = text.corners();
+        float[] actual = parsed.corners();
+        helper.assertTrue(expected.length == actual.length, "corner arrays differ in length");
+        for (int i = 0; i < Math.min(expected.length, actual.length); i += ObjMesh.STRIDE) {
+            for (int element = 0; element < 8; element++) {
+                helper.assertTrue(Math.abs(expected[i + element] - actual[i + element]) < 1.0e-6f,
+                        "corner " + (i / ObjMesh.STRIDE) + " element " + element + ": text "
+                                + expected[i + element] + " vs binary " + actual[i + element]);
+            }
+            helper.assertTrue(actual[i + 8] == 1.0f,
+                    "the fixture's material id must survive as the exact float 1.0, got " + actual[i + 8]);
+        }
+
+        helper.succeed();
+    }
+
+    /**
+     * Packed white is the float bit pattern 0xFFFFFFFF -- a NaN. Float arithmetic or a narrowing
+     * cast turns it into garbage (or 0), and the wheel then draws black with no error anywhere.
+     * The material id lives in data4.x instead, at full precision, so 0.5 must stay exactly 0.5.
+     */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void materialIdSurvivesAsExactFloat(GameTestHelper helper) {
+        byte[] binary = oneTriangleBin(0xFFFFFFFF, 0.5f);
+        ObjMesh mesh;
+        try {
+            mesh = ObjMesh.parseBinary(binary);
+        } catch (IOException e) {
+            helper.assertTrue(false, "a valid one-triangle FRRB must parse: " + e.getMessage());
+            return;
+        }
+        helper.assertTrue(mesh != null && mesh.corners().length >= ObjMesh.STRIDE,
+                "the one-triangle FRRB must produce at least one corner");
+        if (mesh == null || mesh.corners().length < ObjMesh.STRIDE) {
+            return;
+        }
+
+        float[] corner = mesh.corners();
+        helper.assertTrue(corner[8] == 0.5f,
+                "data4.x = 0.5f must decode to exactly 0.5, got " + corner[8]
+                        + " -- quantising it through the packed colour would break the shader's material bucket");
+        helper.assertTrue(corner[9] == 1.0f && corner[10] == 1.0f,
+                "packed white RGBA (0xFFFFFFFF, a NaN float) must decode to green/blue 1.0/1.0 via "
+                        + "Float.floatToRawIntBits, got " + corner[9] + "/" + corner[10]);
+        for (float value : corner) {
+            helper.assertTrue(Float.isFinite(value),
+                    "no NaN from the packed colour may leak into a corner, got " + value);
+        }
+
+        // A genuinely white corner (dharma/soe have no colour attribute): material id 1.0 plus the
+        // NaN packed bits must give 1.0/1.0/1.0, not a dark or garbled tint.
+        try {
+            float[] white = ObjMesh.parseBinary(oneTriangleBin(0xFFFFFFFF, 1.0f)).corners();
+            helper.assertTrue(white[8] == 1.0f && white[9] == 1.0f && white[10] == 1.0f,
+                    "packed white must decode to 1.0/1.0/1.0, got " + white[8] + "/" + white[9] + "/" + white[10]);
+        } catch (IOException e) {
+            helper.assertTrue(false, "a white one-triangle FRRB must parse: " + e.getMessage());
+        }
+
+        helper.succeed();
+    }
+
+    /** A corrupt binary must be rejected on the named header field before any mesh is allocated. */
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void corruptHeadersAreRejectedBeforeAllocation(GameTestHelper helper) {
+        byte[] valid = oneTriangleBin(0xFFFFFFFF, 1.0f);
+
+        byte[] badMagic = valid.clone();
+        badMagic[0] = 'X';
+        expectBad(helper, badMagic, "magic");
+
+        byte[] badVersion = valid.clone();
+        ByteBuffer.wrap(badVersion).order(ByteOrder.LITTLE_ENDIAN).putInt(4, 2);
+        expectBad(helper, badVersion, "version");
+
+        byte[] hugeCorners = valid.clone();
+        ByteBuffer.wrap(hugeCorners).order(ByteOrder.LITTLE_ENDIAN).putInt(12, -1); // 0xFFFFFFFF
+        expectBad(helper, hugeCorners, "cornerCount");
+
+        expectBad(helper, Arrays.copyOf(valid, valid.length - 10), "byteCount");
+
+        helper.succeed();
+    }
+
+    private static void expectBad(GameTestHelper helper, byte[] bytes, String field) {
+        try {
+            ObjMesh.parseBinary(bytes);
+            helper.assertTrue(false, "a corrupt FRRB with a bad " + field + " must throw IOException");
+        } catch (IOException e) {
+            helper.assertTrue(e.getMessage() != null && e.getMessage().contains(field),
+                    "the rejection of a bad " + field + " must name that field, got: " + e.getMessage());
+        }
+    }
+
+    /** A hand-built, valid one-triangle FRRB v1 file: 3 corners, 3 indices, one face. */
+    private static byte[] oneTriangleBin(int packedRgbaBits, float materialId) {
+        int corners = 3;
+        int total = 32 + corners * 56 + corners * 4 + 8 + 28;
+        ByteBuffer buffer = ByteBuffer.allocate(total).order(ByteOrder.LITTLE_ENDIAN);
+        buffer.put("FRRB".getBytes(StandardCharsets.US_ASCII));
+        buffer.putInt(1).putInt(6).putInt(corners).putInt(corners).putInt(0).putInt(0).putInt(total);
+
+        float[][] positions = {{0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}};
+        float[][] uvs = {{0.0f, 0.0f}, {1.0f, 0.0f}, {0.0f, 1.0f}};
+        for (int c = 0; c < corners; c++) {
+            buffer.putFloat(positions[c][0]).putFloat(positions[c][1]).putFloat(positions[c][2]);
+            buffer.putInt(packedRgbaBits); // packed colour: raw float bits, NOT float arithmetic
+            buffer.putFloat(materialId).putFloat(0.0f).putFloat(0.0f).putFloat(0.0f); // data4
+            buffer.putFloat(0.0f).putFloat(0.0f).putFloat(1.0f).putFloat(0.0f); // aux4: normal
+            buffer.putFloat(uvs[c][0]).putFloat(uvs[c][1]);
+        }
+        for (int c = 0; c < corners; c++) {
+            buffer.putInt(c); // layer 1: sequential indices
+        }
+        buffer.putInt(0).putInt(0); // layer 4: face 0 -> group 0 / material 0
+        buffer.putInt(1); // layer 5: faceCount
+        buffer.putFloat(0.0f).putFloat(0.0f).putFloat(0.0f); // centre (positions already centred)
+        buffer.putFloat(1.0f).putFloat(1.0f); // radius, height
+        buffer.putInt(0); // reserved
+        return buffer.array();
+    }
+
+    private static byte[] bytes(String path) {
+        try (InputStream in = open(path)) {
+            return in == null ? null : in.readAllBytes();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** Test resources are mounted on the gametest run classpath, but the mod's own class loader
+     *  only sees main resources -- so try the JVM class loaders as well. */
+    private static InputStream open(String path) {
+        InputStream in = ObjMeshTests.class.getResourceAsStream(path);
+        if (in != null) {
+            return in;
+        }
+        String name = path.startsWith("/") ? path.substring(1) : path;
+        ClassLoader context = Thread.currentThread().getContextClassLoader();
+        in = context != null ? context.getResourceAsStream(name) : null;
+        return in != null ? in : ClassLoader.getSystemResourceAsStream(name);
+    }
+
     private static ObjMesh shipped() {
-        try (InputStream in = ObjMesh.class.getResourceAsStream(WHEEL_OBJ)) {
+        return load(WHEEL_OBJ);
+    }
+
+    private static ObjMesh load(String path) {
+        byte[] bytes = bytes(path);
+        if (bytes == null) {
+            return null;
+        }
+        try {
+            return ObjMesh.parseBinary(bytes);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** The fixture OBJ stays text: it is the reference the binary is compared against. */
+    private static ObjMesh loadText(String path) {
+        try (InputStream in = open(path)) {
             if (in == null) {
                 return null;
             }
