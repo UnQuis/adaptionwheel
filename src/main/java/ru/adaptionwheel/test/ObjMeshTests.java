@@ -339,9 +339,10 @@ public class ObjMeshTests {
             return;
         }
 
-        helper.assertTrue(mesh.triangleCount() >= 9000,
-                "the orbital ring is exported as over nine thousand triangles; parsed " + mesh.triangleCount()
-                        + ", which means the export dropped most of the mesh");
+        helper.assertTrue(mesh.triangleCount() >= 50000,
+                "the orbital ring includes the realised Geometry Nodes detail (~59k triangles); parsed "
+                        + mesh.triangleCount() + ", which means a re-export dropped the Bezier-circle instances "
+                        + "and left only the three plain toruses");
         helper.assertTrue(mesh.radius() > 0,
                 "the orbital OBJ must have a horizontal extent, but its radius is " + mesh.radius());
 
