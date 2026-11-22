@@ -338,7 +338,10 @@ void main() {
         albedo *= 1.0 - 0.35 * smoothstep(0.55, 0.85, pit) - 0.12 * smoothstep(0.60, 0.90, grit);
     } else {
         rough = mat == 2 ? 0.8 : 0.4;
-        albedo = mat == 2 ? texture(Sampler1, texCoord).rgb : vec3(0.035);
+        // f0 IS the albedo for a metal: at 0.035 the shell reflects 3.5% of the environment and
+        // reads as black with only the emissive bands showing. Dark gunmetal needs ~0.25 to keep
+        // the reflections visible without turning it into the gold skin.
+        albedo = mat == 2 ? texture(Sampler1, texCoord).rgb : vec3(0.25);
     }
     float a = rough * rough;
 
