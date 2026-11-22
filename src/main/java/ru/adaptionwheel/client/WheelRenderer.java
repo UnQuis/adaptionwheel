@@ -30,9 +30,11 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterShadersEvent;
 import net.neoforged.neoforge.client.event.RenderLivingEvent;
@@ -44,8 +46,8 @@ import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.category.Concepts;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.ModDataComponents;
-import ru.adaptionwheel.item.ModItems;
-import top.theillusivec4.curios.api.CuriosApi;
+import ru.adaptionwheel.data.WheelSkins;
+import ru.adaptionwheel.item.MahoragaWheelItem;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -58,7 +60,7 @@ public class WheelRenderer {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     /**
-     * The wheel's geometry, read from the OBJ shipped with the mod. It replaced the hand-written
+     * The dharma skin's geometry, read from the OBJ shipped with the mod. It replaced the hand-written
      * 25-cube {@link DharmaChakraModel}, which is kept only as the fallback for a pack that hides
      * the model or a file that fails to parse — a wheel that silently disappears is worse than an
      * old one, and a wheel that silently changes shape is worse than both, so both paths are
@@ -67,8 +69,28 @@ public class WheelRenderer {
     private static final ResourceLocation WHEEL_MODEL = ResourceLocation.fromNamespaceAndPath(
             AdaptionWheel.MODID, "models/entity/dharma_chakra.obj");
 
-    /** Null until a reload has read the OBJ, and again if reading it failed. */
-    private static volatile ObjMesh wheelMesh;
+    /** The second skin's mesh and albedo; no new model format, both go through {@link ObjMesh}. */
+    private static final ResourceLocation ORBITAL_MODEL = ResourceLocation.fromNamespaceAndPath(
+            AdaptionWheel.MODID, "models/entity/orbital_ring.obj");
+    // TextureManager.getTexture -> SimpleTexture looks the ResourceLocation up verbatim as
+    // assets/<namespace>/<path>: it does not prepend "textures/" or append ".png" the way
+    // RenderType's sprite path does. A short id logs "Failed to load texture" and samples black.
+    private static final ResourceLocation ORBITAL_FABRIC = ResourceLocation.fromNamespaceAndPath(
+            AdaptionWheel.MODID, "textures/item/orbital_fabric.png");
+    /** Neutral 1x1 white: the CPU path multiplies texture x vertex colour, so the dark fabric
+     * albedo would crush the decoded per-shell tints to black. The shader path keeps the fabric. */
+    private static final ResourceLocation ORBITAL_FALLBACK = ResourceLocation.fromNamespaceAndPath(
+            AdaptionWheel.MODID, "textures/item/orbital_fallback.png");
+
+    /**
+     * Both meshes are published in one write. Two separate volatile fields could be read between
+     * the writes and mix an old skin with a new one for a frame, which looks like a corrupt wheel.
+     */
+    private record WheelMeshes(ObjMesh dharma, ObjMesh orbital) {
+    }
+
+    /** Null until a reload has read the OBJs, and again if reading them failed. */
+    private static volatile WheelMeshes wheelMeshes;
 
     /**
      * One-shot, because "the OBJ path is not in use" has two causes that are otherwise
@@ -228,14 +250,28 @@ public class WheelRenderer {
         WheelLights.clear();
     }
 
+    /**
+     * Vanilla mobs have no Curios entries and most never wear a wheel, so their cache rows would
+     * otherwise live for the whole session. Entries are refreshed every frame a wheel is drawn; once
+     * an entity stops being rendered (despawn, death, leaving view) its rows age out here. This is
+     * independent of the short {@link #CACHE_TTL_TICKS} lookup TTL and of the full clear on logout.
+     */
+    @SubscribeEvent
+    public static void pruneCaches(ClientTickEvent.Post event) {
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            return;
+        }
+        long now = level.getGameTime();
+        SPIN.entrySet().removeIf(e -> now - e.getValue().lastTouched > CACHE_PRUNE_TICKS);
+        WEARING_CACHE.entrySet().removeIf(e -> now - e.getValue()[0] > CACHE_PRUNE_TICKS);
+    }
+
     @SubscribeEvent
     public static void render(RenderLivingEvent.Post<?, ?> event) {
         LivingEntity entity = event.getEntity();
 
-        if (!(entity instanceof Player player)) {
-            return;
-        }
-        if (!AdaptionConfig.WHEEL_ABOVE_HEAD.get() || !isWearingWheel(player)) {
+        if (!AdaptionConfig.WHEEL_ABOVE_HEAD.get() || !isWearingWheel(entity)) {
             return;
         }
 
@@ -246,7 +282,10 @@ public class WheelRenderer {
         float height = entity.getBbHeight() + 0.45f;
 
         float wheelSize = (float) (double) AdaptionConfig.WHEEL_SIZE.get();
-        ObjMesh mesh = wheelMesh;
+        String skin = skinFor(entity);
+        WheelMeshes meshes = wheelMeshes;
+        ObjMesh mesh = meshes == null ? null
+                : WheelSkins.ORBITAL.equals(skin) ? meshes.orbital() : meshes.dharma();
 
         // Both models are sized by their own radius, so `wheelModelScale` keeps meaning "the
         // wheel's radius in blocks" whichever one is drawing. The old model is authored in model
@@ -258,12 +297,12 @@ public class WheelRenderer {
         // Growth is a smooth function of the adaptation count rather than a step per named tier:
         // the wheel visibly fills out as the player adapts, with no thresholds to cross and
         // nothing to be told about. Capped so a very late wheel cannot grow off the screen.
-        int adaptCount = adaptCountFor(player);
+        int adaptCount = adaptCountFor(entity);
         float growth = 1.0F + 0.55F * (adaptCount / (float) WHEEL_GROWTH_REFERENCE);
         scale *= Math.min(growth, MAX_GROWTH);
         int tint = tintFor(adaptCount);
 
-        float time = player.level().getGameTime() + partialTick;
+        float time = entity.level().getGameTime() + partialTick;
         float bob = Mth.sin(time * BOB_SPEED) * BOB_AMPLITUDE;
 
         // Real light from the world, sampled the way vanilla samples an entity's: the block and the
@@ -294,27 +333,29 @@ public class WheelRenderer {
         // LivingEntityRenderer's push — so there is nothing to cancel here. The old -bodyYaw turn
         // only looked harmless because the wheel was spinning anyway; without the spin it would
         // read as the wheel turning whenever the player turned.
-        float spinAngle = wheelAngle(player, adaptCount, time);
+        float spinAngle = wheelAngle(entity, adaptCount, time);
         poseStack.mulPose(Axis.YP.rotation(spinAngle));
 
         poseStack.scale(scale, scale, scale);
 
         if (mesh != null) {
             if (wheelShader != null && AdaptionConfig.WHEEL_SHADER_ENABLED.get()) {
-                drawMeshShader(mesh, poseStack, tint, packedLight, entity, partialTick);
+                drawMeshShader(mesh, poseStack, tint, packedLight, entity, partialTick, skin);
             } else {
                 if (wheelShader == null && !shaderMissingLogged) {
                     shaderMissingLogged = true;
                     LOGGER.warn("[{}] The wheel metal shader {} is not loaded; drawing the wheel with "
                             + "the old per-vertex lighting", AdaptionWheel.MODID, WHEEL_SHADER);
                 }
-                drawMesh(mesh, poseStack, bufferSource, tint, packedLight, entity, height + bob, spinAngle, partialTick);
+                drawMesh(mesh, poseStack, bufferSource, tint, packedLight, entity, height + bob,
+                        spinAngle, partialTick, skin);
             }
         } else {
             if (!fallbackLogged) {
                 fallbackLogged = true;
-                LOGGER.warn("[{}] No wheel mesh is loaded; drawing the old 25-cube model. If {} exists, "
-                        + "the reload listener did not run", AdaptionWheel.MODID, WHEEL_MODEL);
+                LOGGER.warn("[{}] No wheel mesh is loaded for skin {}; drawing the old 25-cube model. "
+                                + "If {} exists, the reload listener did not run",
+                        AdaptionWheel.MODID, skin, modelFor(skin));
             }
             drawFallback(poseStack, bufferSource, tint, packedLight);
         }
@@ -332,8 +373,9 @@ public class WheelRenderer {
      * is eight-fold symmetric — only the step matters, so a wheel loaded at 300 adaptations has no
      * phase to spin up to, and a hand-over cannot make it whirl.
      */
-    private static float wheelAngle(Player player, int adaptCount, float time) {
-        SpinState state = SPIN.computeIfAbsent(player.getUUID(), id -> new SpinState(adaptCount));
+    private static float wheelAngle(LivingEntity entity, int adaptCount, float time) {
+        SpinState state = SPIN.computeIfAbsent(entity.getUUID(), id -> new SpinState(adaptCount));
+        state.lastTouched = (long) time;
 
         if (state.count != adaptCount) {
             int delta = adaptCount - state.count;
@@ -378,9 +420,12 @@ public class WheelRenderer {
         float from;
         float to;
         float start;
+        /** Game time of the last frame this wheel was drawn; lets the client tick prune stale mobs. */
+        long lastTouched;
 
         SpinState(int count) {
             this.count = count;
+            this.lastTouched = Long.MIN_VALUE;
         }
     }
 
@@ -414,11 +459,12 @@ public class WheelRenderer {
      * unviewed world coordinates, off screen, with no error anywhere.
      */
     private static void drawMeshShader(ObjMesh mesh, PoseStack poseStack, int tint, int packedLight,
-                                       LivingEntity entity, float partialTick) {
+                                       LivingEntity entity, float partialTick, String skin) {
         ShaderInstance shader = wheelShader;
         if (shader == null) {
             return;
         }
+        boolean orbital = WheelSkins.ORBITAL.equals(skin);
 
         PoseStack.Pose pose = poseStack.last();
         Matrix4f poseMatrix = pose.pose();
@@ -444,6 +490,12 @@ public class WheelRenderer {
                 .mul(RenderSystem.getModelViewMatrix());
         shader.safeGetUniform("WheelProj").set(viewProj);
         shader.safeGetUniform("WheelCamera").set(eyeX, eyeY, eyeZ);
+        // The emissive bands run on an explicit clock. RenderSystem stores the time as
+        // (gameTime % 24000 + partialTick) / 24000 and ShaderInstance only copies it into GameTime
+        // during chunk-section rendering, so an immediate draw has to upload it itself.
+        shader.safeGetUniform("GameTime").set(((float) (level.getGameTime() % 24000L) + partialTick) / 24000.0F);
+        // x selects the material branch; the rest is reserved for future per-skin parameters.
+        shader.safeGetUniform("WheelSkin").set(orbital ? 1.0F : 0.0F, 0.0F, 0.0F, 0.0F);
         // The wheel's own origin in world space: the pose stack's origin is the wheel's centre, so
         // transforming (0,0,0) and adding the eye is where it actually sits. The fragment stage
         // uses it to keep the corrosion noise anchored to the wheel instead of to the world.
@@ -465,7 +517,7 @@ public class WheelRenderer {
         // a bug report, while in the dark it is the one thing in the scene that is not lit by
         // something else. The lightmap lift and this are two halves of one adaptation -- the lift
         // makes the world visible, this makes the wheel a source in it.
-        float glow = (entity instanceof Player wearer ? darknessGlowFor(wearer) : 0.0F)
+        float glow = darknessGlowFor(entity)
                 * (0.35f + 0.65f * (1.0f - Math.max(skyAmount, blockAmount)));
         shader.safeGetUniform("WheelGlow").set(glow);
 
@@ -488,6 +540,7 @@ public class WheelRenderer {
         float green = ((tint >> 8) & 0xFF) / 255.0F;
         float blue = (tint & 0xFF) / 255.0F;
         float alpha = (TINT_ALPHA & 0xFF) / 255.0F;
+        shader.safeGetUniform("WheelTint").set(red, green, blue, alpha);
 
         // The world pass leaves face culling on, and a fullscreen-style immediate draw is the
         // classic place it silently eats geometry; the wheel's own winding is correct but this is
@@ -497,8 +550,10 @@ public class WheelRenderer {
         RenderSystem.depthMask(true);
         RenderSystem.disableBlend();
         try {
-            shader.setSampler("Sampler0",
-                    Minecraft.getInstance().getTextureManager().getTexture(DharmaChakraModel.TEXTURE).getId());
+            var textures = Minecraft.getInstance().getTextureManager();
+            shader.setSampler("Sampler0", textures.getTexture(
+                    orbital ? ORBITAL_FABRIC : DharmaChakraModel.TEXTURE).getId());
+            shader.setSampler("Sampler1", textures.getTexture(ORBITAL_FABRIC).getId());
             shader.apply();
 
             BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLES,
@@ -518,9 +573,12 @@ public class WheelRenderer {
                         SHADER_NORMAL_SCRATCH.normalize();
                     }
 
+                    // The vertex colour carries the orbital shell's material id; the dharma OBJ has
+                    // no colours and reads white, so its old output is unchanged. The adaptation
+                    // tint moved to WheelTint so it no longer overwrites that id.
                     buffer.addVertex(IDENTITY, POS_SCRATCH.x, POS_SCRATCH.y, POS_SCRATCH.z)
                             .setUv(corners[o + 3], corners[o + 4])
-                            .setColor(red, green, blue, alpha)
+                            .setColor(corners[o + 8], corners[o + 9], corners[o + 10], alpha)
                             .setNormal(SHADER_NORMAL_SCRATCH.x(), SHADER_NORMAL_SCRATCH.y(), SHADER_NORMAL_SCRATCH.z());
                 }
             }
@@ -535,10 +593,9 @@ public class WheelRenderer {
      * Pushes the OBJ's triangle soup into the entity vertex format.
      *
      * <p>Two things multiply into the vertex colour: the artist's material (gold ring/spheres,
-     * bronze beams — baked into the mesh as per-vertex colours at export time) and the adaptation
-     * tint (grey at nothing adapted, warming to gold as the wheel fills out). The texture
-     * ({@code dharma_chakra.png}) is a neutral brushed-steel grain that adds micro-detail only —
-     * a gold sprite under a gold vertex colour would be gold squared.
+     * bronze beams for dharma; a material id for orbital — baked into the mesh at export time) and
+     * the adaptation tint (grey at nothing adapted, warming to gold as the wheel fills out). The
+     * texture is a neutral grain for dharma and the fabric albedo for orbital.
      *
      * <p>Base lighting is the vanilla entity pipeline (diffuse from the sun/moon, sky/block
      * lightmap from torches and night, fog). On top of that a small Blinn-Phong specular boost is
@@ -547,8 +604,11 @@ public class WheelRenderer {
      * way metal should. Per-corner normals are real: smooth on the re-authored spheres, flat on
      * the faceted torus and bronze beams.
      */
-    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, MultiBufferSource buffers, int tint, int packedLight, LivingEntity entity, float wheelCenterY, float spinAngle, float partialTick) {
-        VertexConsumer consumer = buffers.getBuffer(RenderType.entityCutoutNoCull(DharmaChakraModel.TEXTURE));
+    private static void drawMesh(ObjMesh mesh, PoseStack poseStack, MultiBufferSource buffers, int tint, int packedLight,
+                                 LivingEntity entity, float wheelCenterY, float spinAngle, float partialTick, String skin) {
+        boolean orbital = WheelSkins.ORBITAL.equals(skin);
+        VertexConsumer consumer = buffers.getBuffer(RenderType.entityCutoutNoCull(
+                orbital ? ORBITAL_FALLBACK : DharmaChakraModel.TEXTURE));
         PoseStack.Pose pose = poseStack.last();
 
         float red = ((tint >> 16) & 0xFF) / 255.0F;
@@ -623,9 +683,18 @@ public class WheelRenderer {
         for (int i = 0; i < corners.length; i += ObjMesh.STRIDE * 4) {
             for (int corner = 0; corner < 4; corner++) {
                 int o = i + corner * ObjMesh.STRIDE;
-                float mr = corners[o + 8];
-                float mg = corners[o + 9];
-                float mb = corners[o + 10];
+                // The orbital mesh's red channel is a material id, not a colour: feeding it straight
+                // to setColor would paint the three shells black, dark grey and red. Decode it into
+                // the three fallback tints instead; there is no animated emissive in this path.
+                float mr, mg, mb;
+                if (orbital) {
+                    float[] material = WheelSkins.tintForMaterial(corners[o + 8]);
+                    mr = material[0];
+                    mg = material[1];
+                    mb = material[2];
+                } else {
+                    mr = mg = mb = 1.0F;
+                }
 
                 // Per-corner normal in world/pose space.
                 NORMAL_SCRATCH.set(corners[o + 5], corners[o + 6], corners[o + 7]).mul(normalMatrix);
@@ -700,47 +769,70 @@ public class WheelRenderer {
      * for something that can be done behind the loading screen. It also means a resource pack that
      * replaces the model takes effect on F3+T like every other asset.
      */
-    private static final class WheelMeshReloadListener extends SimplePreparableReloadListener<ObjMesh> {
+    private static final class WheelMeshReloadListener extends SimplePreparableReloadListener<WheelMeshes> {
 
         @Override
-        protected ObjMesh prepare(ResourceManager resources, ProfilerFiller profiler) {
-            Optional<Resource> resource = resources.getResource(WHEEL_MODEL);
-            if (resource.isEmpty()) {
-                LOGGER.error("[{}] Wheel model {} is not in the resource manager; the wheel above the head "
-                        + "will use the old 25-cube model", AdaptionWheel.MODID, WHEEL_MODEL);
-                return null;
-            }
-
-            try (BufferedReader reader = resource.get().openAsReader()) {
-                ObjMesh mesh = ObjMesh.parse(reader);
-                LOGGER.info("[{}] Wheel model {}: {} faces -> {} triangles, radius {} blocks",
-                        AdaptionWheel.MODID, WHEEL_MODEL, mesh.faceCount(), mesh.triangleCount(), mesh.radius());
-                return mesh;
-            } catch (IOException | RuntimeException e) {
-                LOGGER.error("[{}] Could not read wheel model {}; the wheel above the head will use the old "
-                        + "25-cube model", AdaptionWheel.MODID, WHEEL_MODEL, e);
-                return null;
-            }
+        protected WheelMeshes prepare(ResourceManager resources, ProfilerFiller profiler) {
+            // Each file logs its own failure: a single shared flag would report "the wheel model"
+            // and leave the player guessing which of the two skins is broken.
+            return new WheelMeshes(loadMesh(resources, WHEEL_MODEL), loadMesh(resources, ORBITAL_MODEL));
         }
 
         @Override
-        protected void apply(ObjMesh mesh, ResourceManager resources, ProfilerFiller profiler) {
-            wheelMesh = mesh;
+        protected void apply(WheelMeshes meshes, ResourceManager resources, ProfilerFiller profiler) {
+            wheelMeshes = meshes;
         }
     }
 
-    /** The wearer's adaptation count, read the same way for every player a client draws. */
-    private static int adaptCountFor(Player player) {
-        if (player.isLocalPlayer()) {
+    private static ObjMesh loadMesh(ResourceManager resources, ResourceLocation path) {
+        Optional<Resource> resource = resources.getResource(path);
+        if (resource.isEmpty()) {
+            LOGGER.error("[{}] Wheel model {} is not in the resource manager; that skin will use the old "
+                    + "25-cube model", AdaptionWheel.MODID, path);
+            return null;
+        }
+
+        try (BufferedReader reader = resource.get().openAsReader()) {
+            ObjMesh mesh = ObjMesh.parse(reader);
+            LOGGER.info("[{}] Wheel model {}: {} faces -> {} triangles, radius {} blocks",
+                    AdaptionWheel.MODID, path, mesh.faceCount(), mesh.triangleCount(), mesh.radius());
+            return mesh;
+        } catch (IOException | RuntimeException e) {
+            LOGGER.error("[{}] Could not read wheel model {}; that skin will use the old 25-cube model",
+                    AdaptionWheel.MODID, path, e);
+            return null;
+        }
+    }
+
+    /**
+     * The skin lives on the equipped wheel item, so this reads the same place for the local player
+     * and for everyone else on screen — no client-only mirror that could disagree with what a trade
+     * or the anvil wrote.
+     */
+    private static String skinFor(LivingEntity entity) {
+        ItemStack wheel = MahoragaWheelItem.equippedWheel(entity);
+        return WheelSkins.normalize(wheel == null ? null : wheel.get(ModDataComponents.WHEEL_SKIN.get()));
+    }
+
+    /** Which OBJ a missing mesh was supposed to come from, for the fallback warning. */
+    private static ResourceLocation modelFor(String skin) {
+        return WheelSkins.ORBITAL.equals(skin) ? ORBITAL_MODEL : WHEEL_MODEL;
+    }
+
+    /** The wearer's adaptation count, read the same way for every entity a client draws. */
+    private static int adaptCountFor(LivingEntity entity) {
+        // isLocalPlayer() lives on Player in 1.21.1, not on LivingEntity; the instanceof guard both
+        // compiles and keeps ClientAdaption strictly for the local player.
+        if (entity instanceof Player player && player.isLocalPlayer()) {
             return ClientAdaption.adaptedCount;
         }
 
-        return CuriosApi.getCuriosInventory(player)
-                .flatMap(handler -> handler.findFirstCurio(ModItems.MAHORAGA_WHEEL.get()))
-                .map(top.theillusivec4.curios.api.SlotResult::stack)
-                .map(stack -> stack.get(ModDataComponents.WHEEL_DATA.get()))
-                .map(ru.adaptionwheel.data.WheelData::adaptCount)
-                .orElse(0);
+        ItemStack wheel = MahoragaWheelItem.equippedWheel(entity);
+        if (wheel == null) {
+            return 0;
+        }
+        var data = wheel.get(ModDataComponents.WHEEL_DATA.get());
+        return data == null ? 0 : data.adaptCount();
     }
 
     /**
@@ -754,19 +846,17 @@ public class WheelRenderer {
      * switch lives in the player attachment, which is not synced for other players, so a wheel
      * turned off still glows for an observer. That is a smaller wrong than not glowing at all.
      */
-    private static float darknessGlowFor(Player player) {
-        if (player.isLocalPlayer()) {
+    private static float darknessGlowFor(LivingEntity entity) {
+        if (entity instanceof Player player && player.isLocalPlayer()) {
             return ClientAdaption.active(Concepts.ENV_DARKNESS) ? 1.0F : 0.0F;
         }
 
-        boolean adapted = CuriosApi.getCuriosInventory(player)
-                .flatMap(handler -> handler.findFirstCurio(ModItems.MAHORAGA_WHEEL.get()))
-                .map(top.theillusivec4.curios.api.SlotResult::stack)
-                .map(stack -> stack.get(ModDataComponents.WHEEL_DATA.get()))
-                .map(ru.adaptionwheel.data.WheelData::adapted)
-                .map(adaptedKeys -> adaptedKeys.contains(Concepts.ENV_DARKNESS))
-                .orElse(false);
-        return adapted ? 1.0F : 0.0F;
+        ItemStack wheel = MahoragaWheelItem.equippedWheel(entity);
+        if (wheel == null) {
+            return 0.0F;
+        }
+        var data = wheel.get(ModDataComponents.WHEEL_DATA.get());
+        return data != null && data.adapted().contains(Concepts.ENV_DARKNESS) ? 1.0F : 0.0F;
     }
 
     /** Cool grey at nothing adapted, warming towards gold as the wheel fills out. */
@@ -788,24 +878,25 @@ public class WheelRenderer {
     private static final float MAX_GROWTH = 1.55F;
 
     private static final java.util.Map<java.util.UUID, long[]> WEARING_CACHE = new java.util.HashMap<>();
+    /** How long the wearing lookup is trusted before it is recomputed. */
     private static final long CACHE_TTL_TICKS = 10;
+    /** Age past which an unseen entity's cached entries are dropped, so respawns cannot leak forever. */
+    private static final long CACHE_PRUNE_TICKS = 200L;
 
     /** Per-player click state; see {@link #wheelAngle}. */
     private static final java.util.Map<java.util.UUID, SpinState> SPIN = new java.util.HashMap<>();
 
-    private static boolean isWearingWheel(Player player) {
-        if (player.isLocalPlayer()) {
+    private static boolean isWearingWheel(LivingEntity entity) {
+        if (entity instanceof Player player && player.isLocalPlayer()) {
             return ClientAdaption.wearingWheel;
         }
-        long now = player.level().getGameTime();
-        long[] cached = WEARING_CACHE.get(player.getUUID());
+        long now = entity.level().getGameTime();
+        long[] cached = WEARING_CACHE.get(entity.getUUID());
         if (cached != null && now - cached[0] < CACHE_TTL_TICKS) {
             return cached[1] != 0;
         }
-        boolean wearing = CuriosApi.getCuriosInventory(player)
-                .map(handler -> handler.isEquipped(ModItems.MAHORAGA_WHEEL.get()))
-                .orElse(false);
-        WEARING_CACHE.put(player.getUUID(), new long[]{now, wearing ? 1 : 0});
+        boolean wearing = MahoragaWheelItem.equippedWheel(entity) != null;
+        WEARING_CACHE.put(entity.getUUID(), new long[]{now, wearing ? 1 : 0});
         return wearing;
     }
 }

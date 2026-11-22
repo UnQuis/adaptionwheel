@@ -2,7 +2,7 @@ package ru.adaptionwheel.mixin;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.SlimeBlock;
@@ -18,16 +18,16 @@ public abstract class SlimeBlockMixin {
 
     @Inject(method = "stepOn", at = @At("HEAD"), cancellable = true)
     private void adaptionwheel$noSlowdown(Level level, BlockPos pos, BlockState state, Entity entity, CallbackInfo ci) {
-        if (entity instanceof Player player
-                && !player.isSteppingCarefully()
-                && SurfaceAdaptations.ignoresSlimePenalty(player)) {
+        if (entity instanceof LivingEntity living
+                && !living.isSteppingCarefully()
+                && SurfaceAdaptations.ignoresSlimePenalty(living)) {
             ci.cancel();
         }
     }
 
     @Inject(method = "updateEntityAfterFallOn", at = @At("HEAD"), cancellable = true)
     private void adaptionwheel$noBounce(BlockGetter level, Entity entity, CallbackInfo ci) {
-        if (entity instanceof Player player && SurfaceAdaptations.ignoresSlimePenalty(player)) {
+        if (entity instanceof LivingEntity living && SurfaceAdaptations.ignoresSlimePenalty(living)) {
             ci.cancel();
         }
     }

@@ -5,7 +5,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,8 +21,8 @@ public abstract class FrictionMixin {
     private float adaptionwheel$groundFriction(BlockState state, LevelReader level, BlockPos pos, Entity entity,
                                                Operation<Float> original) {
         float friction = original.call(state, level, pos, entity);
-        if (friction > 0.6F && entity instanceof Player player
-                && SurfaceAdaptations.wantsGroundFriction(player, state)) {
+        if (friction > 0.6F && entity instanceof LivingEntity living
+                && SurfaceAdaptations.wantsGroundFriction(living, state)) {
             return 0.6F;
         }
         return friction;

@@ -3,7 +3,7 @@ package ru.adaptionwheel.mixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.Block;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -22,8 +22,8 @@ public abstract class SpeedFactorMixin {
             return factor;
         }
         Entity self = (Entity) (Object) this;
-        if (self instanceof Player player) {
-            Float neutralized = SurfaceAdaptations.neutralizedSpeedFactor(player, block);
+        if (self instanceof LivingEntity living) {
+            Float neutralized = SurfaceAdaptations.neutralizedSpeedFactor(living, block);
             if (neutralized != null) {
                 return neutralized;
             }
@@ -41,7 +41,7 @@ public abstract class SpeedFactorMixin {
             return factor;
         }
         Entity self = (Entity) (Object) this;
-        if (self instanceof Player player && SurfaceAdaptations.keepsFullJump(player, block)) {
+        if (self instanceof LivingEntity living && SurfaceAdaptations.keepsFullJump(living, block)) {
             return 1.0F;
         }
         return factor;

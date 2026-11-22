@@ -2,11 +2,14 @@ package ru.adaptionwheel.item;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
+import org.jetbrains.annotations.Nullable;
 import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.data.WheelData;
+import top.theillusivec4.curios.api.CuriosApi;
 import top.theillusivec4.curios.api.SlotContext;
 import top.theillusivec4.curios.api.type.capability.ICurioItem;
 
@@ -19,6 +22,29 @@ public class MahoragaWheelItem extends Item implements ICurioItem {
     public static boolean isWheel(net.minecraft.world.item.ItemStack stack) {
         return stack != null && (stack.is(ModItems.MAHORAGA_WHEEL.get())
                 || stack.is(ModItems.MAHORAGA_WHEEL_WOOD.get()));
+    }
+
+    /**
+     * The wheel in an entity's dedicated Curios slot, or null.
+     *
+     * <p>Read the slot directly instead of {@code findFirstCurio}/{@code isEquipped}: Curios caches
+     * those answers for the current game tick, so equipping and unequipping in the same tick (a
+     * command, a swap, a mob dying) leaves every wearer check stale until the next tick. The
+     * dedicated slot is the only place this item can legally be worn anyway.
+     */
+    @Nullable
+    public static ItemStack equippedWheel(LivingEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+        var handler = CuriosApi.getCuriosInventory(entity)
+                .flatMap(inv -> inv.getStacksHandler(WHEEL_SLOT))
+                .orElse(null);
+        if (handler == null) {
+            return null;
+        }
+        ItemStack stack = handler.getStacks().getStackInSlot(0);
+        return isWheel(stack) ? stack : null;
     }
 
     public MahoragaWheelItem(Properties properties) {
@@ -40,7 +66,7 @@ public class MahoragaWheelItem extends Item implements ICurioItem {
         tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip").withStyle(ChatFormatting.GOLD));
         tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip2").withStyle(ChatFormatting.GRAY));
         tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip3").withStyle(ChatFormatting.DARK_GRAY));
-
+        tooltipComponents.add(Component.translatable("item.adaptionwheel.mahoraga_wheel.tooltip5").withStyle(ChatFormatting.GRAY));
         WheelData wd = stack.get(ModDataComponents.WHEEL_DATA);
         if (wd != null) {
             int count = wd.adaptCount();
