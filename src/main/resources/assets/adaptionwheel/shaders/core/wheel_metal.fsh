@@ -146,10 +146,14 @@ vec3 orbitalEmissive(vec3 dir) {
     float seconds = GameTime * 1200.0;
     vec2 q = dir.xz;
     vec2 slow = voronoi2(q * 3.0 + vec2(seconds * -0.67, 0.0));
-    vec2 fast = voronoi2(q * 12.0 + vec2(seconds * -0.5, 0.0));
+    // The authored bands (0.88..0.90 and 0.20..0.25 of the cell distance) are thinner than a
+    // pixel on a 1.3-block wheel: only ~8% of the circumference lit, as isolated cyan dots.
+    // Wider bands and a coarser fast layer keep the same two-layer interference but make the
+    // squares readable; measured at ~43% of the ring above the visible threshold.
+    vec2 fast = voronoi2(q * 6.0 + vec2(seconds * -0.5, 0.0));
 
-    float outline = smoothstep(0.88, 0.89, slow.y) * (1.0 - smoothstep(0.89, 0.90, slow.y));
-    float core = smoothstep(0.20, 0.225, fast.x) * (1.0 - smoothstep(0.225, 0.25, fast.x));
+    float outline = smoothstep(0.80, 0.84, slow.y) * (1.0 - smoothstep(0.90, 0.94, slow.y));
+    float core = smoothstep(0.10, 0.16, fast.x) * (1.0 - smoothstep(0.26, 0.34, fast.x));
     vec3 blueCyan = mix(vec3(0.10, 0.25, 1.00), vec3(0.00, 1.00, 1.00), clamp(slow.x, 0.0, 1.0));
     vec3 violetCyan = mix(vec3(0.55, 0.10, 1.00), vec3(0.00, 1.00, 1.00), clamp(fast.y, 0.0, 1.0));
     return min(blueCyan * outline * 1.2 + violetCyan * core * 2.5, vec3(3.7));
@@ -338,10 +342,11 @@ void main() {
         albedo *= 1.0 - 0.35 * smoothstep(0.55, 0.85, pit) - 0.12 * smoothstep(0.60, 0.90, grit);
     } else {
         rough = mat == 2 ? 0.8 : 0.4;
-        // f0 IS the albedo for a metal: at 0.035 the shell reflects 3.5% of the environment and
-        // reads as black with only the emissive bands showing. Dark gunmetal needs ~0.25 to keep
-        // the reflections visible without turning it into the gold skin.
-        albedo = mat == 2 ? texture(Sampler1, texCoord).rgb : vec3(0.25);
+        // f0 IS the albedo for a metal. 0.035 made the shell black; 0.25 made every shell the
+        // same light grey, so the fabric and the metal became indistinguishable. 0.14 keeps the
+        // reflections readable while leaving room for the fabric to read as a darker material;
+        // the contrast-stretched weave is tinted blue-grey rather than left neutral.
+        albedo = mat == 2 ? texture(Sampler1, texCoord).rgb * vec3(0.36, 0.42, 0.58) : vec3(0.14);
     }
     float a = rough * rough;
 
