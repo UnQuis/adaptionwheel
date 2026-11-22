@@ -73,12 +73,15 @@ public class WheelRenderer {
     /** The second skin's mesh and albedo; no new model format, both go through {@link ObjMesh}. */
     private static final ResourceLocation ORBITAL_MODEL = ResourceLocation.fromNamespaceAndPath(
             AdaptionWheel.MODID, "models/entity/orbital_ring.obj");
+    // TextureManager.getTexture -> SimpleTexture looks the ResourceLocation up verbatim as
+    // assets/<namespace>/<path>: it does not prepend "textures/" or append ".png" the way
+    // RenderType's sprite path does. A short id logs "Failed to load texture" and samples black.
     private static final ResourceLocation ORBITAL_FABRIC = ResourceLocation.fromNamespaceAndPath(
-            AdaptionWheel.MODID, "item/orbital_fabric");
+            AdaptionWheel.MODID, "textures/item/orbital_fabric.png");
     /** Neutral 1x1 white: the CPU path multiplies texture x vertex colour, so the dark fabric
      * albedo would crush the decoded per-shell tints to black. The shader path keeps the fabric. */
     private static final ResourceLocation ORBITAL_FALLBACK = ResourceLocation.fromNamespaceAndPath(
-            AdaptionWheel.MODID, "item/orbital_fallback");
+            AdaptionWheel.MODID, "textures/item/orbital_fallback.png");
 
     /**
      * Both meshes are published in one write. Two separate volatile fields could be read between
