@@ -788,11 +788,10 @@ public class WheelRenderer {
     }
 
     /**
-     * The skin lives on the equipped wheel item, so this reads the same place for the local player
-     * and for everyone else on screen — no client-only mirror that could disagree with what a trade
-     * or the anvil wrote.
+     * The wheel in the dedicated Curios slot, read the same way for every entity a client draws.
+     * The skin lives on the equipped item, so this is the same place for the local player and for
+     * everyone else on screen — no client-only mirror that could disagree with a trade or the anvil.
      */
-    /** The wheel in the dedicated Curios slot, read the same way for every entity a client draws. */
     private static ItemStack equippedWheel(LivingEntity entity) {
         var handler = CuriosApi.getCuriosInventory(entity)
                 .flatMap(inv -> inv.getStacksHandler(MahoragaWheelItem.WHEEL_SLOT))

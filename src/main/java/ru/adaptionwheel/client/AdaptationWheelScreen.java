@@ -23,7 +23,6 @@ import ru.adaptionwheel.category.Synergies;
 import ru.adaptionwheel.data.AdaptionTask;
 import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.data.PlayerAdaption;
-import ru.adaptionwheel.data.WheelData;
 import ru.adaptionwheel.data.WheelSkins;
 import ru.adaptionwheel.item.MahoragaWheelItem;
 import ru.adaptionwheel.item.ModItems;
