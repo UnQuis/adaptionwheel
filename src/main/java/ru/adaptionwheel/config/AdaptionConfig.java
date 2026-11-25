@@ -178,6 +178,13 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> DIVE_COOLDOWN_TICKS;
     public static final ModConfigSpec.ConfigValue<Integer> DIVE_MAX_BLOCKS;
 
+    public static final ModConfigSpec.ConfigValue<Boolean> TIME_WARP_ENABLED;
+    public static final ModConfigSpec.ConfigValue<Double> TIME_WARP_SPEED;
+    public static final ModConfigSpec.ConfigValue<Double> TIME_WARP_RADIUS;
+    public static final ModConfigSpec.ConfigValue<Integer> TIME_WARP_DURATION_SECONDS;
+    public static final ModConfigSpec.ConfigValue<Integer> TIME_WARP_COOLDOWN_SECONDS;
+    public static final ModConfigSpec.ConfigValue<Boolean> TIME_WARP_PLAYERS;
+
     public static final ModConfigSpec.ConfigValue<Boolean> SKILL_ISSUE_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_RADIUS;
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_STRENGTH;
@@ -609,6 +616,24 @@ public final class AdaptionConfig {
                         "radii and modded soft blocks from turning a single dive into a chunk-sized",
                         "hole; blocks are taken nearest-first, so a capped crater stays round.")
                 .defineInRange("maxBlocks", 1500, 1, 4096);
+        s.pop();
+
+        s.comment("--- Time Warp (active ability) ---").push("timeWarp");
+        TIME_WARP_ENABLED = s.comment("Time Warp: decimate entity ticks inside a sphere around the",
+                        "wearer while the wearer moves normally. Activated with the existing R key.")
+                .define("enabled", true);
+        TIME_WARP_SPEED = s.comment("World speed inside the sphere. 0.2 means entities tick once",
+                        "every five server ticks. The zone owner is always excluded.")
+                .defineInRange("speed", 0.2, 0.05, 1.0);
+        TIME_WARP_RADIUS = s.comment("Radius of the slowed sphere, in blocks.")
+                .defineInRange("radius", 64.0, 4.0, 256.0);
+        TIME_WARP_DURATION_SECONDS = s.comment("How long one zone lasts, in seconds.")
+                .defineInRange("durationSeconds", 120, 1, 1200);
+        TIME_WARP_COOLDOWN_SECONDS = s.comment("Cooldown after a zone ends, in seconds.")
+                .defineInRange("cooldownSeconds", 10, 0, 600);
+        TIME_WARP_PLAYERS = s.comment("Whether other players inside the sphere are slowed too.",
+                        "The owner is excluded either way; off by default so PvP pacing is unchanged.")
+                .define("slowPlayers", false);
         s.pop();
 
         s.comment("--- Contact Defense ---").push("contactDefense");

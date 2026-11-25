@@ -81,6 +81,12 @@ public class AdaptionWheel {
                     ru.adaptionwheel.server.DiveAbility.ID,
                     ru.adaptionwheel.server.DiveAbility::start,
                     ru.adaptionwheel.server.DiveAbility::unlocked);
+            ru.adaptionwheel.ability.ActiveAbilities.register(
+                    ru.adaptionwheel.server.TimeWarpAbility.definition());
+            ru.adaptionwheel.server.AbilityDispatch.register(
+                    ru.adaptionwheel.server.TimeWarpAbility.ID,
+                    ru.adaptionwheel.server.TimeWarpAbility::start,
+                    ru.adaptionwheel.server.TimeWarpAbility::unlocked);
             ru.adaptionwheel.server.DomainExchange.bootstrap();
         });
     }
