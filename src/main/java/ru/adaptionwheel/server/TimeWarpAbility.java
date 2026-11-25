@@ -382,7 +382,7 @@ public final class TimeWarpAbility {
     private static UUID zoneOwner(Entity entity) {
         for (State state : STATES.values()) {
             if (state.owner.equals(entity.getUUID())) {
-                return null;
+                continue;
             }
             double dx = entity.getX() - state.centre.getX();
             double dy = entity.getY() - state.centre.getY();
