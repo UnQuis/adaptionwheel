@@ -254,8 +254,10 @@ public final class TimeWarpAbility {
         if (owner == null || explosion == null) {
             return;
         }
+        Vec3 centre = explosion.center();
         PENDING_EXPLOSIONS.computeIfAbsent(owner, key -> new ArrayList<>()).add(new PendingExplosion(
-                explosion.center().immutable(), explosion.radius(), explosion.getDirectSourceEntity(),
+                new Vec3(centre.x(), centre.y(), centre.z()), explosion.radius(),
+                explosion.getDirectSourceEntity(),
                 explosion.interactsWithBlocks() ? Level.ExplosionInteraction.BLOCK : Level.ExplosionInteraction.NONE));
     }
 
@@ -415,7 +417,7 @@ public final class TimeWarpAbility {
         Explosion explosion = event.getExplosion();
         Vec3 centre = explosion.center();
         for (State state : STATES.values()) {
-            if (centre.distanceToSquared(new Vec3(state.centre.getX(), state.centre.getY(), state.centre.getZ()))
+            if (centre.distanceToSqr(new Vec3(state.centre.getX(), state.centre.getY(), state.centre.getZ()))
                     <= state.radius * state.radius) {
                 event.setCanceled(true);
                 bufferExplosion(state.owner, explosion);
