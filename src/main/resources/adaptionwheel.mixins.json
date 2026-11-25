@@ -16,7 +16,9 @@
     "ShieldDisableMixin",
     "AttackCooldownMixin",
     "LivingEntityTickerAccessor",
-    "GuardianLaserMixin"
+    "GuardianLaserMixin",
+    "TimeWarpServerLevelMixin",
+    "TimeWarpServerEntityMixin"
   ],
   "client": [
     "HurtCamMixin",
