@@ -31,6 +31,10 @@ public class AdaptionNetworking {
                 (payload, context) -> context.enqueueWork(() -> AbilityCooldownPayload.apply(payload)));
         registrar.playToClient(CacheSyncPayload.TYPE, CacheSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> CacheSyncPayload.apply(payload)));
+        registrar.playToClient(TimeWarpStatePayload.TYPE, TimeWarpStatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ru.adaptionwheel.client.TimeWarpClient.onState(payload)));
+        registrar.playToClient(TimeWarpHitPayload.TYPE, TimeWarpHitPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> TimeWarpHitPayload.apply(payload)));
         registrar.playToClient(ExistenceCinematicPayload.TYPE, ExistenceCinematicPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> ru.adaptionwheel.client.ExistenceCinematicFX.start(payload)));
         registrar.playToServer(TradeActionPayload.TYPE, TradeActionPayload.STREAM_CODEC,
