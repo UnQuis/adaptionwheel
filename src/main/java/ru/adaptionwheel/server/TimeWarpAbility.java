@@ -16,11 +16,13 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 import ru.adaptionwheel.AdaptionWheel;
 import ru.adaptionwheel.ability.ActiveAbility;
 import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.network.AbilityCooldownPayload;
+import ru.adaptionwheel.network.TimeWarpHitPayload;
 import ru.adaptionwheel.network.TimeWarpStatePayload;
 
 import java.util.ArrayList;
@@ -64,9 +66,12 @@ public final class TimeWarpAbility {
         }
     }
 
+    private record PendingHit(float damage, boolean critical) {
+    }
+
     private static final Map<UUID, State> STATES = new HashMap<>();
     private static final Map<UUID, Long> READY_AT = new HashMap<>();
-    private static final Map<UUID, Map<Integer, Float>> PENDING_HITS = new HashMap<>();
+    private static final Map<UUID, Map<Integer, PendingHit>> PENDING_HITS = new HashMap<>();
     private static final Map<ResourceKey<Level>, Long> DAY_BEFORE = new HashMap<>();
     private static final Map<ResourceKey<Level>, Double> DAY_REST = new HashMap<>();
 
@@ -152,6 +157,17 @@ public final class TimeWarpAbility {
         return ready != null && now < ready;
     }
 
+    /** Server-side producer for buffered hits (wired from the damage handler in Task 5). */
+    public static void buffer(UUID owner, int targetId, float damage, boolean critical) {
+        if (owner == null || damage <= 0f) {
+            return;
+        }
+        PENDING_HITS.computeIfAbsent(owner, key -> new HashMap<>()).merge(targetId,
+                new PendingHit(damage, critical),
+                (oldHit, next) -> new PendingHit(oldHit.damage() + next.damage(),
+                        oldHit.critical() || next.critical()));
+    }
+
     /** Ends one zone, applying its buffered damage once before the state is forgotten. */
     public static void clear(UUID owner) {
         State state = STATES.remove(owner);
@@ -180,7 +196,7 @@ public final class TimeWarpAbility {
     }
 
     private static void applyBuffered(UUID owner, State state) {
-        Map<Integer, Float> hits = PENDING_HITS.get(owner);
+        Map<Integer, PendingHit> hits = PENDING_HITS.get(owner);
         if (hits == null || hits.isEmpty() || applying || state.level == null) {
             return;
         }
@@ -190,10 +206,18 @@ public final class TimeWarpAbility {
         }
         applying = true;
         try {
-            for (Map.Entry<Integer, Float> hit : new ArrayList<>(hits.entrySet())) {
+            for (Map.Entry<Integer, PendingHit> hit : new ArrayList<>(hits.entrySet())) {
                 Entity target = state.level.getEntity(hit.getKey());
                 if (target instanceof LivingEntity living && living.isAlive()) {
-                    living.hurt(source.damageSources().playerAttack(source), hit.getValue());
+                    PendingHit pending = hit.getValue();
+                    if (living.hurt(source.damageSources().playerAttack(source), pending.damage())) {
+                        // The damage is authoritative; this only carries the impact sound to clients.
+                        PacketDistributor.sendToPlayersNear(state.level, null,
+                                living.getX(), living.getY(), living.getZ(), 64.0,
+                                new TimeWarpHitPayload(owner, living.getId(),
+                                        (float) living.getX(), (float) living.getY(), (float) living.getZ(),
+                                        pending.critical(), 1, pending.damage()));
+                    }
                 }
             }
         } finally {
