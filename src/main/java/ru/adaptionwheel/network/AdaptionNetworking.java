@@ -25,6 +25,8 @@ public class AdaptionNetworking {
                 (payload, context) -> context.enqueueWork(() -> TradeSyncPayload.apply(payload)));
         registrar.playToClient(RiftImpactPayload.TYPE, RiftImpactPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> RiftImpactPayload.apply(payload)));
+        registrar.playToClient(SlashCutPayload.TYPE, SlashCutPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> SlashCutPayload.apply(payload)));
         registrar.playToClient(DiveImpactPayload.TYPE, DiveImpactPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> DiveImpactPayload.apply(payload)));
         registrar.playToClient(AbilityCooldownPayload.TYPE, AbilityCooldownPayload.STREAM_CODEC,

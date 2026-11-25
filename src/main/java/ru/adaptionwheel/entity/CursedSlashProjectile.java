@@ -17,6 +17,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import ru.adaptionwheel.server.SlashCut;
 import ru.adaptionwheel.sound.ModSounds;
 
 import java.util.ArrayDeque;
@@ -136,7 +137,14 @@ public class CursedSlashProjectile extends Projectile {
             // This branch still has LivingEntity.hurt(DamageSource, float); hurtServer is 26.3's
             // replacement and does not exist here.
             if (!level().isClientSide()) {
-                target.hurt(source, damage);
+                // Every slash from this projectile is cursed energy. Try the cut first; a cut
+                // removes the target (loot/XP before discard), so do not also hurt the corpse.
+                // Scratches and ineligible targets fall through to the ordinary slash damage.
+                LivingEntity owner = getOwner() instanceof LivingEntity living ? living : null;
+                boolean cut = owner != null && SlashCut.cut((ServerLevel) level(), target, owner, from, to);
+                if (!cut) {
+                    target.hurt(source, damage);
+                }
             }
             level().playSound(null, target.blockPosition(), ModSounds.SOE_HIT_2.get(), SoundSource.PLAYERS, 0.8f,
                     1f + (random.nextFloat() - 0.5f) * 0.2f);
