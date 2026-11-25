@@ -27,6 +27,8 @@
     "FogDistanceMixin",
     "AbstractContainerScreenAccess",
     "CachePanelClickMixin",
+    "EntityRenderDispatcherMixin",
+    "ModelPartMixin",
     "client.TimeWarpClientLevelMixin",
     "client.TimeWarpPartialTickMixin",
     "client.TimeWarpParticleMixin",

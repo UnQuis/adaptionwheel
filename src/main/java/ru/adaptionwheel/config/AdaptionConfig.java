@@ -185,6 +185,13 @@ public final class AdaptionConfig {
     public static final ModConfigSpec.ConfigValue<Integer> TIME_WARP_COOLDOWN_SECONDS;
     public static final ModConfigSpec.ConfigValue<Boolean> TIME_WARP_PLAYERS;
 
+    public static final ModConfigSpec.ConfigValue<Double> SLASH_CUT_FRAC_MIN;
+    public static final ModConfigSpec.ConfigValue<Double> SLASH_CUT_FRAC_MAX;
+    public static final ModConfigSpec.ConfigValue<Double> SLASH_CUT_SCRATCH_DAMAGE;
+    public static final ModConfigSpec.ConfigValue<Integer> SLASH_CUT_SCRATCH_FIRE_SECONDS;
+    public static final ModConfigSpec.ConfigValue<Integer> SLASH_CUT_SCRATCH_THROTTLE_TICKS;
+    public static final ModConfigSpec.ConfigValue<Double> SLASH_CUT_NOTIFY_RADIUS;
+
     public static final ModConfigSpec.ConfigValue<Boolean> SKILL_ISSUE_ENABLED;
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_RADIUS;
     public static final ModConfigSpec.ConfigValue<Double> SKILL_ISSUE_STRENGTH;
@@ -634,6 +641,22 @@ public final class AdaptionConfig {
         TIME_WARP_PLAYERS = s.comment("Whether other players inside the sphere are slowed too.",
                         "The owner is excluded either way; off by default so PvP pacing is unchanged.")
                 .define("slowPlayers", false);
+        s.pop();
+
+        s.comment("--- Slash Cut (cursed sword slices mobs during the sweep) ---").push("slashCut");
+        SLASH_CUT_FRAC_MIN = s.comment("Minimum fraction of a mob's swept depth at which a cut lands.",
+                        "Outside this band the sweep only scratches and ignites the target.")
+                .defineInRange("fractionMin", 0.15, 0.0, 0.5);
+        SLASH_CUT_FRAC_MAX = s.comment("Maximum fraction of a mob's swept depth at which a cut lands.")
+                .defineInRange("fractionMax", 0.85, 0.5, 1.0);
+        SLASH_CUT_SCRATCH_DAMAGE = s.comment("Damage dealt by a slash that misses the cutting band.")
+                .defineInRange("scratchDamage", 4.0, 0.0, 100.0);
+        SLASH_CUT_SCRATCH_FIRE_SECONDS = s.comment("Seconds of fire applied with a scratch cut.")
+                .defineInRange("scratchFireSeconds", 4, 0, 60);
+        SLASH_CUT_SCRATCH_THROTTLE_TICKS = s.comment("Minimum ticks between scratches on one mob.")
+                .defineInRange("scratchThrottleTicks", 10, 0, 200);
+        SLASH_CUT_NOTIFY_RADIUS = s.comment("Radius in blocks within which clients receive the cut geometry.")
+                .defineInRange("notifyRadius", 192.0, 16.0, 512.0);
         s.pop();
 
         s.comment("--- Contact Defense ---").push("contactDefense");

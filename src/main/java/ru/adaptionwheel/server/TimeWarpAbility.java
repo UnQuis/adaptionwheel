@@ -63,7 +63,7 @@ public final class TimeWarpAbility {
         State(UUID owner, ServerLevel level, BlockPos centre, float radius, float speed, long endsAt) {
             this.owner = owner;
             this.level = level;
-            this.centre = centre.immutable();
+            this.centre = centre;
             this.radius = radius;
             this.speed = speed;
             this.endsAt = endsAt;
@@ -205,7 +205,9 @@ public final class TimeWarpAbility {
         if ((hits == null || hits.isEmpty()) && (explosions == null || explosions.isEmpty())) {
             return;
         }
-        ServerPlayer source = state.level.getServer().getPlayerByUUID(owner);
+        if (!(state.level.getPlayerByUUID(owner) instanceof ServerPlayer source)) {
+            return;
+        }
         applying = true;
         try {
             if (explosions != null) {
@@ -277,7 +279,7 @@ public final class TimeWarpAbility {
         clock = advanceClock(clock, velocity);
         tickLento = clock / 1000L != before / 1000L;
 
-        long now = event.getServer().getGameTime();
+        long now = event.getServer().overworld().getGameTime();
         for (UUID owner : new ArrayList<>(STATES.keySet())) {
             State state = STATES.get(owner);
             if (state == null) {

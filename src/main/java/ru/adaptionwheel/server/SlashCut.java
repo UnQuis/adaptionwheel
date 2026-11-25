@@ -56,7 +56,7 @@ public final class SlashCut {
 
     /** Attempt a cut. Returns true when the target was removed by the cut. */
     public static boolean cut(ServerLevel level, LivingEntity target, LivingEntity owner, Vec3 from, Vec3 to) {
-        if (!(target instanceof Mob) || target instanceof PartEntity<?> || target instanceof Player) {
+        if (!(target instanceof Mob) || target instanceof Player) {
             return false;
         }
         if (target.isDeadOrDying() || target.isRemoved() || !target.isAlive()) {
