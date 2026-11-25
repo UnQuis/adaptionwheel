@@ -24,7 +24,11 @@
     "FogColorMixin",
     "FogDistanceMixin",
     "AbstractContainerScreenAccess",
-    "CachePanelClickMixin"
+    "CachePanelClickMixin",
+    "client.TimeWarpClientLevelMixin",
+    "client.TimeWarpPartialTickMixin",
+    "client.TimeWarpParticleMixin",
+    "client.TimeWarpSoundMixin"
   ],
   "injectors": {
     "defaultRequire": 1
