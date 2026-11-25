@@ -6,7 +6,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.system.RenderSystem;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.GameRenderer;
@@ -14,6 +14,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.joml.Vector3fc;
 import ru.adaptionwheel.network.SlashCutPayload;
 
 import java.util.ArrayList;
@@ -115,7 +117,7 @@ public final class Metades {
         List<Fonte[]> cap = cap(rim, normal);
         Vec3 center = Vec3.ZERO;
         for (Fonte f : rim) {
-            center = center.add(f.pos());
+            center = center.add(vec(f.pos()));
         }
         center = rim.isEmpty() ? point : center.scale(1.0 / rim.size());
         Vec3 sweep = p.sweep();
@@ -142,8 +144,16 @@ public final class Metades {
         return all;
     }
 
+    private static Vec3 vec(Vector3fc v) {
+        return new Vec3(v.x(), v.y(), v.z());
+    }
+
     private static double dot(Vec3 a, Vec3 b) {
         return a.x * b.x + a.y * b.y + a.z * b.z;
+    }
+
+    private static double dot(Vector3fc a, Vec3 b) {
+        return a.x() * b.x + a.y() * b.y + a.z() * b.z;
     }
 
     /** Sutherland–Hodgman against one plane; interpolated vertices keep UV/normal/colour. */
@@ -206,16 +216,16 @@ public final class Metades {
         }
         List<Fonte[]> kept = new ArrayList<>();
         for (int i = 0; i < groups.size(); i++) {
-            if (find(root, groups.get(i)[0]).equals(best)) {
+            if (find(root, groups.get(i)[0]) == best) {
                 kept.add(faces.get(i));
             }
         }
         return kept.isEmpty() ? faces : kept;
     }
 
-    private static String key(Vec3 p) {
-        return Math.round(p.x * 1000.0) + "/" + Math.round(p.y * 1000.0) + "/"
-                + Math.round(p.z * 1000.0);
+    private static String key(Vector3fc p) {
+        return Math.round(p.x() * 1000.0) + "/" + Math.round(p.y() * 1000.0) + "/"
+                + Math.round(p.z() * 1000.0);
     }
 
     private static int find(int[] roots, int i) {
@@ -245,13 +255,15 @@ public final class Metades {
         }
         u = u.normalize();
         Vec3 v = normal.cross(u).normalize();
+        Vec3 axisU = u;
+        Vec3 axisV = v;
         Map<String, Fonte> unique = new HashMap<>();
         for (Fonte f : rim) {
             unique.putIfAbsent(key(f.pos()), f);
         }
         List<Fonte> points = new ArrayList<>(unique.values());
-        points.sort(Comparator.comparingDouble((Fonte f) -> dot(f.pos(), u))
-                .thenComparingDouble(f -> dot(f.pos(), v)));
+        points.sort(Comparator.comparingDouble((Fonte f) -> dot(f.pos(), axisU))
+                .thenComparingDouble(f -> dot(f.pos(), axisV)));
         if (points.size() < 3) {
             return List.of();
         }
@@ -341,7 +353,7 @@ public final class Metades {
         for (Metade m : ATIVAS) {
             float fade = Mth.clamp(1f - Math.max(0, m.age - 55) / (float) (LIFE_TICKS - 55), 0f, 1f);
             int alpha = (int) (0xFF * fade);
-            Vec3 offset = m.pos.sub(m.origin);
+            Vec3 offset = m.pos.subtract(m.origin);
             for (Fonte[] face : m.faces) {
                 for (int i = 1; i + 1 < face.length; i++) {
                     emit(buffer, matrix, face[0], offset, m.tint, alpha);
@@ -356,7 +368,7 @@ public final class Metades {
 
     private static void emit(BufferBuilder buffer, Matrix4f matrix, Fonte f, Vec3 offset,
                              int tint, int alpha) {
-        Vec3 p = f.pos().add(offset);
+        Vec3 p = vec(f.pos()).add(offset);
         int r = (tint >> 16) & 0xFF;
         int g = (tint >> 8) & 0xFF;
         int b = tint & 0xFF;
