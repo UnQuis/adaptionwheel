@@ -12,9 +12,13 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.Explosion;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import ru.adaptionwheel.AdaptionWheel;
@@ -69,9 +73,14 @@ public final class TimeWarpAbility {
     private record PendingHit(float damage, boolean critical) {
     }
 
+    private record PendingExplosion(Vec3 centre, float radius, Entity source,
+                                    Level.ExplosionInteraction interaction) {
+    }
+
     private static final Map<UUID, State> STATES = new HashMap<>();
     private static final Map<UUID, Long> READY_AT = new HashMap<>();
     private static final Map<UUID, Map<Integer, PendingHit>> PENDING_HITS = new HashMap<>();
+    private static final Map<UUID, List<PendingExplosion>> PENDING_EXPLOSIONS = new HashMap<>();
     private static final Map<ResourceKey<Level>, Long> DAY_BEFORE = new HashMap<>();
     private static final Map<ResourceKey<Level>, Double> DAY_REST = new HashMap<>();
 
@@ -134,6 +143,7 @@ public final class TimeWarpAbility {
         }
         STATES.put(owner, new State(owner, level, centre, radius, clampSpeed(speed), endsAt));
         PENDING_HITS.put(owner, new HashMap<>());
+        PENDING_EXPLOSIONS.put(owner, new ArrayList<>());
         velocity = clampSpeed(speed);
         clock = 0L;
         tickLento = false;
@@ -157,26 +167,17 @@ public final class TimeWarpAbility {
         return ready != null && now < ready;
     }
 
-    /** Server-side producer for buffered hits (wired from the damage handler in Task 5). */
-    public static void buffer(UUID owner, int targetId, float damage, boolean critical) {
-        if (owner == null || damage <= 0f) {
-            return;
-        }
-        PENDING_HITS.computeIfAbsent(owner, key -> new HashMap<>()).merge(targetId,
-                new PendingHit(damage, critical),
-                (oldHit, next) -> new PendingHit(oldHit.damage() + next.damage(),
-                        oldHit.critical() || next.critical()));
-    }
-
     /** Ends one zone, applying its buffered damage once before the state is forgotten. */
     public static void clear(UUID owner) {
         State state = STATES.remove(owner);
         if (state == null) {
             PENDING_HITS.remove(owner);
+            PENDING_EXPLOSIONS.remove(owner);
             return;
         }
         applyBuffered(owner, state);
         PENDING_HITS.remove(owner);
+        PENDING_EXPLOSIONS.remove(owner);
         if (STATES.isEmpty()) {
             clock = 0L;
             tickLento = false;
@@ -196,34 +197,66 @@ public final class TimeWarpAbility {
     }
 
     private static void applyBuffered(UUID owner, State state) {
+        if (applying || state.level == null) {
+            return;
+        }
         Map<Integer, PendingHit> hits = PENDING_HITS.get(owner);
-        if (hits == null || hits.isEmpty() || applying || state.level == null) {
+        List<PendingExplosion> explosions = PENDING_EXPLOSIONS.get(owner);
+        if ((hits == null || hits.isEmpty()) && (explosions == null || explosions.isEmpty())) {
             return;
         }
         ServerPlayer source = state.level.getServer().getPlayerByUUID(owner);
-        if (source == null) {
-            return;
-        }
         applying = true;
         try {
-            for (Map.Entry<Integer, PendingHit> hit : new ArrayList<>(hits.entrySet())) {
-                Entity target = state.level.getEntity(hit.getKey());
-                if (target instanceof LivingEntity living && living.isAlive()) {
-                    PendingHit pending = hit.getValue();
-                    if (living.hurt(source.damageSources().playerAttack(source), pending.damage())) {
-                        // The damage is authoritative; this only carries the impact sound to clients.
-                        PacketDistributor.sendToPlayersNear(state.level, null,
-                                living.getX(), living.getY(), living.getZ(), 64.0,
-                                new TimeWarpHitPayload(owner, living.getId(),
-                                        (float) living.getX(), (float) living.getY(), (float) living.getZ(),
-                                        pending.critical(), 1, pending.damage()));
+            if (explosions != null) {
+                for (PendingExplosion blast : new ArrayList<>(explosions)) {
+                    Vec3 at = blast.centre();
+                    state.level.explode(blast.source(), at.x(), at.y(), at.z(), blast.radius(),
+                            false, blast.interaction());
+                }
+                explosions.clear();
+            }
+            if (hits != null && source != null) {
+                for (Map.Entry<Integer, PendingHit> hit : new ArrayList<>(hits.entrySet())) {
+                    Entity target = state.level.getEntity(hit.getKey());
+                    if (target instanceof LivingEntity living && living.isAlive()) {
+                        PendingHit pending = hit.getValue();
+                        if (living.hurt(source.damageSources().playerAttack(source), pending.damage())) {
+                            // Damage is authoritative; this only carries the impact sound to clients.
+                            PacketDistributor.sendToPlayersNear(state.level, null,
+                                    living.getX(), living.getY(), living.getZ(), 64.0,
+                                    new TimeWarpHitPayload(owner, living.getId(),
+                                            (float) living.getX(), (float) living.getY(), (float) living.getZ(),
+                                            pending.critical(), 1, pending.damage()));
+                        }
                     }
                 }
+                hits.clear();
             }
         } finally {
-            hits.clear();
             applying = false;
         }
+    }
+
+    /** Buffers one hit that would have landed inside an active zone. */
+    public static void buffer(UUID owner, int targetId, float damage, boolean critical) {
+        if (owner == null || damage <= 0f) {
+            return;
+        }
+        PENDING_HITS.computeIfAbsent(owner, key -> new HashMap<>()).merge(targetId,
+                new PendingHit(damage, critical),
+                (oldHit, next) -> new PendingHit(oldHit.damage() + next.damage(),
+                        oldHit.critical() || next.critical()));
+    }
+
+    /** Buffers one explosion whose centre is inside an active zone. */
+    public static void bufferExplosion(UUID owner, Explosion explosion) {
+        if (owner == null || explosion == null) {
+            return;
+        }
+        PENDING_EXPLOSIONS.computeIfAbsent(owner, key -> new ArrayList<>()).add(new PendingExplosion(
+                explosion.center().immutable(), explosion.radius(), explosion.getDirectSourceEntity(),
+                explosion.interactsWithBlocks() ? Level.ExplosionInteraction.BLOCK : Level.ExplosionInteraction.NONE));
     }
 
     public static void onServerTick(ServerTickEvent.Pre event) {
@@ -341,6 +374,54 @@ public final class TimeWarpAbility {
             return 1f;
         }
         return Math.max(0f, Math.min(1f, speed));
+    }
+
+    /** Owner of the zone containing this entity, or null when the entity is not slowed. */
+    private static UUID zoneOwner(Entity entity) {
+        for (State state : STATES.values()) {
+            if (state.owner.equals(entity.getUUID())) {
+                return null;
+            }
+            double dx = entity.getX() - state.centre.getX();
+            double dy = entity.getY() - state.centre.getY();
+            double dz = entity.getZ() - state.centre.getZ();
+            if (dx * dx + dy * dy + dz * dz <= state.radius * state.radius) {
+                return state.owner;
+            }
+        }
+        return null;
+    }
+
+    @SubscribeEvent
+    public static void onIncomingDamage(LivingIncomingDamageEvent event) {
+        if (applying || event.getEntity().level().isClientSide) {
+            return;
+        }
+        LivingEntity target = event.getEntity();
+        UUID owner = zoneOwner(target);
+        if (owner == null) {
+            return;
+        }
+        event.setCanceled(true);
+        // 1.21.1's DamageSource has no critical flag; the payload keeps the field for future use.
+        buffer(owner, target.getId(), event.getAmount(), false);
+    }
+
+    @SubscribeEvent
+    public static void onExplosionStart(ExplosionEvent.Start event) {
+        if (applying || !(event.getLevel() instanceof ServerLevel)) {
+            return;
+        }
+        Explosion explosion = event.getExplosion();
+        Vec3 centre = explosion.center();
+        for (State state : STATES.values()) {
+            if (centre.distanceToSquared(new Vec3(state.centre.getX(), state.centre.getY(), state.centre.getZ()))
+                    <= state.radius * state.radius) {
+                event.setCanceled(true);
+                bufferExplosion(state.owner, explosion);
+                return;
+            }
+        }
     }
 
     @SubscribeEvent
