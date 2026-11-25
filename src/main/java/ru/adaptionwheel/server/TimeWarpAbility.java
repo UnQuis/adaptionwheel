@@ -101,7 +101,9 @@ public final class TimeWarpAbility {
                 Component.translatable("adaptionwheel.ability.time_warp.desc"),
                 () -> new ItemStack(Items.CLOCK),
                 0xFF8FD8FF,
-                Math.max(0, AdaptionConfig.TIME_WARP_COOLDOWN_SECONDS.get()) * 20,
+                // definition() runs in common setup, before the SERVER config is loaded. The
+                // authoritative cooldown is read in start(); this is only the menu's initial value.
+                200,
                 "R",
                 List.of());
     }

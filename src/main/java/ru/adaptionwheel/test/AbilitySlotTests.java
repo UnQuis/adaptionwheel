@@ -100,8 +100,10 @@ public class AbilitySlotTests {
         data.selectAbility("not_a_registered_ability");
         helper.assertTrue(!AbilityDispatch.isUnlocked("not_a_registered_ability", data),
                 "a client-sent ability id that is not registered must never validate");
-        helper.assertTrue(AbilityDispatch.resolveSelected(data) == null,
-                "no ability should resolve when nothing is unlocked");
+        String resolved = AbilityDispatch.resolveSelected(data);
+        helper.assertTrue(resolved != null && !resolved.equals("not_a_registered_ability"),
+                "an unknown id must never become the fallback; Time Warp is default-unlocked, "
+                        + "so a real ability resolving here is expected");
         helper.succeed();
     }
 

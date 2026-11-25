@@ -86,11 +86,24 @@ been published to `origin/1.21.1` yet.
 - Post-review fixes on top of `0d5b82b`: global voice cooldown sentinel no longer overflows;
   owner gate compares `getOwnerUUID()` (works for offline owners); new-wearer scan interval
   actually throttles; tamed-tab counters and companion filtering corrected.
+- `5fb308f`/`12a2f83` **Time Warp** — a default-unlocked active ability: 10 s slow-time sphere
+  (120 s duration, 10 s cooldown), server-authoritative clock, buffered hits/explosions replayed
+  on expiry, and a client decimator that halves model/particle/sound playback rate. Config section
+  `timeWarp`, 397 lang keys.
+- `5fb308f` **Slash Cut** — cursed sword sweeps now cut tamed mobs during the swing: swept-depth
+  band determines full cut vs scratch+fire, with a client-side clip/capture pipeline for half-body
+  geometry. Config section `slashCut`; design docs in `docs/mob-slicing.md` and
+  `docs/time-slowdown.md`.
+- `TimeWarpAbility.definition()` no longer reads the server config during common setup (that
+  crashed the dedicated server with `Cannot get config value before config is loaded`); the
+  authoritative cooldown is read when the ability starts.
 
 ### Tests
 
 - 7 new gametests in `MobWearerTests`: Curios slot on a vanilla mob, equip/unequip, wheel-data
-  read-back and merge, and reduced damage for a mob wearer. Suite: **205/205 passing**.
+  read-back and merge, and reduced damage for a mob wearer. Suite: **212/212 passing** after
+  adding Time Warp and Slash Cut (the ability fallback test was updated for the default-unlocked
+  Time Warp).
 - `python3 tools/check-lang.py` and `python3 tools/check-config.py` both pass.
 
 ---
