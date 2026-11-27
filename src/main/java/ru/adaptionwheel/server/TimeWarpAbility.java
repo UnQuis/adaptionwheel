@@ -119,20 +119,42 @@ public final class TimeWarpAbility {
             return false;
         }
         long now = player.level().getGameTime();
-        if (isOnCooldown(player.getUUID(), now)) {
+        UUID owner = player.getUUID();
+        // The same key ends the zone. Check this before the cooldown: the cooldown belongs to the
+        // next cast, not to switching off the one that is running.
+        if (isActive(owner)) {
+            stop(owner, now);
+            AbilityCooldownPayload.send(player, ID, cooldownTicks());
+            player.displayClientMessage(Component.translatable("adaptionwheel.time_warp.stop"), true);
+            return true;
+        }
+        if (isOnCooldown(owner, now)) {
             return false;
         }
-        int cooldown = Math.max(0, AdaptionConfig.TIME_WARP_COOLDOWN_SECONDS.get()) * 20;
-        READY_AT.put(player.getUUID(), now + cooldown);
 
         float speed = clampSpeed((float) (double) AdaptionConfig.TIME_WARP_SPEED.get());
         float radius = (float) Math.max(1.0, AdaptionConfig.TIME_WARP_RADIUS.get());
         long duration = Math.max(1, AdaptionConfig.TIME_WARP_DURATION_SECONDS.get()) * 20L;
-        activate(player.getUUID(), (ServerLevel) player.level(), player.blockPosition(),
+        // The cooldown starts when the zone ends, not when it is cast.
+        READY_AT.put(owner, now + duration + cooldownTicks());
+        activate(owner, (ServerLevel) player.level(), player.blockPosition(),
                 radius, speed, now + duration);
 
-        AbilityCooldownPayload.send(player, ID, cooldown);
         player.displayClientMessage(Component.translatable("adaptionwheel.time_warp.start"), true);
+        return true;
+    }
+
+    private static int cooldownTicks() {
+        return Math.max(0, AdaptionConfig.TIME_WARP_COOLDOWN_SECONDS.get()) * 20;
+    }
+
+    /** Ends a running zone and starts the cooldown from this moment. */
+    public static boolean stop(UUID owner, long now) {
+        if (!isActive(owner)) {
+            return false;
+        }
+        clear(owner);
+        READY_AT.put(owner, now + cooldownTicks());
         return true;
     }
 
@@ -289,6 +311,11 @@ public final class TimeWarpAbility {
             }
             if (now >= state.endsAt) {
                 clear(owner);
+                if (state.level != null
+                        && state.level.getPlayerByUUID(owner) instanceof ServerPlayer player) {
+                    long ready = READY_AT.getOrDefault(owner, now);
+                    AbilityCooldownPayload.send(player, ID, (int) Math.max(0, ready - now));
+                }
                 continue;
             }
             state.clock = clock;
@@ -337,7 +364,7 @@ public final class TimeWarpAbility {
 
     /** True when this entity loses the current server tick. */
     public static boolean pular(Entity entity) {
-        if (entity == null || STATES.isEmpty() || !tickLento) {
+        if (entity == null || STATES.isEmpty()) {
             return false;
         }
         if (entity instanceof Player && !AdaptionConfig.TIME_WARP_PLAYERS.get()) {
@@ -346,8 +373,11 @@ public final class TimeWarpAbility {
         if (!inZone(entity)) {
             return false;
         }
+        if (!tickLento) {
+            return true;
+        }
         TICARAM.add(entity.getId());
-        return true;
+        return false;
     }
 
     /** 0 = outside, 1 = ticked last round (force send), 2 = did not tick (delay send). */

@@ -273,6 +273,7 @@
   "adaptionwheel.ability.time_warp.name": "Time Warp",
   "adaptionwheel.ability.time_warp.desc": "Slow everything around you while you move normally.",
   "adaptionwheel.time_warp.start": "TIME WARP",
+  "adaptionwheel.time_warp.stop": "TIME WARP ENDS",
   "adaptionwheel.synergy.ashwalker": "Ashwalker",
   "adaptionwheel.synergy.ashwalker.desc": "Your attacks set the target alight.",
   "adaptionwheel.synergy.glacierblood": "Glacierblood",

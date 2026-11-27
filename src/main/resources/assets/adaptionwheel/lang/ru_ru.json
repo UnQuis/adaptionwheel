@@ -273,6 +273,7 @@
   "adaptionwheel.ability.time_warp.name": "Искажение времени",
   "adaptionwheel.ability.time_warp.desc": "Замедли всё вокруг, двигаясь как обычно.",
   "adaptionwheel.time_warp.start": "ИСКАЖЕНИЕ ВРЕМЕНИ",
+  "adaptionwheel.time_warp.stop": "ИСКАЖЕНИЕ ВРЕМЕНИ СПАЛО",
   "adaptionwheel.synergy.ashwalker": "Пепельник",
   "adaptionwheel.synergy.ashwalker.desc": "Твои удары поджигают цель.",
   "adaptionwheel.synergy.glacierblood": "Ледяная Кровь",

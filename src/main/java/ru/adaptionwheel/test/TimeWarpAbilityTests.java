@@ -58,6 +58,28 @@ public class TimeWarpAbilityTests {
     }
 
     @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void onlyTheSlowTickRunsForEntitiesInTheSphere(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        UUID owner = UUID.randomUUID();
+        Entity inside = EntityType.COW.create(level);
+        inside.setPos(2.0, 100.0, 0.0);
+
+        TimeWarpAbility.activate(owner, level, new BlockPos(0, 100, 0), 4f, 0.2f,
+                level.getGameTime() + 2000L);
+        for (int i = 0; i < 5; i++) {
+            TimeWarpAbility.onServerTick(new ServerTickEvent.Pre(() -> true, level.getServer()));
+            boolean skipped = TimeWarpAbility.pular(inside);
+            if (i < 4) {
+                helper.assertTrue(skipped, "tick " + (i + 1) + " must be skipped inside the sphere");
+            } else {
+                helper.assertTrue(!skipped, "the fifth tick crosses a logical second and must run");
+            }
+        }
+        TimeWarpAbility.clear(owner);
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
     public static void ownerAndEntitiesOutsideTheSphereAreNotDecimated(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         UUID owner = UUID.randomUUID();
@@ -70,8 +92,7 @@ public class TimeWarpAbilityTests {
 
         long endsAt = level.getGameTime() + 2000L;
         TimeWarpAbility.activate(owner, level, centre, 4f, 0.2f, endsAt);
-        // Drive one logical second so tickLento is true.
-        TimeWarpAbility.onServerTick(new ServerTickEvent.Pre(() -> true, level.getServer()));
+        // Four ticks stay inside the first logical second; the fifth is the one that runs.
         for (int i = 0; i < 4; i++) {
             TimeWarpAbility.onServerTick(new ServerTickEvent.Pre(() -> true, level.getServer()));
         }
@@ -111,6 +132,21 @@ public class TimeWarpAbilityTests {
 
         TimeWarpAbility.clear(owner);
         helper.assertTrue(!TimeWarpAbility.isActive(owner), "clear removes the zone");
+        helper.succeed();
+    }
+
+    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
+    public static void stoppingAnActiveZoneTurnsItOff(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        UUID owner = UUID.randomUUID();
+        TimeWarpAbility.activate(owner, level, new BlockPos(0, 100, 0), 8f, 0.2f,
+                level.getGameTime() + 2000L);
+
+        helper.assertTrue(TimeWarpAbility.stop(owner, level.getGameTime()),
+                "an active zone must be stoppable by the same key");
+        helper.assertTrue(!TimeWarpAbility.isActive(owner), "stopping removes the zone");
+        helper.assertTrue(!TimeWarpAbility.stop(owner, level.getGameTime()),
+                "stopping an inactive zone is a no-op");
         helper.succeed();
     }
 
