@@ -49,6 +49,10 @@ Changes made after the 0.2.0 section was written; fold them into the next releas
   original design.
 - `152a069` **R toggles Time Warp off** instead of being ignored while the zone is active. The
   cooldown starts when the zone ends (or when it is switched off early), not when it is cast.
+- `3a89f70` **Time Warp clients no longer stay slowed after the zone ends.** The server removed
+  the zone silently; the client mirror kept `active = true` and kept decimating rendering and
+  entity ticks. `clear` now broadcasts an explicit inactive state, with a direct packet to the
+  owner so it also works after walking away from the sphere.
 - 214 gametests now pass (new tests pin the server's tick decimation and the toggle).
 
 ---
