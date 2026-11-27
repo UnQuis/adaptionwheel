@@ -2792,8 +2792,10 @@ public class AdaptionEvents {
         // a HUD card drawn from a stale copy promises a key that the server will refuse. One list
         // per sync means the card and the gate cannot disagree.
         List<String> abilities = new ArrayList<>();
-        if (DiveAbility.unlocked(data)) {
-            abilities.add(DiveAbility.ID);
+        for (ru.adaptionwheel.ability.ActiveAbility ability : ru.adaptionwheel.ability.ActiveAbilities.all()) {
+            if (AbilityDispatch.isUnlocked(ability.id(), data)) {
+                abilities.add(ability.id());
+            }
         }
         AdaptionSyncPayload payload = new AdaptionSyncPayload(
                 wearing,
