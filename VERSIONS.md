@@ -69,6 +69,10 @@ Changes made after the 0.2.0 section was written; fold them into the next releas
   `adapt_voice` pitched down to 0.68; the shipped `AdaptVoiceFull.ogg` now plays at normal pitch
   for maxed leveled concepts, one-time mutations, existence, adversity, All Adaptation and the
   existence cinematic finale. Basic adaptations keep the original `adapt_voice`.
+- `fa2637b` **Reverted PR #13's Time Warp multizone rewrite.** After the merge, slowed entities and
+  slashes ran at full speed in singleplayer. The client mirror and server bookkeeping are back to
+  the pre-merge implementation; the dimension-isolation and concurrent-zone work is dropped until
+  it can be reintroduced without the regression. The full-voice change above is kept.
 
 ---
 
