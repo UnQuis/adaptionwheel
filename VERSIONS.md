@@ -43,7 +43,13 @@ Changes made after the 0.2.0 section was written; fold them into the next releas
   from the fallback copies used when a loot table rolls empty.
 - TAMED left card shows the companion's face texture (wolf/cat/parrot/horse/llama, with a fallback),
   and the domain rail is available in TAMED too so the mob's adaptations can be filtered by domain.
-- 207 gametests now pass (new tests pin mob mortality and the level-7 cap).
+- `152a069` **Time Warp decimated the wrong ticks.** The server skipped the slow tick and ran the
+  other four, so mobs moved and attacked at 4/5 speed while the client rendered them at 1/5 —
+  frozen models that still hit. `pular` now skips the non-slow ticks, matching the client and the
+  original design.
+- `152a069` **R toggles Time Warp off** instead of being ignored while the zone is active. The
+  cooldown starts when the zone ends (or when it is switched off early), not when it is cast.
+- 214 gametests now pass (new tests pin the server's tick decimation and the toggle).
 
 ---
 
