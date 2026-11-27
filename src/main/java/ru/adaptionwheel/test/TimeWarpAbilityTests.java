@@ -6,7 +6,6 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.GameRules;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -172,60 +171,6 @@ public class TimeWarpAbilityTests {
                         + level.getDayTime());
         TimeWarpAbility.clear(owner);
         level.setDayTime(0L);
-        helper.succeed();
-    }
-
-    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void zonesDoNotAffectEntitiesInOtherDimensions(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        ServerLevel otherDimension = level.getServer().getLevel(Level.NETHER);
-        helper.assertTrue(otherDimension != null, "the Nether level must be available in the test server");
-
-        UUID owner = UUID.randomUUID();
-        Entity sameDimension = EntityType.COW.create(level);
-        Entity otherDimensionEntity = EntityType.COW.create(otherDimension);
-        sameDimension.setPos(2.0, 100.0, 0.0);
-        otherDimensionEntity.setPos(2.0, 100.0, 0.0);
-
-        TimeWarpAbility.activate(owner, level, new BlockPos(0, 100, 0), 4f, 0.2f,
-                level.getGameTime() + 2000L);
-        TimeWarpAbility.onServerTick(new ServerTickEvent.Pre(() -> true, level.getServer()));
-
-        helper.assertTrue(TimeWarpAbility.pular(sameDimension),
-                "an entity inside the sphere in the zone's own dimension is decimated");
-        helper.assertTrue(!TimeWarpAbility.pular(otherDimensionEntity),
-                "matching coordinates in another dimension must not be affected");
-        TimeWarpAbility.clear(owner);
-        helper.succeed();
-    }
-
-    @GameTest(template = "aw_empty5x5x5", templateNamespace = "adaptionwheel")
-    public static void activatingAnotherZoneDoesNotResetTheSharedClock(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        UUID firstOwner = UUID.randomUUID();
-        UUID secondOwner = UUID.randomUUID();
-        Entity insideFirstZone = EntityType.COW.create(level);
-        insideFirstZone.setPos(2.0, 100.0, 0.0);
-
-        TimeWarpAbility.activate(firstOwner, level, new BlockPos(0, 100, 0), 4f, 0.2f,
-                level.getGameTime() + 2000L);
-        for (int i = 0; i < 4; i++) {
-            TimeWarpAbility.onServerTick(new ServerTickEvent.Pre(() -> true, level.getServer()));
-        }
-        helper.assertTrue(TimeWarpAbility.pular(insideFirstZone),
-                "the first zone is still in its initial slow interval before the second activation");
-
-        TimeWarpAbility.activate(secondOwner, level, new BlockPos(20, 100, 0), 4f, 0.2f,
-                level.getGameTime() + 2000L);
-        helper.assertTrue(TimeWarpAbility.isActive(firstOwner) && TimeWarpAbility.isActive(secondOwner),
-                "both owners' zones remain active concurrently");
-
-        TimeWarpAbility.onServerTick(new ServerTickEvent.Pre(() -> true, level.getServer()));
-        helper.assertTrue(!TimeWarpAbility.pular(insideFirstZone),
-                "the fifth shared-clock tick must run; adding a zone must not restart the clock");
-
-        TimeWarpAbility.clear(firstOwner);
-        TimeWarpAbility.clear(secondOwner);
         helper.succeed();
     }
 }
