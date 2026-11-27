@@ -20,7 +20,13 @@
 //     a uniform roughness: it is polished plate interrupted by matte pits, and that variation is
 //     most of what makes it look corroded rather than sandblasted.
 
-uniform sampler2D Sampler0;
+uniform sampler2D Sampler0; // dharma albedo
+uniform sampler2D Sampler1; // orbital fabric albedo
+
+// RenderSystem's day clock: (gameTime % 24000 + partialTick) / 24000, i.e. 1 unit = 1200 seconds.
+uniform float GameTime;
+uniform vec4 WheelSkin;     // x = 0 dharma, x = 1 orbital
+uniform vec4 WheelTint;     // rgb = the adaptation tint that used to be baked into Color
 
 uniform vec3 WheelCamera;   // world-space eye
 uniform vec3 WheelCentre;   // world-space centre of the wheel, so noise can be wheel-local
@@ -99,6 +105,56 @@ float fbm(vec3 p) {
         a *= 0.5;
     }
     return v;
+}
+
+/**
+ * F1 and F2 distances of a 2D Voronoi field, reusing the cell hash above so the emissive needs no
+ * second noise vocabulary. Nine neighbours are enough: a cell's true nearest site is always in the
+ * 3x3 block around the sample.
+ */
+vec2 hash22(vec2 p) {
+    return vec2(hash13(vec3(p, 0.0)), hash13(vec3(p, 37.0)));
+}
+
+vec2 voronoi2(vec2 p) {
+    vec2 cell = floor(p);
+    vec2 f = fract(p);
+    float f1 = 8.0;
+    float f2 = 8.0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(float(x), float(y));
+            vec2 r = g + hash22(cell + g) - f;
+            float d = dot(r, r);
+            if (d < f1) {
+                f2 = f1;
+                f1 = d;
+            } else if (d < f2) {
+                f2 = d;
+            }
+        }
+    }
+    return sqrt(vec2(f1, f2));
+}
+
+/**
+ * The orbital emissive shell: two animated Voronoi bands, the slow F2 outline and the fast F1
+ * core. It runs on the authored torus UVs, not on dir.xz: a polar projection of the direction
+ * squeezes the cells near the ring's tangent direction and stretches them across it. u runs once
+ * around the ring and v once around the tube; tiling u 16x makes the cells square in world space.
+ * The bands are wider than the authored 0.88..0.90 / 0.20..0.25, which are sub-pixel at 1.3 blocks.
+ */
+vec3 orbitalEmissive(vec2 uv) {
+    float seconds = GameTime * 1200.0;
+    vec2 q = vec2(uv.x * 16.0, uv.y);
+    vec2 slow = voronoi2(q + vec2(seconds * -0.67, 0.0));
+    vec2 fast = voronoi2(q * 2.0 + vec2(seconds * -0.5, 0.0));
+
+    float outline = smoothstep(0.80, 0.84, slow.y) * (1.0 - smoothstep(0.90, 0.94, slow.y));
+    float core = smoothstep(0.10, 0.16, fast.x) * (1.0 - smoothstep(0.26, 0.34, fast.x));
+    vec3 blueCyan = mix(vec3(0.10, 0.25, 1.00), vec3(0.00, 1.00, 1.00), clamp(slow.x, 0.0, 1.0));
+    vec3 violetCyan = mix(vec3(0.55, 0.10, 1.00), vec3(0.00, 1.00, 1.00), clamp(fast.y, 0.0, 1.0));
+    return min(blueCyan * outline * 1.2 + violetCyan * core * 2.5, vec3(3.7));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -243,33 +299,63 @@ void main() {
     }
     vec3 V = normalize(WheelCamera - worldPos);
 
+    bool dharma = WheelSkin.x < 0.5;
+    // Three shells share one mesh: 0 dark metal, 1 emissive, 2 fabric. The id arrives as vertex
+    // colour because an OBJ has no material the game reads.
+    int mat = int(vColor.r * 2.0 + 0.5);
+
     // Corrosion, in wheel-local units so it travels with the wheel instead of swimming past it as
     // the player walks. `pit` is the large-scale field (which patches are eaten), `grit` the fine
-    // one (individual pinpricks).
+    // one (individual pinpricks). The orbital ring is clean sci-fi metal: no corrosion, no normal
+    // wobble, and the four fbm calls are skipped on that branch entirely.
     vec3 local = (worldPos - WheelCentre) * 14.0;
-    float pit = fbm(local);
-    float grit = fbm(local * 3.7 + vec3(11.0, 5.0, 7.0));
+    float pit = 0.0;
+    float grit = 0.0;
+    if (dharma) {
+        pit = fbm(local);
+        grit = fbm(local * 3.7 + vec3(11.0, 5.0, 7.0));
 
-    // The pitting is what makes the surface corroded rather than sandblasted: a few percent of
-    // normal wobble, plus a roughness that swings from near-mirror plate to matte scabs.
-    vec3 grad = vec3(
-        fbm(local + vec3(0.06, 0.0, 0.0)) - fbm(local - vec3(0.06, 0.0, 0.0)),
-        fbm(local + vec3(0.0, 0.06, 0.0)) - fbm(local - vec3(0.0, 0.06, 0.0)),
-        fbm(local + vec3(0.0, 0.0, 0.06)) - fbm(local - vec3(0.0, 0.0, 0.06)));
-    N = normalize(N + grad * 0.55);
+        // The pitting is what makes the surface corroded rather than sandblasted: a few percent of
+        // normal wobble, plus a roughness that swings from near-mirror plate to matte scabs.
+        vec3 grad = vec3(
+            fbm(local + vec3(0.06, 0.0, 0.0)) - fbm(local - vec3(0.06, 0.0, 0.0)),
+            fbm(local + vec3(0.0, 0.06, 0.0)) - fbm(local - vec3(0.0, 0.06, 0.0)),
+            fbm(local + vec3(0.0, 0.0, 0.06)) - fbm(local - vec3(0.0, 0.0, 0.06)));
+        N = normalize(N + grad * 0.55);
+    }
 
     float NoV = max(dot(N, V), 1.0e-3);
     vec3 R = reflect(-V, N);
 
-    float baseRough = clamp(WheelParams.x, 0.06, 1.0);
-    float rough = clamp(baseRough + (smoothstep(0.40, 0.78, pit) - 0.15) * 0.55, 0.06, 1.0);
+    float baseRough;
+    float rough;
+    vec3 albedo;
+    if (dharma) {
+        baseRough = clamp(WheelParams.x, 0.06, 1.0);
+        rough = clamp(baseRough + (smoothstep(0.40, 0.78, pit) - 0.15) * 0.55, 0.06, 1.0);
+        // Same output as before: the adaptation tint used to be baked into the vertex colour by
+        // the CPU, and is now its own uniform so the orbital id can occupy that channel.
+        albedo = texture(Sampler0, texCoord).rgb * WheelTint.rgb;
+        // Pits are darker, the cheapest possible ambient occlusion.
+        albedo *= 1.0 - 0.35 * smoothstep(0.55, 0.85, pit) - 0.12 * smoothstep(0.60, 0.90, grit);
+    } else {
+        rough = mat == 2 ? 0.8 : 0.4;
+        // f0 IS the albedo for a metal. 0.035 made the shell black; 0.25 made every shell the
+        // same light grey, so the fabric and the metal became indistinguishable. 0.14 keeps the
+        // reflections readable while leaving room for the fabric to read as a darker material;
+        // the contrast-stretched weave is tinted blue-grey rather than left neutral.
+        // The authored UV unwrap is 0..1 around the whole ring; tile u 16x so the weave's texels
+        // are square in world space instead of stretched along the circumference.
+        // The authored fabric is "full black": after the contrast stretch its mean is 0.55, so
+        // this multiplier has to stay low. 0.36/0.42/0.58 gave an effective albedo of ~0.20/0.23/
+        // 0.32 and read far lighter than the Blender original; half of that (~0.09/0.11/0.15)
+        // keeps the weave readable without turning the rubber into a grey shell.
+        albedo = mat == 2 ? texture(Sampler1, vec2(texCoord.x * 16.0, texCoord.y)).rgb
+                            * vec3(0.16, 0.20, 0.27) : vec3(0.14);
+    }
     float a = rough * rough;
 
     // A metal has no diffuse: its base colour is its reflectance, and it tints the reflection.
-    // Pits are also darker, which is the cheapest possible ambient occlusion and the thing that
-    // stops the noise from reading as a pattern rather than as damage.
-    vec3 albedo = texture(Sampler0, texCoord).rgb * vColor.rgb;
-    albedo *= 1.0 - 0.35 * smoothstep(0.55, 0.85, pit) - 0.12 * smoothstep(0.60, 0.90, grit);
     vec3 f0 = albedo;
 
     // The Fresnel floor from liquid-chrome: a metal is never 4% reflective face-on, and letting
@@ -303,6 +389,12 @@ void main() {
     // 1.4x the surrounding metal, i.e. a wash; at 0.20 it measures 2.5x, which reads as an image.
     color += albedo * vec3(1.00, 0.62, 0.30) * WheelParams.z * 0.20;
     color += f0 * 0.035;
+
+    // The orbital emissive shell, gated by its material id so it cannot leak onto the metal or the
+    // fabric. This is an emission baked into the skin, not the wearer's darkness adaptation below.
+    if (!dharma && mat == 1) {
+        color += orbitalEmissive(texCoord);
+    }
 
     // The wheel's own light, once the wearer has adapted to darkness. Emissive, not reflective:
     // it does not depend on anything around it, which is the point. The lightmap lift makes the

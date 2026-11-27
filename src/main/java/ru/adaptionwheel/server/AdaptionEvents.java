@@ -64,6 +64,7 @@ import ru.adaptionwheel.data.AdaptionTask;
 import ru.adaptionwheel.data.ModDataComponents;
 import ru.adaptionwheel.data.PlayerAdaption;
 import ru.adaptionwheel.data.WheelData;
+import ru.adaptionwheel.data.WheelSkins;
 import ru.adaptionwheel.item.ModItems;
 import ru.adaptionwheel.network.AdaptionSyncPayload;
 import ru.adaptionwheel.network.TaskProgressPayload;
@@ -2775,7 +2776,15 @@ public class AdaptionEvents {
         if (!forward && !backward) {
             return;
         }
-        event.setOutput(new ItemStack(ModItems.MAHORAGA_WHEEL.get()));
+        // The skin lives on the item, so it must travel with the upgrade. An absent (or invalid)
+        // value normalises to dharma and is left off the output -- that is the default already.
+        ItemStack wheel = ru.adaptionwheel.item.MahoragaWheelItem.isWheel(left) ? left : right;
+        String skin = WheelSkins.normalize(wheel.get(ModDataComponents.WHEEL_SKIN.get()));
+        ItemStack output = new ItemStack(ModItems.MAHORAGA_WHEEL.get());
+        if (!WheelSkins.DHARMA.equals(skin)) {
+            output.set(ModDataComponents.WHEEL_SKIN.get(), skin);
+        }
+        event.setOutput(output);
         event.setCost(WHEEL_GOLD_COST);
         event.setMaterialCost(1);
     }

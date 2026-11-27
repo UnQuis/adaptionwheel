@@ -61,6 +61,9 @@ public class AdaptionNetworking {
         registrar.playToServer(ToggleAdaptationPayload.TYPE, ToggleAdaptationPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         ToggleAdaptationPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
+        registrar.playToServer(SetSkinPayload.TYPE, SetSkinPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        SetSkinPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));
         registrar.playToServer(CacheClickPayload.TYPE, CacheClickPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         CacheClickPayload.handle(payload, (net.minecraft.server.level.ServerPlayer) context.player())));

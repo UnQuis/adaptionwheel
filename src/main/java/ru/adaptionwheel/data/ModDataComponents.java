@@ -30,6 +30,17 @@ public class ModDataComponents {
                             .networkSynchronized(ByteBufCodecs.BOOL)
                             .build());
 
+    // Deliberately separate from WheelData: saveToStack rebuilds that component and would erase a
+    // skin choice carried inside it. The choice has to survive a save and be synced on its own.
+    @SuppressWarnings("unchecked")
+    public static final DeferredHolder<DataComponentType<String>, DataComponentType<String>> WHEEL_SKIN =
+            (DeferredHolder<DataComponentType<String>, DataComponentType<String>>)
+            (DeferredHolder<?, ?>) COMPONENTS.register("wheel_skin", () ->
+                    DataComponentType.<String>builder()
+                            .persistent(Codec.STRING)
+                            .networkSynchronized(ByteBufCodecs.STRING_UTF8)
+                            .build());
+
     private ModDataComponents() {
     }
 }
