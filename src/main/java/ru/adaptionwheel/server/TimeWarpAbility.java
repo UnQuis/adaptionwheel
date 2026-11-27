@@ -199,6 +199,16 @@ public final class TimeWarpAbility {
             PENDING_EXPLOSIONS.remove(owner);
             return;
         }
+        // The client mirrors this boolean; without the explicit false it keeps decimating after
+        // the server has already returned to normal time.
+        if (state.level != null) {
+            TimeWarpStatePayload.sendTo(state.level, owner, state.speed, state.clock, false,
+                    state.centre, state.radius, false);
+            if (state.level.getPlayerByUUID(owner) instanceof ServerPlayer player) {
+                TimeWarpStatePayload.sendTo(player, new TimeWarpStatePayload(owner, state.speed,
+                        state.clock, false, state.centre, state.radius, false));
+            }
+        }
         applyBuffered(owner, state);
         PENDING_HITS.remove(owner);
         PENDING_EXPLOSIONS.remove(owner);
