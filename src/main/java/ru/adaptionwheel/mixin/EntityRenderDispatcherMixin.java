@@ -18,7 +18,7 @@ import ru.adaptionwheel.client.slashcut.CapturaCorpo;
 @Mixin(EntityRenderDispatcher.class)
 public abstract class EntityRenderDispatcherMixin {
 
-    @Inject(method = "render(LEnet/minecraft/world/entity/Entity;DDDFFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
+    @Inject(method = "render",
             at = @At("HEAD"), cancellable = true)
     private void adaptionwheel$beginCapture(Entity entity, double x, double y, double z,
                                             float yaw, float partialTick, PoseStack pose,
@@ -31,7 +31,7 @@ public abstract class EntityRenderDispatcherMixin {
         CapturaCorpo.begin(entity instanceof LivingEntity living ? living : null);
     }
 
-    @Inject(method = "render(LEnet/minecraft/world/entity/Entity;DDDFFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
+    @Inject(method = "render",
             at = @At("TAIL"))
     private void adaptionwheel$endCapture(Entity entity, double x, double y, double z,
                                           float yaw, float partialTick, PoseStack pose,

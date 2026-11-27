@@ -49,7 +49,9 @@ public record Extras(List<String> disabled, List<net.minecraft.world.item.ItemSt
 
     public static final Codec<Extras> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.STRING.listOf().optionalFieldOf("disabled", List.of()).forGetter(Extras::disabled),
-            net.minecraft.world.item.ItemStack.CODEC.listOf().optionalFieldOf("cache", List.of())
+            // The cache is padded to a fixed grid with ItemStack.EMPTY; the strict codec rejects
+            // air and made the whole attachment fail to save on every world exit.
+            net.minecraft.world.item.ItemStack.OPTIONAL_CODEC.listOf().optionalFieldOf("cache", List.of())
                     .forGetter(Extras::cache),
             Codec.unboundedMap(Codec.STRING, Codec.INT).optionalFieldOf("progress", Map.of())
                     .forGetter(Extras::progress),

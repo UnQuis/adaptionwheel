@@ -38,9 +38,7 @@ public abstract class TimeWarpPartialTickMixin {
     }
 
     @Invoker("renderEntity")
-    private void adaptionwheel$renderEntity(Entity entity, double camX, double camY, double camZ,
-                                            float partialTick, PoseStack poseStack,
-                                            MultiBufferSource bufferSource) {
-        throw new AssertionError();
-    }
+    protected abstract void adaptionwheel$renderEntity(Entity entity, double camX, double camY, double camZ,
+                                                     float partialTick, PoseStack poseStack,
+                                                     MultiBufferSource bufferSource);
 }
