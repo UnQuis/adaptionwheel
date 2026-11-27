@@ -65,6 +65,10 @@ Changes made after the 0.2.0 section was written; fold them into the next releas
   but the client skips most ticks of a warped entity, so it moved in visible steps. The new client
   mixin applies the packet position at once and sets the old position to the previous packet's,
   letting the existing partial-tick interpolation spread the step across the warped interval.
+- `30da3eb` **Level 8 and special adaptations use the new full voice.** The old cue was just
+  `adapt_voice` pitched down to 0.68; the shipped `AdaptVoiceFull.ogg` now plays at normal pitch
+  for maxed leveled concepts, one-time mutations, existence, adversity, All Adaptation and the
+  existence cinematic finale. Basic adaptations keep the original `adapt_voice`.
 
 ---
 
