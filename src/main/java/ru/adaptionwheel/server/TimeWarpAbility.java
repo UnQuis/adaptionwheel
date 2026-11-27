@@ -84,8 +84,8 @@ public final class TimeWarpAbility {
     private static final Map<ResourceKey<Level>, Long> DAY_BEFORE = new HashMap<>();
     private static final Map<ResourceKey<Level>, Double> DAY_REST = new HashMap<>();
 
-    private static Set<Integer> TICARAM = new HashSet<>();
-    private static Set<Integer> TICARAM_ANTES = new HashSet<>();
+    private static Set<UUID> TICARAM = new HashSet<>();
+    private static Set<UUID> TICARAM_ANTES = new HashSet<>();
     private static long clock;
     private static float velocity = 1f;
     private static boolean tickLento;
@@ -168,13 +168,17 @@ public final class TimeWarpAbility {
         STATES.put(owner, new State(owner, level, centre, radius, clampSpeed(speed), endsAt));
         PENDING_HITS.put(owner, new HashMap<>());
         PENDING_EXPLOSIONS.put(owner, new ArrayList<>());
-        velocity = clampSpeed(speed);
-        clock = 0L;
-        tickLento = false;
-        TICARAM.clear();
-        TICARAM_ANTES.clear();
-        DAY_BEFORE.clear();
-        DAY_REST.clear();
+        // All active zones share one server logical clock. Adding another owner must not
+        // restart that clock or erase the previous tick's entity bookkeeping.
+        if (STATES.size() == 1) {
+            velocity = clampSpeed(speed);
+            clock = 0L;
+            tickLento = false;
+            TICARAM.clear();
+            TICARAM_ANTES.clear();
+            DAY_BEFORE.clear();
+            DAY_REST.clear();
+        }
         if (level != null) {
             State state = STATES.get(owner);
             TimeWarpStatePayload.sendTo(level, owner, state.speed, state.clock, state.tick,
@@ -202,11 +206,11 @@ public final class TimeWarpAbility {
         // The client mirrors this boolean; without the explicit false it keeps decimating after
         // the server has already returned to normal time.
         if (state.level != null) {
-            TimeWarpStatePayload.sendTo(state.level, owner, state.speed, state.clock, false,
+            TimeWarpStatePayload.sendTo(state.level, owner, state.speed, state.clock, tickLento,
                     state.centre, state.radius, false);
             if (state.level.getPlayerByUUID(owner) instanceof ServerPlayer player) {
                 TimeWarpStatePayload.sendTo(player, new TimeWarpStatePayload(owner, state.speed,
-                        state.clock, false, state.centre, state.radius, false));
+                        state.clock, tickLento, state.centre, state.radius, false));
             }
         }
         applyBuffered(owner, state);
@@ -298,7 +302,7 @@ public final class TimeWarpAbility {
     }
 
     public static void onServerTick(ServerTickEvent.Pre event) {
-        Set<Integer> swap = TICARAM_ANTES;
+        Set<UUID> swap = TICARAM_ANTES;
         TICARAM_ANTES = TICARAM;
         TICARAM = swap;
         TICARAM.clear();
@@ -386,7 +390,7 @@ public final class TimeWarpAbility {
         if (!tickLento) {
             return true;
         }
-        TICARAM.add(entity.getId());
+        TICARAM.add(entity.getUUID());
         return false;
     }
 
@@ -397,12 +401,12 @@ public final class TimeWarpAbility {
                 || !inZone(entity)) {
             return 0;
         }
-        return TICARAM_ANTES.contains(entity.getId()) ? 1 : 2;
+        return TICARAM_ANTES.contains(entity.getUUID()) ? 1 : 2;
     }
 
     private static boolean inZone(Entity entity) {
         for (State state : STATES.values()) {
-            if (state.owner.equals(entity.getUUID())) {
+            if (state.owner.equals(entity.getUUID()) || entity.level() != state.level) {
                 continue;
             }
             double dx = entity.getX() - state.centre.getX();
@@ -425,7 +429,7 @@ public final class TimeWarpAbility {
     /** Owner of the zone containing this entity, or null when the entity is not slowed. */
     private static UUID zoneOwner(Entity entity) {
         for (State state : STATES.values()) {
-            if (state.owner.equals(entity.getUUID())) {
+            if (state.owner.equals(entity.getUUID()) || entity.level() != state.level) {
                 continue;
             }
             double dx = entity.getX() - state.centre.getX();
@@ -461,7 +465,8 @@ public final class TimeWarpAbility {
         Explosion explosion = event.getExplosion();
         Vec3 centre = explosion.center();
         for (State state : STATES.values()) {
-            if (centre.distanceToSqr(new Vec3(state.centre.getX(), state.centre.getY(), state.centre.getZ()))
+            if (event.getLevel() == state.level
+                    && centre.distanceToSqr(new Vec3(state.centre.getX(), state.centre.getY(), state.centre.getZ()))
                     <= state.radius * state.radius) {
                 event.setCanceled(true);
                 bufferExplosion(state.owner, explosion);
