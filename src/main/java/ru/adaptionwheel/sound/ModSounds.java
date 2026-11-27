@@ -15,6 +15,9 @@ public final class ModSounds {
     public static final DeferredHolder<SoundEvent, SoundEvent> ADAPT_VOICE =
             register("adapt_voice");
 
+    public static final DeferredHolder<SoundEvent, SoundEvent> ADAPT_VOICE_FULL =
+            register("adapt_voice_full");
+
     public static final DeferredHolder<SoundEvent, SoundEvent> DIMENSION_CUT =
             register("dimension_cut");
 

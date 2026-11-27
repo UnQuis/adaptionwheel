@@ -4,6 +4,11 @@
       "adaptionwheel:adapt_voice"
     ]
   },
+  "adapt_voice_full": {
+    "sounds": [
+      "adaptionwheel:adapt_voice_full"
+    ]
+  },
   "dimension_cut": {
     "sounds": [
       "adaptionwheel:dimension_cut"

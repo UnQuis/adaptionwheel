@@ -200,7 +200,7 @@ public final class ExistenceCinematicFX {
         if (player == null) {
             return;
         }
-        player.playSound(ModSounds.ADAPT_VOICE.get(), 3f, 0.7f);
+        player.playSound(ModSounds.ADAPT_VOICE_FULL.get(), 3f, 1f);
         player.playSound(ModSounds.REF.get(), 2f, 0.6f);
         player.playSound(ModSounds.SOE_HIT_1.get(), 1.5f, 0.8f);
         punch = 1f;

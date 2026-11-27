@@ -1371,7 +1371,7 @@ public class AdaptionEvents {
                 completeAllTasks(entity, data);
                 grantOneTime(entity, data, Concepts.ADVERSITY);
 
-                playAdaptVoice(entity, 1f, 1f);
+                playFullVoice(entity);
                 applyStats(entity, data);
                 if (player != null) {
                     player.sendSystemMessage(Component.translatable("adaptionwheel.msg.adversity_done")
@@ -1810,7 +1810,7 @@ public class AdaptionEvents {
         data.invalidateAdaptCount();
 
         player.heal(AdaptionConfig.ADAPTATION_HEAL_AMOUNT.get());
-        playMaxVoice(player);
+        playFullVoice(player);
         saveToItem(player, data);
 
         player.sendSystemMessage(Component.translatable("adaptionwheel.msg.existence",
@@ -1837,7 +1837,7 @@ public class AdaptionEvents {
         }
         grantOneTime(entity, data, concept);
         ServerPlayer player = Wearers.asPlayer(entity);
-        playMaxVoice(entity);
+        playFullVoice(entity);
         if (player != null) {
             player.sendSystemMessage(Component.translatable("adaptionwheel.msg.mutation_unlocked",
                             Concepts.chatName(concept))
@@ -2245,7 +2245,7 @@ public class AdaptionEvents {
         data.invalidateAdaptCount();
         boolean maxedOut = isLevelBased && data.level(concept) >= cap;
         if (maxedOut) {
-            playMaxVoice(entity);
+            playFullVoice(entity);
         } else {
             playAdaptVoice(entity, 1f, 1f);
         }
@@ -2300,7 +2300,7 @@ public class AdaptionEvents {
         saveToItem(serverPlayer, data);
 
         LAST_VOICE_TICK.remove(serverPlayer.getUUID());
-        playMaxVoice(serverPlayer);
+        playFullVoice(serverPlayer);
 
         serverPlayer.sendSystemMessage(Component.translatable("adaptionwheel.msg.all_adaption_maxed")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
@@ -2479,8 +2479,9 @@ public class AdaptionEvents {
         playSoundThrottled(entity, ModSounds.ADAPT_VOICE.get(), pitch, volume);
     }
 
-    private static void playMaxVoice(LivingEntity entity) {
-        playSoundThrottled(entity, ModSounds.ADAPT_VOICE.get(), 0.68f, 1.2f);
+    private static void playFullVoice(LivingEntity entity) {
+        // The old "full" cue was just this voice pitched down; the shipped longer line replaces it.
+        playSoundThrottled(entity, ModSounds.ADAPT_VOICE_FULL.get(), 1f, 1.2f);
     }
 
     /**
