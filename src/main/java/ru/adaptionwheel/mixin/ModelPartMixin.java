@@ -18,6 +18,6 @@ public abstract class ModelPartMixin {
     private void adaptionwheel$captureModel(PoseStack pose, VertexConsumer consumer,
                                             int packedLight, int packedOverlay, int color,
                                             CallbackInfo ci) {
-        CapturaCorpo.captureRootIfNeeded((ModelPart) (Object) this);
+        CapturaCorpo.captureRootIfNeeded((ModelPart) (Object) this, pose, packedLight, color);
     }
 }

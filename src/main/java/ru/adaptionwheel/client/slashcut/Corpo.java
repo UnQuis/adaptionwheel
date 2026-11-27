@@ -1,5 +1,6 @@
 package ru.adaptionwheel.client.slashcut;
 
+import net.minecraft.resources.ResourceLocation;
 import org.joml.Vector3f;
 
 import java.util.List;
@@ -18,18 +19,20 @@ public final class Corpo {
     private final int[] colors;
     private final int[] lights;
     private final int[][] quads;
+    private final ResourceLocation texture;
 
     private Corpo(Vector3f[] positions, float[] uvs, Vector3f[] normals,
-                  int[] colors, int[] lights, int[][] quads) {
+                  int[] colors, int[] lights, int[][] quads, ResourceLocation texture) {
         this.positions = positions;
         this.uvs = uvs;
         this.normals = normals;
         this.colors = colors;
         this.lights = lights;
         this.quads = quads;
+        this.texture = texture;
     }
 
-    public static Corpo of(List<Fonte> vertices, List<int[]> quads) {
+    public static Corpo of(List<Fonte> vertices, List<int[]> quads, ResourceLocation texture) {
         int n = vertices.size();
         Vector3f[] positions = new Vector3f[n];
         float[] uvs = new float[n * 2];
@@ -45,7 +48,8 @@ public final class Corpo {
             colors[i] = f.color();
             lights[i] = f.light();
         }
-        return new Corpo(positions, uvs, normals, colors, lights, quads.toArray(new int[0][]));
+        return new Corpo(positions, uvs, normals, colors, lights, quads.toArray(new int[0][]),
+                texture);
     }
 
     public int quadCount() {
@@ -58,6 +62,10 @@ public final class Corpo {
 
     public int[] quad(int index) {
         return quads[index];
+    }
+
+    public ResourceLocation texture() {
+        return texture;
     }
 
     public Fonte vertex(int index) {

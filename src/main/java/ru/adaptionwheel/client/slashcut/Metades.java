@@ -1,15 +1,13 @@
 package ru.adaptionwheel.client.slashcut;
 
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -42,17 +40,19 @@ public final class Metades {
     private static final class Metade {
         final List<Fonte[]> faces;
         final Vec3 origin;
+        final ResourceLocation texture;
         Vec3 pos;
         Vec3 vel;
         final int tint;
         int age;
 
-        Metade(List<Fonte[]> faces, Vec3 origin, Vec3 vel, int tint) {
+        Metade(List<Fonte[]> faces, Vec3 origin, Vec3 vel, int tint, ResourceLocation texture) {
             this.faces = faces;
             this.origin = origin;
             this.pos = origin;
             this.vel = vel;
             this.tint = tint;
+            this.texture = texture;
         }
     }
 
@@ -123,9 +123,11 @@ public final class Metades {
         Vec3 sweep = p.sweep();
         double jitter = (p.entityId() % 7) * 0.003;
         ATIVAS.add(new Metade(append(plus, cap), center,
-                normal.scale(0.06 + jitter).add(sweep.scale(0.04)), 0x9A66FFFF));
+                normal.scale(0.06 + jitter).add(sweep.scale(0.04)), 0xFFB8E6FF,
+                corpo.texture()));
         ATIVAS.add(new Metade(append(minus, cap), center,
-                normal.scale(-0.06 - jitter).add(sweep.scale(0.04)), 0x9A30E0FF));
+                normal.scale(-0.06 - jitter).add(sweep.scale(0.04)), 0xFF9FD4FF,
+                corpo.texture()));
     }
 
     private static void addPolygon(List<Fonte> poly, List<Fonte[]> out, List<Fonte> rim) {
@@ -340,40 +342,61 @@ public final class Metades {
         }
     }
 
-    /** Immediate world-space triangles; the level stage pose is already camera relative. */
+    /** Textured triangles in world space; the level stage pose carries the camera rotation only. */
     public static void desenhar(PoseStack pose, float partialTick) {
         if (ATIVAS.isEmpty()) {
             return;
         }
-        Matrix4f matrix = pose.last().pose();
-        RenderSystem.disableCull();
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
-        BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLES,
-                DefaultVertexFormat.POSITION_COLOR);
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) {
+            return;
+        }
+        Vec3 camera = mc.gameRenderer.getMainCamera().getPosition();
+        MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
+        PoseStack.Pose view = pose.last();
         for (Metade m : ATIVAS) {
             float fade = Mth.clamp(1f - Math.max(0, m.age - 55) / (float) (LIFE_TICKS - 55), 0f, 1f);
             int alpha = (int) (0xFF * fade);
             Vec3 offset = m.pos.subtract(m.origin);
+            RenderType type = RenderType.entityTranslucent(m.texture);
+            VertexConsumer buffer = buffers.getBuffer(type);
             for (Fonte[] face : m.faces) {
                 for (int i = 1; i + 1 < face.length; i++) {
-                    emit(buffer, matrix, face[0], offset, m.tint, alpha);
-                    emit(buffer, matrix, face[i], offset, m.tint, alpha);
-                    emit(buffer, matrix, face[i + 1], offset, m.tint, alpha);
+                    emit(buffer, view, face[0], offset, camera, m.tint, alpha);
+                    emit(buffer, view, face[i], offset, camera, m.tint, alpha);
+                    emit(buffer, view, face[i + 1], offset, camera, m.tint, alpha);
                 }
             }
+            buffers.endBatch(type);
         }
-        BufferUploader.drawWithShader(buffer.buildOrThrow());
-        RenderSystem.enableCull();
     }
 
-    private static void emit(BufferBuilder buffer, Matrix4f matrix, Fonte f, Vec3 offset,
-                             int tint, int alpha) {
-        Vec3 p = vec(f.pos()).add(offset);
+    /** Draws an untrimmed captured body; used by the Time Warp afterimages. */
+    public static void desenharCorpo(VertexConsumer buffer, PoseStack.Pose view, Corpo corpo,
+                                     Vec3 camera, Vec3 offset, int tint, int alpha) {
+        for (int q = 0; q < corpo.quadCount(); q++) {
+            int[] quad = corpo.quad(q);
+            for (int i = 1; i + 1 < quad.length; i++) {
+                emit(buffer, view, corpo.vertex(quad[0]), offset, camera, tint, alpha);
+                emit(buffer, view, corpo.vertex(quad[i]), offset, camera, tint, alpha);
+                emit(buffer, view, corpo.vertex(quad[i + 1]), offset, camera, tint, alpha);
+            }
+        }
+    }
+
+    private static void emit(VertexConsumer buffer, PoseStack.Pose view, Fonte f, Vec3 offset,
+                             Vec3 camera, int tint, int alpha) {
+        Vec3 p = vec(f.pos()).add(offset).subtract(camera);
         int r = (tint >> 16) & 0xFF;
         int g = (tint >> 8) & 0xFF;
         int b = tint & 0xFF;
-        buffer.addVertex(matrix, (float) p.x, (float) p.y, (float) p.z)
-                .setColor((alpha << 24) | (r << 16) | (g << 8) | b);
+        Vector3f normal = view.transformNormal(f.normal(), new Vector3f());
+        buffer.addVertex(view.pose(), (float) p.x, (float) p.y, (float) p.z)
+                .setColor((alpha << 24) | (r << 16) | (g << 8) | b)
+                .setUv(f.u(), f.v())
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setLight(f.light())
+                .setNormal(normal.x(), normal.y(), normal.z());
     }
 
     public static void limpar() {

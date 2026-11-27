@@ -9,6 +9,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
 import ru.adaptionwheel.AdaptionWheel;
+import ru.adaptionwheel.config.AdaptionConfig;
 
 /**
  * Server -&gt; client: a mob was cut by a cursed slash, with the geometry of the cut plane.
@@ -39,7 +40,8 @@ public record SlashCutPayload(int entityId, Vec3 point, Vec3 normal, Vec3 sweep,
     }
 
     public static void sendNear(ServerLevel level, Vec3 at, SlashCutPayload payload) {
-        double radiusSq = 192.0 * 192.0;
+        double radius = Math.max(0.0, AdaptionConfig.SLASH_CUT_NOTIFY_RADIUS.get());
+        double radiusSq = radius * radius;
         for (ServerPlayer player : level.players()) {
             if (player.distanceToSqr(at) <= radiusSq) {
                 PacketDistributor.sendToPlayer(player, payload);
@@ -47,14 +49,4 @@ public record SlashCutPayload(int entityId, Vec3 point, Vec3 normal, Vec3 sweep,
         }
     }
 
-    /** Hand-off for the client FX task; the payload never mutates server state. */
-    private static volatile SlashCutPayload lastReceived;
-
-    public static void apply(SlashCutPayload payload) {
-        lastReceived = payload;
-    }
-
-    public static SlashCutPayload lastReceived() {
-        return lastReceived;
-    }
 }

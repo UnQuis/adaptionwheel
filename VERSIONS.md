@@ -54,6 +54,17 @@ Changes made after the 0.2.0 section was written; fold them into the next releas
   entity ticks. `clear` now broadcasts an explicit inactive state, with a direct packet to the
   owner so it also works after walking away from the sphere.
 - 214 gametests now pass (new tests pin the server's tick decimation and the toggle).
+- `6182b38` **Slash Cut now cuts visibly.** The client packet handler only cached the payload and
+  never built the halves; it now calls the effect renderer directly. The captured body uses the
+  mob's real model polygons and skin, and the halves are drawn camera-relative with that texture
+  instead of untextured world-space triangles. The `slash_cut_*` config keys finally drive the
+  cut band, scratch damage/fire/throttle and the packet radius.
+- `6182b38` **Time Warp leaves afterimages.** Slowed mobs periodically snapshot their captured
+  body and leave a short translucent trail rendered at `AFTER_ENTITIES`.
+- `6182b38` **Stopped-time jerking fixed.** Move packets queued vanilla's three-tick interpolation,
+  but the client skips most ticks of a warped entity, so it moved in visible steps. The new client
+  mixin applies the packet position at once and sets the old position to the previous packet's,
+  letting the existing partial-tick interpolation spread the step across the warped interval.
 
 ---
 

@@ -26,7 +26,8 @@ public class AdaptionNetworking {
         registrar.playToClient(RiftImpactPayload.TYPE, RiftImpactPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> RiftImpactPayload.apply(payload)));
         registrar.playToClient(SlashCutPayload.TYPE, SlashCutPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> SlashCutPayload.apply(payload)));
+                (payload, context) -> context.enqueueWork(
+                        () -> ru.adaptionwheel.client.SlashCutEffectRenderer.onCut(payload)));
         registrar.playToClient(DiveImpactPayload.TYPE, DiveImpactPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> DiveImpactPayload.apply(payload)));
         registrar.playToClient(AbilityCooldownPayload.TYPE, AbilityCooldownPayload.STREAM_CODEC,

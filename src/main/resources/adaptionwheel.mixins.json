@@ -30,6 +30,7 @@
     "EntityRenderDispatcherMixin",
     "ModelPartMixin",
     "client.TimeWarpClientLevelMixin",
+    "client.TimeWarpEntityLerpMixin",
     "client.TimeWarpPartialTickMixin",
     "client.TimeWarpParticleMixin",
     "client.TimeWarpSoundMixin"

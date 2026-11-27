@@ -8,6 +8,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import ru.adaptionwheel.config.AdaptionConfig;
 import ru.adaptionwheel.network.SlashCutPayload;
 
 import java.util.ArrayList;
@@ -21,13 +22,6 @@ import java.util.UUID;
 /** Server-authoritative cut geometry for a cursed slash sweep. */
 public final class SlashCut {
 
-    // shortcut: these come from AdaptionConfig in the lead's follow-up; config is off-limits in this zone.
-    private static final float FRAC_MIN = 0.15f;
-    private static final float FRAC_MAX = 0.85f;
-    private static final float SCRATCH_DAMAGE = 4f;
-    private static final int SCRATCH_FIRE_TICKS = 4 * 20;
-    private static final int SCRATCH_THROTTLE_TICKS = 10;
-    private static final double NOTIFY_RADIUS_SQ = 192.0 * 192.0;
     private static final Set<String> EXCLUDED_IDS = new HashSet<>();
 
     private static final Map<UUID, Long> LAST_SCRATCH = new HashMap<>();
@@ -86,7 +80,8 @@ public final class SlashCut {
         }
 
         float frac = fraction(target, eye, normal);
-        if (frac < FRAC_MIN || frac > FRAC_MAX) {
+        if (frac < (float) (double) AdaptionConfig.SLASH_CUT_FRAC_MIN.get()
+                || frac > (float) (double) AdaptionConfig.SLASH_CUT_FRAC_MAX.get()) {
             scratch(level, target, owner);
             return false;
         }
@@ -110,12 +105,15 @@ public final class SlashCut {
     private static void scratch(ServerLevel level, LivingEntity target, LivingEntity owner) {
         long now = level.getGameTime();
         Long last = LAST_SCRATCH.get(target.getUUID());
-        if (last != null && now - last < SCRATCH_THROTTLE_TICKS) {
+        int throttle = Math.max(0, AdaptionConfig.SLASH_CUT_SCRATCH_THROTTLE_TICKS.get());
+        if (last != null && now - last < throttle) {
             return;
         }
         LAST_SCRATCH.put(target.getUUID(), now);
-        target.hurt(Wearers.damageSource(owner), SCRATCH_DAMAGE);
-        target.setRemainingFireTicks(SCRATCH_FIRE_TICKS);
+        target.hurt(Wearers.damageSource(owner),
+                (float) (double) AdaptionConfig.SLASH_CUT_SCRATCH_DAMAGE.get());
+        target.setRemainingFireTicks(
+                Math.max(0, AdaptionConfig.SLASH_CUT_SCRATCH_FIRE_SECONDS.get()) * 20);
     }
 
     /** Sutherland-Hodgman clip of the sweep triangle against all six AABB planes. */

@@ -7,6 +7,7 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import ru.adaptionwheel.AdaptionWheel;
+import ru.adaptionwheel.client.slashcut.CapturaCorpo;
 import ru.adaptionwheel.client.slashcut.Metades;
 import ru.adaptionwheel.network.SlashCutPayload;
 
@@ -33,6 +34,7 @@ public final class SlashCutEffectRenderer {
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         Metades.tick();
+        CapturaCorpo.prune();
     }
 
     @SubscribeEvent

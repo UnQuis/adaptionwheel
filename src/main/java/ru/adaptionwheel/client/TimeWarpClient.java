@@ -41,6 +41,10 @@ public final class TimeWarpClient {
     private TimeWarpClient() {
     }
 
+    public static boolean isActive() {
+        return active;
+    }
+
     public static void onState(TimeWarpStatePayload payload) {
         UUID newOwner = payload.owner();
         if (owner != null && !owner.equals(newOwner)) {
