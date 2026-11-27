@@ -1,7 +1,9 @@
 package ru.adaptionwheel.client;
 
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Deque;
 import java.util.UUID;
 
 import net.minecraft.client.Minecraft;
@@ -33,8 +35,11 @@ public final class TimeWarpClient {
     private record Zone(float speed, long clock, BlockPos centre, float radius, long lastSeenTick) {
     }
 
+    private static final int MAX_PENDING_TICKS = 10;
     private static final Map<UUID, Zone> ZONES = new HashMap<>();
+    private static final Deque<Boolean> PENDING_TICKS = new ArrayDeque<>();
     private static ResourceKey<Level> dimension;
+    private static long lastQueuedClock = Long.MIN_VALUE;
     private static boolean tickAgora;
     private static long clientTick;
 
@@ -53,6 +58,9 @@ public final class TimeWarpClient {
         ResourceKey<Level> current = mc.level.dimension();
         if (dimension != null && !dimension.equals(current)) {
             ZONES.clear();
+            PENDING_TICKS.clear();
+            lastQueuedClock = Long.MIN_VALUE;
+            tickAgora = false;
         }
         dimension = current;
         if (payload.active()) {
@@ -61,9 +69,15 @@ public final class TimeWarpClient {
         } else {
             ZONES.remove(payload.owner());
         }
-        // Every zone is driven by the same server logical clock. Packets for different owners
-        // therefore carry the same tick verdict; they must not enqueue duplicate client ticks.
-        tickAgora = payload.tick();
+        // All zones share one logical clock. Multiple owner packets for the same clock must
+        // contribute only one verdict, otherwise a client with several zones advances too fast.
+        if (payload.clock() != lastQueuedClock) {
+            if (PENDING_TICKS.size() == MAX_PENDING_TICKS) {
+                PENDING_TICKS.removeFirst();
+            }
+            PENDING_TICKS.addLast(payload.tick());
+            lastQueuedClock = payload.clock();
+        }
     }
 
     @SubscribeEvent
@@ -72,6 +86,8 @@ public final class TimeWarpClient {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || (dimension != null && !dimension.equals(mc.level.dimension()))) {
             ZONES.clear();
+            PENDING_TICKS.clear();
+            lastQueuedClock = Long.MIN_VALUE;
             dimension = mc.level == null ? null : mc.level.dimension();
             tickAgora = false;
         } else {
@@ -79,9 +95,14 @@ public final class TimeWarpClient {
             // out of tracking range so stale zones cannot affect a client that later returns.
             ZONES.entrySet().removeIf(entry -> clientTick - entry.getValue().lastSeenTick() > 10L);
             if (ZONES.isEmpty()) {
+                PENDING_TICKS.clear();
+                lastQueuedClock = Long.MIN_VALUE;
                 tickAgora = false;
             }
         }
+        // Minecraft may execute several catch-up client ticks after one packet drain.
+        // Consume exactly one server verdict per client tick, rather than reusing the latest one.
+        tickAgora = !PENDING_TICKS.isEmpty() && PENDING_TICKS.removeFirst();
     }
 
     @SubscribeEvent
@@ -91,7 +112,9 @@ public final class TimeWarpClient {
 
     private static void reset() {
         ZONES.clear();
+        PENDING_TICKS.clear();
         dimension = null;
+        lastQueuedClock = Long.MIN_VALUE;
         tickAgora = false;
         clientTick = 0L;
     }
