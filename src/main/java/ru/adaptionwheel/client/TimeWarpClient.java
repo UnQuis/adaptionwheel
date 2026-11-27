@@ -66,17 +66,22 @@ public final class TimeWarpClient {
         if (payload.active()) {
             ZONES.put(payload.owner(), new Zone(payload.speed(), payload.clock(),
                     payload.centre(), payload.radius(), clientTick));
+            // All zones share one logical clock. Multiple owner packets for the same clock must
+            // contribute only one verdict, otherwise a client with several zones advances too fast.
+            if (payload.clock() != lastQueuedClock) {
+                if (PENDING_TICKS.size() == MAX_PENDING_TICKS) {
+                    PENDING_TICKS.removeFirst();
+                }
+                PENDING_TICKS.addLast(payload.tick());
+                lastQueuedClock = payload.clock();
+            }
         } else {
             ZONES.remove(payload.owner());
-        }
-        // All zones share one logical clock. Multiple owner packets for the same clock must
-        // contribute only one verdict, otherwise a client with several zones advances too fast.
-        if (payload.clock() != lastQueuedClock) {
-            if (PENDING_TICKS.size() == MAX_PENDING_TICKS) {
-                PENDING_TICKS.removeFirst();
+            if (ZONES.isEmpty()) {
+                PENDING_TICKS.clear();
+                lastQueuedClock = Long.MIN_VALUE;
+                tickAgora = false;
             }
-            PENDING_TICKS.addLast(payload.tick());
-            lastQueuedClock = payload.clock();
         }
     }
 
