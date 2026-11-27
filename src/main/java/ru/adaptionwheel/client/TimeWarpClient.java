@@ -30,12 +30,13 @@ import ru.adaptionwheel.network.TimeWarpStatePayload;
 @EventBusSubscriber(modid = AdaptionWheel.MODID, value = Dist.CLIENT)
 public final class TimeWarpClient {
 
-    private record Zone(float speed, long clock, BlockPos centre, float radius) {
+    private record Zone(float speed, long clock, BlockPos centre, float radius, long lastSeenTick) {
     }
 
     private static final Map<UUID, Zone> ZONES = new HashMap<>();
     private static ResourceKey<Level> dimension;
     private static boolean tickAgora;
+    private static long clientTick;
 
     private TimeWarpClient() {
     }
@@ -56,7 +57,7 @@ public final class TimeWarpClient {
         dimension = current;
         if (payload.active()) {
             ZONES.put(payload.owner(), new Zone(payload.speed(), payload.clock(),
-                    payload.centre(), payload.radius()));
+                    payload.centre(), payload.radius(), clientTick));
         } else {
             ZONES.remove(payload.owner());
         }
@@ -67,11 +68,19 @@ public final class TimeWarpClient {
 
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Pre event) {
+        clientTick++;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || (dimension != null && !dimension.equals(mc.level.dimension()))) {
             ZONES.clear();
             dimension = mc.level == null ? null : mc.level.dimension();
             tickAgora = false;
+        } else {
+            // Zone updates are sent only to nearby players. Expire a mirror if its owner moves
+            // out of tracking range so stale zones cannot affect a client that later returns.
+            ZONES.entrySet().removeIf(entry -> clientTick - entry.getValue().lastSeenTick() > 10L);
+            if (ZONES.isEmpty()) {
+                tickAgora = false;
+            }
         }
     }
 
@@ -84,6 +93,7 @@ public final class TimeWarpClient {
         ZONES.clear();
         dimension = null;
         tickAgora = false;
+        clientTick = 0L;
     }
 
     /** Substitute partialTick in [0,1] for the zone affecting the supplied entity. */
